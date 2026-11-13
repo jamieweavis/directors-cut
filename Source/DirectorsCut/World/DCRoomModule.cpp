@@ -1,12 +1,31 @@
 #include "World/DCRoomModule.h"
 #include "World/DCStation.h"
+#include "World/DCCameraRig.h"
+#include "World/DCPlayerController.h"
 #include "Core/DCWorldTags.h"
+#include "Core/DCAssetPaths.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/LightComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/World.h"
+#include "Materials/MaterialInstanceDynamic.h"
+
+namespace
+{
+	// Reveal timeline (seconds from start).
+	constexpr float DustAt = 0.55f;
+	constexpr float SwapAt = 0.85f;
+	constexpr float LightStagger = 0.22f;
+	constexpr float LightRamp = 0.6f;
+	constexpr float DustLife = 1.3f;
+}
 
 ADCRoomModule::ADCRoomModule()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
 }
@@ -28,6 +47,15 @@ void ADCRoomModule::RegisterStation(ADCStation* Station)
 	}
 }
 
+bool ADCRoomModule::GroupHasContent(FName Group) const
+{
+	if (const TArray<TWeakObjectPtr<USceneComponent>>* Comps = Groups.Find(Group))
+	{
+		for (const TWeakObjectPtr<USceneComponent>& C : *Comps) { if (C.IsValid()) { return true; } }
+	}
+	return false;
+}
+
 void ADCRoomModule::SetGroupVisible(FName Group, bool bVisible)
 {
 	if (TArray<TWeakObjectPtr<USceneComponent>>* Comps = Groups.Find(Group))
@@ -39,15 +67,41 @@ void ADCRoomModule::SetGroupVisible(FName Group, bool bVisible)
 				SC->SetVisibility(bVisible, true);
 				if (UPrimitiveComponent* P = Cast<UPrimitiveComponent>(SC))
 				{
-					P->SetCollisionEnabled(bVisible ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
+					// Hidden prims never block clicks; visible ones get back whatever collision D gave them.
+					const TWeakObjectPtr<UPrimitiveComponent> Key(P);
+					if (!OriginalCollision.Contains(Key)) { OriginalCollision.Add(Key, P->GetCollisionEnabled()); }
+					P->SetCollisionEnabled(bVisible ? OriginalCollision[Key].GetValue() : ECollisionEnabled::NoCollision);
 				}
 			}
 		}
 	}
 }
 
+float ADCRoomModule::GetLightBase(ULightComponent* L)
+{
+	if (!L) { return 0.f; }
+	if (const float* F = LightBaseIntensity.Find(L)) { return *F; }
+	const float I = L->Intensity;
+	LightBaseIntensity.Add(L, I);
+	return I;
+}
+
 void ADCRoomModule::ApplyState(EDCRoomState State, int32 Level)
 {
+	// An instant apply cancels any running reveal.
+	if (bRevealing)
+	{
+		bRevealing = false;
+		SetActorTickEnabled(false);
+		ClearTempScaffold();
+		if (DustPuff) { DustPuff->DestroyComponent(); DustPuff = nullptr; }
+	}
+	for (FRevealLight& RL : RevealLights)
+	{
+		if (ULightComponent* L = RL.Light.Get()) { L->SetIntensity(GetLightBase(L)); }
+	}
+	RevealLights.Reset();
+
 	CurrentState = State;
 	CurrentLevel = Level;
 	const bool bBuilt = State == EDCRoomState::Built;
@@ -63,10 +117,225 @@ void ADCRoomModule::ApplyState(EDCRoomState State, int32 Level)
 	}
 }
 
+static ADCCameraRig* FindRig(const UWorld* W)
+{
+	const ADCPlayerController* PC = W ? Cast<ADCPlayerController>(W->GetFirstPlayerController()) : nullptr;
+	return PC ? PC->GetCameraRig() : nullptr;
+}
+
 void ADCRoomModule::PlayReveal(int32 NewLevel)
 {
-	// Wave 0 stub: instant. Agent E implements the choreography.
-	ApplyState(EDCRoomState::Built, NewLevel);
+	if (bRevealing) { FinishReveal(); }
+	if (!GetWorld() || !GetWorld()->HasBegunPlay())
+	{
+		ApplyState(EDCRoomState::Built, NewLevel);
+		return;
+	}
+	RevealFromState = CurrentState;
+	RevealLevel = FMath::Clamp(NewLevel, 1, 3);
+	RevealTime = 0.f;
+	bRevealing = true;
+	bRevealSwapped = false;
+	bRevealCameraReturned = false;
+
+	// Phase 1: scaffolding & work lights.
+	SetGroupVisible(DCGroups::Locked, false);
+	if (GroupHasContent(DCGroups::Building)) { SetGroupVisible(DCGroups::Building, true); }
+	else { SpawnFallbackScaffold(); }
+	CurrentState = EDCRoomState::Building;
+
+	if (bRevealMovesCamera)
+	{
+		if (ADCCameraRig* Rig = FindRig(GetWorld()))
+		{
+			Rig->BeginCinematic(GetFocusPoint(), 0.35f, RevealDuration + 1.f);
+		}
+	}
+	SetActorTickEnabled(true);
+}
+
+void ADCRoomModule::SpawnFallbackScaffold()
+{
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, DCPaths::Cube);
+	if (!Cube) { return; }
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, DCPaths::MatSurface);
+	const bool bSurface = Base != nullptr;
+	if (!Base) { Base = LoadObject<UMaterialInterface>(nullptr, DCPaths::BasicShapeMaterial); }
+	UMaterialInstanceDynamic* M = Base ? UMaterialInstanceDynamic::Create(Base, this) : nullptr;
+	if (M)
+	{
+		M->SetVectorParameterValue(bSurface ? TEXT("BaseColor") : TEXT("Color"), FLinearColor(0.55f, 0.38f, 0.05f));
+		if (bSurface) { M->SetScalarParameterValue(TEXT("Metallic"), 0.7f); M->SetScalarParameterValue(TEXT("Roughness"), 0.45f); }
+	}
+	const FBox B = LocalBounds;
+	const float H = FMath::Max(200.f, B.Max.Z - B.Min.Z - 20.f);
+	auto AddBar = [&](const FVector& Center, const FVector& Size)
+	{
+		UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
+		C->SetStaticMesh(Cube);
+		C->SetupAttachment(Root);
+		C->SetRelativeLocation(Center);
+		C->SetRelativeScale3D(Size / 100.f);
+		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		C->SetCastShadow(true);
+		if (M) { C->SetMaterial(0, M); }
+		C->RegisterComponent();
+		TempScaffold.Add(C);
+	};
+	const float In = 70.f;
+	const FVector Mn = B.Min + FVector(In, In, 0.f), Mx = B.Max - FVector(In, In, 0.f);
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const FVector P((i & 1) ? Mx.X : Mn.X, (i & 2) ? Mx.Y : Mn.Y, B.Min.Z + H * 0.5f);
+		AddBar(P, FVector(10.f, 10.f, H));
+	}
+	for (float Z : { H * 0.45f, H * 0.9f })
+	{
+		AddBar(FVector((Mn.X + Mx.X) * 0.5f, Mx.Y, B.Min.Z + Z), FVector(Mx.X - Mn.X, 8.f, 8.f));
+		AddBar(FVector(Mx.X, (Mn.Y + Mx.Y) * 0.5f, B.Min.Z + Z), FVector(8.f, Mx.Y - Mn.Y, 8.f));
+		AddBar(FVector((Mn.X + Mx.X) * 0.5f, Mn.Y, B.Min.Z + Z), FVector(Mx.X - Mn.X, 8.f, 8.f));
+		AddBar(FVector(Mn.X, (Mn.Y + Mx.Y) * 0.5f, B.Min.Z + Z), FVector(8.f, Mx.Y - Mn.Y, 8.f));
+	}
+	// Harsh work light.
+	UPointLightComponent* WL = NewObject<UPointLightComponent>(this);
+	WL->SetupAttachment(Root);
+	WL->SetRelativeLocation(FVector(B.GetCenter().X, B.GetCenter().Y, B.Min.Z + H * 0.8f));
+	WL->SetIntensity(9000.f);
+	WL->SetAttenuationRadius(FMath::Max(B.GetSize().X, B.GetSize().Y));
+	WL->SetLightColor(FLinearColor(0.75f, 0.85f, 1.f));
+	WL->SetCastShadows(false);
+	WL->RegisterComponent();
+	TempScaffold.Add(WL);
+}
+
+void ADCRoomModule::ClearTempScaffold()
+{
+	for (USceneComponent* C : TempScaffold) { if (C) { C->DestroyComponent(); } }
+	TempScaffold.Reset();
+}
+
+void ADCRoomModule::SpawnDustPuff()
+{
+	UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, DCPaths::Sphere);
+	if (!Sphere) { return; }
+	UMaterialInterface* Glass = LoadObject<UMaterialInterface>(nullptr, DCPaths::MatGlass);
+	if (!Glass) { return; } // an opaque puff would look wrong; skip the effect
+	DustMID = UMaterialInstanceDynamic::Create(Glass, this);
+	DustMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.55f, 0.5f, 0.44f));
+	DustParam = TEXT("Opacity");
+	DustBaseValue = 0.32f;
+	DustMID->SetScalarParameterValue(DustParam, DustBaseValue);
+	DustPuff = NewObject<UStaticMeshComponent>(this);
+	DustPuff->SetStaticMesh(Sphere);
+	DustPuff->SetupAttachment(Root);
+	const FVector C = LocalBounds.GetCenter();
+	DustPuff->SetRelativeLocation(FVector(C.X, C.Y, LocalBounds.Min.Z + 20.f));
+	DustPuff->SetRelativeScale3D(FVector(1.f, 1.f, 0.35f));
+	DustPuff->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	DustPuff->SetCastShadow(false);
+	DustPuff->SetMaterial(0, DustMID);
+	DustPuff->RegisterComponent();
+}
+
+void ADCRoomModule::RevealSwapToBuilt()
+{
+	bRevealSwapped = true;
+	ClearTempScaffold();
+	SetGroupVisible(DCGroups::Building, false);
+
+	// Lights already on before this reveal (upgrade) keep shining; new ones flicker on.
+	TSet<ULightComponent*> AlreadyOn;
+	if (RevealFromState == EDCRoomState::Built)
+	{
+		TArray<ULightComponent*> Ls; GetComponents<ULightComponent>(Ls);
+		for (ULightComponent* L : Ls) { if (L && L->IsVisible()) { AlreadyOn.Add(L); } }
+	}
+
+	const bool bWasRevealing = bRevealing;
+	bRevealing = false; // so ApplyState doesn't cancel us
+	ApplyState(EDCRoomState::Built, RevealLevel);
+	bRevealing = bWasRevealing;
+
+	TArray<ULightComponent*> Lights; GetComponents<ULightComponent>(Lights);
+	int32 Index = 0;
+	for (ULightComponent* L : Lights)
+	{
+		if (!L || !L->ComponentHasTag(DCTags::RoomLight) || !L->IsVisible() || AlreadyOn.Contains(L)) { continue; }
+		FRevealLight RL;
+		RL.Light = L;
+		RL.Target = GetLightBase(L);
+		RL.Start = RevealTime + 0.15f + Index * LightStagger;
+		RL.Seed = Index * 7.31f + 1.7f;
+		L->SetIntensity(0.f);
+		RevealLights.Add(RL);
+		++Index;
+	}
+}
+
+void ADCRoomModule::FinishReveal()
+{
+	if (!bRevealCameraReturned && bRevealMovesCamera)
+	{
+		if (ADCCameraRig* Rig = FindRig(GetWorld())) { Rig->EndCinematic(); }
+		bRevealCameraReturned = true;
+	}
+	if (DustPuff) { DustPuff->DestroyComponent(); DustPuff = nullptr; }
+	bRevealing = false;
+	SetActorTickEnabled(false);
+	ApplyState(EDCRoomState::Built, RevealLevel); // restores light intensities
+}
+
+void ADCRoomModule::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (!bRevealing) { SetActorTickEnabled(false); return; }
+	const float Prev = RevealTime;
+	RevealTime += FMath::Min(DeltaSeconds, 0.1f);
+
+	if (Prev < DustAt && RevealTime >= DustAt) { SpawnDustPuff(); }
+	if (!bRevealSwapped && RevealTime >= SwapAt) { RevealSwapToBuilt(); }
+
+	// Dust puff: expands and fades.
+	if (DustPuff)
+	{
+		const float A = FMath::Clamp((RevealTime - DustAt) / DustLife, 0.f, 1.f);
+		const float E = 1.f - FMath::Pow(1.f - A, 3.f);
+		const FVector Sz = LocalBounds.GetSize();
+		const float R = FMath::Lerp(0.6f, FMath::Max(Sz.X, Sz.Y) * 0.85f / 100.f, E);
+		DustPuff->SetRelativeScale3D(FVector(R, R, R * 0.28f));
+		if (DustMID) { DustMID->SetScalarParameterValue(DustParam, DustBaseValue * (1.f - A) * (1.f - A)); }
+		if (A >= 1.f) { DustPuff->DestroyComponent(); DustPuff = nullptr; }
+	}
+
+	// Lights: staggered flicker-on.
+	for (FRevealLight& RL : RevealLights)
+	{
+		ULightComponent* L = RL.Light.Get();
+		if (!L) { continue; }
+		const float T = (RevealTime - RL.Start) / LightRamp;
+		float I = 0.f;
+		if (T <= 0.f) { I = 0.f; }
+		else if (T < 0.65f)
+		{
+			const float N = FMath::PerlinNoise1D(RevealTime * 22.f + RL.Seed);
+			I = RL.Target * (N > -0.05f ? FMath::Lerp(0.35f, 0.9f, T) : 0.03f);
+		}
+		else { I = RL.Target * FMath::Clamp(FMath::Lerp(0.8f, 1.f, (T - 0.65f) / 0.35f), 0.f, 1.f); }
+		L->SetIntensity(I);
+	}
+
+	if (!bRevealCameraReturned && RevealTime >= RevealDuration - 0.7f)
+	{
+		bRevealCameraReturned = true;
+		if (bRevealMovesCamera) { if (ADCCameraRig* Rig = FindRig(GetWorld())) { Rig->EndCinematic(); } }
+	}
+	if (RevealTime >= RevealDuration) { FinishReveal(); }
+}
+
+void ADCRoomModule::EndPlay(const EEndPlayReason::Type Reason)
+{
+	ClearTempScaffold();
+	Super::EndPlay(Reason);
 }
 
 FBox ADCRoomModule::GetWorldBounds() const
