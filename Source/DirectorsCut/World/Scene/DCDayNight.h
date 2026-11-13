@@ -58,10 +58,10 @@ protected:
 	float FixedHour = -1.f;
 	float LampAlpha = 0.f;
 	double Time = 0.0;
-	float EVDay = -2.8f;
+	float EVDay = -2.5f;
 	float EVNight = -1.6f;
-	float SunLux = 40.f;
-	float MoonLux = 1.5f;
-	float SkyDay = 0.6f;
-	float SkyNight = 0.05f;
+	float SunLux = 110.f;
+	float MoonLux = 4.f;
+	float SkyDay = 10.f;
+	float SkyNight = 1.2f;
 };

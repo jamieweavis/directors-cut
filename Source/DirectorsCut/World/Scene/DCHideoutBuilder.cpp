@@ -792,7 +792,7 @@ void ADCHideoutBuilder::BuildShell(const FRoomDef& Def)
 			for (int32 i = 0; i < Shared.Num(); ++i)
 			{
 				const float A = Shared[i].Key - Base, B = Shared[i].Value - Base;
-				const bool bTall = Def.Type == EDCRoomType::Office && SharedWith[i] == EDCRoomType::OpsRoom;
+				const bool bTall = Def.Type == EDCRoomType::Office && (SharedWith[i] == EDCRoomType::OpsRoom || SharedWith[i] == EDCRoomType::Garage);
 				const float H = bTall ? TallH : PartH;
 				TArray<FOpening> Ops = LocalOps(Shared[i].Key, Shared[i].Value);
 				if (Ops.Num() == 0 && (B - A) > 300.f) { Ops.Add({ (A + B) * 0.5f, 130.f, 0.f, 230.f }); }
@@ -899,7 +899,7 @@ void ADCHideoutBuilder::BuildLightingAndPost()
 	S.bOverride_ToneCurveAmount = true; S.ToneCurveAmount = 1.f;
 	S.bOverride_LumenSceneLightingQuality = true; S.LumenSceneLightingQuality = 1.f;
 	S.bOverride_LumenFinalGatherQuality = true; S.LumenFinalGatherQuality = 1.f;
-	S.bOverride_LumenSkylightLeaking = true; S.LumenSkylightLeaking = 0.05f;
+	S.bOverride_LumenSkylightLeaking = true; S.LumenSkylightLeaking = 0.35f;
 	S.bOverride_IndirectLightingIntensity = true; S.IndirectLightingIntensity = 1.2f;
 
 	// Height fog with ~zero density: only here because Volumetric Fog (sun shafts in local fog volumes) hangs off it.
@@ -954,9 +954,9 @@ void ADCHideoutBuilder::BuildHideout()
 
 	auto R = [](float X0, float X1, float Y0, float Y1) { return FBox2D(FVector2D(X0, Y0), FVector2D(X1, Y1)); };
 	Defs = {
-		{ EDCRoomType::Office,       R(-500,  500, -400,  400), "Slab",        "Brick",      false },
+		{ EDCRoomType::Office,       R(-500,  500, -400,  400), "Slab",        "Brick",      true },
 		{ EDCRoomType::Workshop,     R(-500,  500, -1400, -400), "SlabDark",   "BrickGrey",  true },
-		{ EDCRoomType::Garage,       R( 500, 1300, -1400, -400), "SlabDark",   "CorrugatedV", false },
+		{ EDCRoomType::Garage,       R( 500, 1300, -1400,  400), "SlabDark",   "CorrugatedV", false },
 		{ EDCRoomType::OpsRoom,      R(-500, 1300,  400, 1600), "Slab",        "Brick",      false },
 		{ EDCRoomType::Lounge,       R(-1300, -500, -1400, -400), "Slab",      "BrickPaint", true },
 		{ EDCRoomType::ServerRoom,   R(-1300, -500, -400,  400), "RaisedFloor", "BlockDark", true },
@@ -965,9 +965,9 @@ void ADCHideoutBuilder::BuildHideout()
 	};
 	// Openings in room-local coordinates along the side. side: 0 +X, 1 +Y, 2 -X, 3 -Y
 	auto Op = [this](EDCRoomType T, int32 Side, float C, float W, float B, float Tp) { RoomOpenings.FindOrAdd((uint8)T).Add(TPair<int32, FOpening>(Side, FOpening{ C, W, B, Tp })); };
-	Op(EDCRoomType::Office, 0, -250.f, 120.f, 0.f, 225.f);    // street door to the yard
+	Op(EDCRoomType::Office, 0, -250.f, 120.f, 0.f, 225.f);    // street door through to the garage
 	Op(EDCRoomType::Office, 1, -430.f, 90.f, 0.f, 215.f);     // door through to the ops room
-	Op(EDCRoomType::Garage, 0, 0.f, 360.f, 0.f, 290.f);       // roller door
+	Op(EDCRoomType::Garage, 0, -400.f, 360.f, 0.f, 290.f);    // roller door
 
 	for (const FRoomDef& D : Defs) { SpawnRoom(D); }
 	for (const FRoomDef& D : Defs) { BuildShell(D); }

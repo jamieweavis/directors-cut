@@ -78,6 +78,7 @@ void ADCDayNight::BeginPlay()
 	if (UTextureCube* Cube = LoadObject<UTextureCube>(nullptr, TEXT("/Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap")))
 	{
 		Sky->SetCubemap(Cube);
+		UE_LOG(LogDC, Display, TEXT("[DayNight] sky cubemap %s"), *Cube->GetName());
 	}
 	const TCHAR* Cmd = FCommandLine::Get();
 	FParse::Value(Cmd, TEXT("DCFixedHour="), FixedHour);
@@ -157,7 +158,7 @@ void ADCDayNight::Apply(float H, float DeltaSeconds)
 	const float MoonI = MoonLux * MoonA;
 	Sun->SetIntensity(bDay ? SunI : MoonI);
 	// Colour temperature: warm low sun, neutral noon; cool moon.
-	Sun->SetTemperature(bDay ? FMath::Lerp(2300.f, 5600.f, FMath::Pow(SunA, 0.6f)) : 9000.f);
+	Sun->SetTemperature(bDay ? FMath::Lerp(2100.f, 5800.f, FMath::Pow(SunA, 1.6f)) : 9000.f);
 	Sun->SetLightColor(bDay ? FLinearColor::White : FLinearColor(0.55f, 0.7f, 1.f));
 
 	// ---------------------------------------------------------------- sky light (ambient fill), window glow
