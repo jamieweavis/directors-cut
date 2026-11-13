@@ -10,7 +10,7 @@
 
 ## Progress: as of Fri Nov 13, ~18:15 PST
 
-**Status: α playable** (tag `alpha` on `main`). Waves 0 and 1 are done, apart from Agent D's final polish. Main builds and all 12 automation tests pass (9 Sim, 2 Audio, 1 Smoke). A bot autoplay of a seeded run works end to end on the real sim.
+**Status: α playable** (tag `alpha` on `main`). Waves 0 and 1 are done and merged. Main builds and all 12 automation tests pass (9 Sim, 2 Audio, 1 Smoke). A bot autoplay of a seeded run works end to end on the real sim.
 
 **Changes from the original plan:**
 - **The MCP has no level, actor, Python or screenshot tools** (only Sequencer/UMG/PCG/Fab and similar). So the hideout is **built procedurally in C++ at runtime** (`World/Scene/ADCHideoutBuilder`, spawned by `ADCGameMode::StartPlay`). `L_Hideout` is an empty map.
@@ -31,7 +31,7 @@
 | 1A Sim | ✅ merged: full §2.7 resolver, modifier stack (every kind), rooms, perks, retakes, Final Cut, Clinic, Lawyer, 9 tests |
 | 1B Data | ✅ merged: all JSON, validate.py, balance_check.py |
 | 1C UI | ✅ merged: every panel, Dailies reveal, perk draft, game over, credits, settings, tutorial, fonts (OFL/Apache) |
-| 1D Scene | 🟡 snapshot `fab611a` merged; final polish (materials, lighting, L2/L3) still landing |
+| 1D Scene | ✅ merged: 8-room diorama, 11 stations, doors, neon, practicals, post, procedural materials, L1–L3 dressing, scene-review camera (`-DCSceneShots`) |
 | 1E World | ✅ merged: camera rig, input, hover/click, room reveal, pawns, departures/returns |
 | 1H Audio | ✅ merged: 32 procedural sounds, music state machine, ambience, volumes, 2 tests (**not yet listened to by a human**) |
 | 2 Integration | ✅ α built and screenshot-checked. Your playtest is next |
@@ -40,7 +40,8 @@
 **Known α issues:**
 - Pawn accent rim reads too gold.
 - Some pawns wander outside the office.
-- The Lumen exposure debug warning shows on screen.
+- **Performance:** 30–44 fps at 1600×900 (with other editors running); cheap fixes are a larger volumetric fog grid or fewer shadowed lights. Volumetric shafts barely show, so a fake beam cone stands in. The Garage/car is dark and boxy. Lounge pawns spawn against the pool table.
+- **Instanced-mesh materials:** materials used on instanced meshes need the instanced-static-mesh usage flag (`M_DC_Emissive` and `M_DC_Glass` lack it).
 - The Workbench always shows 3 gear slots (needs a per-criminal slot count in the API).
 - Gear "unavailable" reasons are guessed (needs an `UnavailableReason` field on `FDCGearItem`).
 - Low-loyalty crew treat the default 30% cut as greedy.
@@ -533,7 +534,7 @@ Wave 1 has six agents running at once. Only D touches the editor, and it starts 
 - [x] **Office, Lounge, Workshop and Garage** can be built and upgraded, each with a lights-on reveal
 - [x] Game over ("CANCELLED") plus a run summary, and "New Run" works
 - [x] Clickable stations with hover highlight and a camera focus dolly; pawns idle and depart/return through the garage
-- [~] (D finishing) Moody Lumen lighting, volumetric shafts, neon spill, dust/smoke FX, filmic post
+- [x] Moody Lumen lighting, volumetric shafts, neon spill, dust/smoke FX, filmic post
 - [x] **Music, ambience and UI SFX**, with volume settings
 - [ ] A packaged build runs outside the editor, and the zip is under 1 GB
 
@@ -542,7 +543,7 @@ Wave 1 has six agents running at once. Only D touches the editor, and it starts 
 - [x] The Screening Room with Retakes, the **Final Cut** job, and the **win end credits**
 - [x] Back-Alley Clinic
 - [x] Tutorial hints
-- [~] (D finishing) Room L2/L3 visual dressing
+- [x] Room L2/L3 visual dressing
 
 **Could:**
 - [x] Server Closet, Lawyer's Office
