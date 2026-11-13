@@ -110,7 +110,7 @@ void ADCHideoutBuilder::InitAssets()
 	Proc("Linen",      12, C(0.40f, 0.41f, 0.41f), C(0.3f, 0.3f, 0.3f), 0.95f, 0.f, 1.f, 0.3f);
 	Proc("Blanket",    12, C(0.08f, 0.09f, 0.06f), C(0.05f, 0.05f, 0.04f), 0.95f, 0.f, 1.f, 0.2f);
 	Proc("BlanketGrey",12, C(0.12f, 0.12f, 0.13f), C(0.08f, 0.08f, 0.08f), 0.95f, 0.f, 1.f, 0.2f);
-	Proc("Tarp",       12, C(0.30f, 0.33f, 0.36f), C(0.2f, 0.22f, 0.24f), 0.55f, 0.f, 1.f, 0.4f);
+	Proc("Tarp",       12, C(0.055f, 0.06f, 0.065f), C(0.035f, 0.038f, 0.042f), 0.6f, 0.f, 1.f, 0.4f);
 	Proc("Nylon",       0, C(0.018f, 0.018f, 0.02f), C(0.03f, 0.03f, 0.035f), 0.6f, 0.f, 1.f, 0.f);
 	Proc("NylonOlive",  0, C(0.05f, 0.055f, 0.035f), C(0.035f, 0.04f, 0.025f), 0.7f, 0.f, 1.f, 0.f);
 	Proc("Cardboard",   0, C(0.30f, 0.21f, 0.12f), C(0.22f, 0.15f, 0.08f), 0.9f, 0.f, 1.f, 0.4f);
@@ -151,7 +151,7 @@ void ADCHideoutBuilder::InitAssets()
 	// --- special
 	Special("Glass", TEXT("/Game/DC/Materials/M_DC_GlassI.M_DC_GlassI"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(0.3f, 0.35f, 0.38f)); D->SetScalarParameterValue("Opacity", 0.22f); });
 	Special("TintGlass", TEXT("/Game/DC/Materials/M_DC_GlassI.M_DC_GlassI"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(0.01f, 0.012f, 0.015f)); D->SetScalarParameterValue("Opacity", 0.88f); D->SetScalarParameterValue("Roughness", 0.04f); });
-	Special("Plastic", TEXT("/Game/DC/Materials/M_DC_GlassI.M_DC_GlassI"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(0.55f, 0.6f, 0.62f)); D->SetScalarParameterValue("Opacity", 0.45f); D->SetScalarParameterValue("Roughness", 0.3f); });
+	Special("Plastic", TEXT("/Game/DC/Materials/M_DC_GlassI.M_DC_GlassI"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(0.16f, 0.18f, 0.19f)); D->SetScalarParameterValue("Opacity", 0.32f); D->SetScalarParameterValue("Roughness", 0.3f); });
 	Special("Screen0", TEXT("/Game/DC/Materials/M_DC_Screen.M_DC_Screen"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Mode", 0.f); D->SetScalarParameterValue("Strength", 2.2f); });
 	Special("Screen1", TEXT("/Game/DC/Materials/M_DC_Screen.M_DC_Screen"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Mode", 1.f); D->SetScalarParameterValue("Strength", 2.6f); D->SetVectorParameterValue("Color", FLinearColor(0.15f, 0.65f, 1.f)); });
 	Special("Screen2", TEXT("/Game/DC/Materials/M_DC_Screen.M_DC_Screen"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Mode", 2.f); D->SetScalarParameterValue("Strength", 3.f); D->SetVectorParameterValue("Color", FLinearColor(1.f, 0.25f, 0.1f)); });
