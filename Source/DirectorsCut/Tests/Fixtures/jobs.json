@@ -1,0 +1,113 @@
+{
+  "_comment": "Job templates ('productions'). tier = minimum tier. statWeights sum to 1. flavour = 3 'script' variants.",
+  "jobs": [
+    { "id": "corner_store", "displayName": "Corner Store Stickup", "tier": 1,
+      "requiredRoles": ["Muscle"], "bonusRoles": ["Wheelman"],
+      "minCrew": 1, "maxCrew": 2,
+      "statWeights": { "Muscle": 0.6, "Driving": 0.4 },
+      "baseDifficulty": 46, "payoutRange": [7000, 11000],
+      "xpReward": 40, "arrestRisk": 0.15,
+      "heavy": false, "finalCut": false,
+      "flavour": [
+        "INT. LATE-NIGHT GROCERY. A bored clerk, a jar of pickled eggs and a till that hasn't been emptied since Tuesday.",
+        "A low-budget opener. One loud entrance, one quiet exit, and nobody touches the lottery tickets.",
+        "The owner keeps his takings under the cigarette rack. Everybody in the neighbourhood knows. Now so do you."
+      ] },
+    { "id": "car_boost", "displayName": "Car Boost", "tier": 1,
+      "requiredRoles": ["Wheelman"], "bonusRoles": ["Hacker"],
+      "minCrew": 1, "maxCrew": 2,
+      "statWeights": { "Driving": 0.65, "Tech": 0.35 },
+      "baseDifficulty": 46, "payoutRange": [8000, 13000],
+      "xpReward": 40, "arrestRisk": 0.12,
+      "heavy": false, "finalCut": false,
+      "flavour": [
+        "A cherry-red coupe parked outside the country club. The valet is on a smoke break for exactly four minutes.",
+        "EXT. CAR DEALERSHIP - NIGHT. Rows of chrome under sodium lights. Pick the one with the fewest dents and the loudest stereo.",
+        "A collector wants a convertible with fins. He doesn't want to know where it came from. Neither do the insurers."
+      ] },
+    { "id": "data_siphon", "displayName": "Data Siphon", "tier": 1,
+      "requiredRoles": ["Hacker"], "bonusRoles": ["Ghost"],
+      "minCrew": 1, "maxCrew": 2,
+      "statWeights": { "Tech": 0.6, "Stealth": 0.4 },
+      "baseDifficulty": 48, "payoutRange": [10000, 16000],
+      "xpReward": 45, "arrestRisk": 0.10,
+      "heavy": false, "finalCut": false,
+      "flavour": [
+        "An insurance firm keeps its client ledger on a mainframe the size of a wardrobe. Bring a very long cable.",
+        "The phone company's switchboard room. Tap the line, record the tones, sell the numbers. Very modern.",
+        "A rival studio's accounts are on magnetic tape in the basement. Copy the reel, swap the labels, walk out humming."
+      ] },
+    { "id": "jewellery_grab", "displayName": "Jewellery Smash & Grab", "tier": 1,
+      "requiredRoles": ["Muscle", "Wheelman"], "bonusRoles": ["Face"],
+      "minCrew": 2, "maxCrew": 3,
+      "statWeights": { "Muscle": 0.5, "Driving": 0.5 },
+      "baseDifficulty": 50, "payoutRange": [16000, 24000],
+      "xpReward": 60, "arrestRisk": 0.20,
+      "heavy": false, "finalCut": false,
+      "flavour": [
+        "Sixty seconds. One display case, one brick, one engine already running. Action!",
+        "The jeweller on Fifth just got a shipment of sapphires and a brand-new window. Only one of those survives the night.",
+        "A ring-heavy window display, a Sunday-night crowd and a getaway car double-parked with its hazards on."
+      ] },
+    { "id": "gallery_lift", "displayName": "Gallery Lift", "tier": 2,
+      "requiredRoles": ["Ghost", "Face"], "bonusRoles": ["Safecracker", "Hacker"],
+      "minCrew": 2, "maxCrew": 3,
+      "statWeights": { "Stealth": 0.4, "Charm": 0.3, "Finesse": 0.3 },
+      "baseDifficulty": 54, "payoutRange": [18000, 28000],
+      "xpReward": 80, "arrestRisk": 0.18,
+      "heavy": false, "finalCut": false,
+      "flavour": [
+        "A gala opening. Canapes, champagne and a small oil painting nobody will miss until the critics arrive.",
+        "The Face charms the curator about brushwork. The Ghost leaves through the skylight with the brushwork.",
+        "A modern art exhibit. Half the guests won't notice the frame is empty. The other half will call it a statement."
+      ] },
+    { "id": "casino_con", "displayName": "Casino Con", "tier": 2,
+      "requiredRoles": ["Face", "Hacker"], "bonusRoles": ["Ghost", "Muscle"],
+      "minCrew": 2, "maxCrew": 4,
+      "statWeights": { "Charm": 0.55, "Tech": 0.45 },
+      "baseDifficulty": 56, "payoutRange": [20000, 32000],
+      "xpReward": 85, "arrestRisk": 0.20,
+      "heavy": false, "finalCut": false,
+      "flavour": [
+        "A high-roller with a borrowed accent, a rigged roulette wheel and a pit boss who loves a good story.",
+        "The casino's new electronic slot machines talk to a computer in the back. Teach it some new manners.",
+        "Comp the suite, charm the cashier, swap the chips. The house always wins. Tonight, you're the house."
+      ] },
+    { "id": "armoured_truck", "displayName": "Armoured Truck", "tier": 3,
+      "requiredRoles": ["Muscle", "Wheelman", "Safecracker"], "bonusRoles": ["Hacker"],
+      "minCrew": 3, "maxCrew": 4,
+      "statWeights": { "Muscle": 0.35, "Driving": 0.35, "Finesse": 0.3 },
+      "baseDifficulty": 58, "payoutRange": [28000, 42000],
+      "xpReward": 110, "arrestRisk": 0.25,
+      "heavy": true, "finalCut": false,
+      "flavour": [
+        "The Friday payroll run takes the tunnel at 6:15. A stalled ice-cream van, a crowbar and a very polite request.",
+        "A car-chase set piece: box the truck in on the overpass, crack the back doors before the sirens get a close-up.",
+        "The guards stop for doughnuts at the same diner every shift. Their truck does not stop being full of money."
+      ] },
+    { "id": "bank_vault", "displayName": "Bank Vault", "tier": 3,
+      "requiredRoles": ["Safecracker", "Hacker", "Wheelman"], "bonusRoles": ["Ghost", "Face"],
+      "minCrew": 3, "maxCrew": 5,
+      "statWeights": { "Finesse": 0.35, "Tech": 0.25, "Driving": 0.2, "Stealth": 0.2 },
+      "baseDifficulty": 60, "payoutRange": [38000, 60000],
+      "xpReward": 140, "arrestRisk": 0.28,
+      "heavy": true, "finalCut": false,
+      "flavour": [
+        "First National's vault door weighs eleven tons and hasn't met you yet. Long weekend. Long take.",
+        "Tunnel in from the dry cleaner's next door. Mind the steam pipes and do not, under any circumstances, take the shirts.",
+        "The alarm company is running a 'routine test' tonight. You know this because you booked it."
+      ] },
+    { "id": "the_premiere", "displayName": "The Premiere", "tier": 4,
+      "requiredRoles": ["Face", "Ghost", "Safecracker", "Hacker", "Wheelman"], "bonusRoles": ["Muscle"],
+      "minCrew": 5, "maxCrew": 6,
+      "statWeights": { "Charm": 0.2, "Stealth": 0.2, "Finesse": 0.2, "Tech": 0.2, "Driving": 0.2 },
+      "baseDifficulty": 52, "payoutRange": [60000, 80000],
+      "xpReward": 300, "arrestRisk": 0.35,
+      "heavy": false, "finalCut": true,
+      "flavour": [
+        "The Grand Palace Theatre, opening night. Red carpet, searchlights, and the box-office vault holding a month of takings. Roll camera.",
+        "Every star in town will be in the stalls. Every guard will be watching the stars. The vault is backstage, behind the orchestra pit.",
+        "Your magnum opus. Five specialists, one night, one take. When the house lights come up, the safe should be empty and you should be gone."
+      ] }
+  ]
+}

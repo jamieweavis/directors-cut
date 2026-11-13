@@ -58,4 +58,37 @@ private:
 	// ═══ Agent H owns everything below this line ═══
 	EDCMusicState MusicState = EDCMusicState::None;
 	float Volumes[4] = { 1.f, 0.8f, 1.f, 0.7f };
+
+	// Components live in the game instance's current world; rebuilt when that world changes.
+	UPROPERTY(Transient) TObjectPtr<class UAudioComponent> MusicA;
+	UPROPERTY(Transient) TObjectPtr<class UAudioComponent> MusicB;
+	UPROPERTY(Transient) TArray<TObjectPtr<class UAudioComponent>> AmbienceComps;
+	UPROPERTY(Transient) TMap<FName, TObjectPtr<class USoundBase>> SoundCache;
+
+	/** Non-UObject runtime state (ticker, preload handle, timers); defined in Audio/DCAudioSubsystem.cpp. */
+	TSharedPtr<struct FDCAudioRuntime> RT;
+
+	bool TickAudio(float DeltaTime);
+	UWorld* GetAudioWorld() const;
+	bool EnsureComponents();
+	void TearDownComponents();
+	void StartMusic(EDCMusicState State);
+	void StartAmbience();
+	void ApplyVolumes();
+	void SetAmbienceDucked(bool bDuck);
+	void DuckMusic(float Seconds);
+	class USoundBase* LoadSound(const FSoftObjectPath& Path);
+	class UAudioComponent* MakeComponent(class USoundBase* Sound);
+	class UAudioComponent* ActiveMusic() const;
+	float MusicGain() const;
+	float AmbienceGain(int32 Index) const;
+	void LoadVolumes();
+	void SaveVolumes();
+
+	void HandlePhaseChanged(EDCGamePhase Phase);
+	void HandlePlanCommitted(const FDCCrewPlan& Plan);
+	void HandleNightResolved(const FDCNightReport& Report);
+	void HandleLevelUp(int32 CriminalId, int32 NewLevel);
+	void HandleRoomChanged(const FDCRoom& Room);
+	void HandlePerkOffered(const TArray<FDCPerk>& Perks);
 };
