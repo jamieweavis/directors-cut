@@ -3,6 +3,7 @@
 #include "UI/SDCRootInternal.h"
 #include "Framework/Application/SlateApplication.h"
 #include "InputCoreTypes.h"
+#include "Misc/CommandLine.h"
 #include "DirectorsCut.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -13,6 +14,8 @@ void SDCRoot::Construct(const FArguments& InArgs)
 {
 	Owner = InArgs._Owner;
 	PlanCache = MakeShared<FPlanCache>();
+	// The root covers the whole viewport: only its visible children may eat clicks, never the empty space.
+	SetVisibility(EVisibility::SelfHitTestInvisible);
 
 	auto PanelAlpha = [this]() -> float
 	{
@@ -73,7 +76,7 @@ void SDCRoot::Construct(const FArguments& InArgs)
 		[
 			SNew(SBorder)
 			.BorderImage(WhiteBrush())
-			.BorderBackgroundColor_Lambda([this]() { return FLinearColor(0.01f, 0.012f, 0.016f, Current == EDCPanel::Title ? 0.f : 0.72f); })
+			.BorderBackgroundColor_Lambda([this, ModalAlpha]() { return FLinearColor(0.01f, 0.012f, 0.016f, (ShownModal == EDCPanel::Title ? 0.f : 0.72f) * ModalAlpha()); })
 			.Padding(0.f)
 			.ColorAndOpacity_Lambda([ModalAlpha]() { return FLinearColor(1, 1, 1, ModalAlpha()); })
 			.Visibility_Lambda([this, ModalAlpha]() { return bModalShown ? EVisibility::Visible : (ModalAlpha() > 0.01f ? EVisibility::HitTestInvisible : EVisibility::Collapsed); })
@@ -285,10 +288,19 @@ void SDCRoot::Open(EDCPanel P)
 	SavedScroll.Reset();
 	Scrolls.Reset();
 	SetCurrent(P);
-	if (P == EDCPanel::MissionPlanner) { RecomputePlan(); }
+	if (P == EDCPanel::MissionPlanner)
+	{
+		// Screenshot runs (-DCShots) can't click: show the planner with the auto-filled crew.
+		if (PlanCrew.Num() == 0 && FCString::Strifind(FCommandLine::Get(), TEXT("DCShots=")))
+		{
+			if (const UDCRunSubsystem* R = Run()) { PlanCrew = R->SuggestPlan(PlanMissionId, PlanCut).CriminalIds; }
+		}
+		RecomputePlan();
+	}
 	const double T = Now();
 	if (IsModal(P))
 	{
+		ShownModal = P;
 		ModalSlot->SetContent(BuildPanel(P));
 		if (!bModalShown) { ModalT0 = T; }
 		bModalShown = true;
@@ -760,7 +772,6 @@ TSharedRef<SWidget> SDCRoot::DockButton(FName IconName, const FString& Name, con
 				Icon(IconName, 18.f, TAttribute<FSlateColor>::CreateLambda([IsActive]() { return FSlateColor(IsActive() ? Accent : Text); }))
 			]
 		];
-	TSharedRef<SWidget> KeyHint = Key.IsEmpty() ? SNullWidget::NullWidget : Txt(Key, Mono(7.5f), TextFaint);
 	B->SetToolTip(TipWidget(
 		SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Txt(Name, Font(11.f, EW::SemiBold), Text)]
@@ -774,8 +785,7 @@ TSharedRef<SWidget> SDCRoot::DockButton(FName IconName, const FString& Name, con
 			.BorderImage_Lambda([IsActive]() { return IsActive() ? Box(A(Accent, 0.14f), 10.f, A(Accent, 0.5f), 1.f) : NoBrush(); })
 			.Padding(0.f)[B]
 		]
-		+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Bottom).Padding(FMargin(0.f, 0.f, 0.f, 4.f))[SNew(SBox).Visibility(EVisibility::HitTestInvisible)[KeyHint]]
-		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(FMargin(0.f, 3.f, 3.f, 0.f))[Badge(BadgeCount, Accent)];
+		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(FMargin(0.f, -2.f, -2.f, 0.f))[Badge(BadgeCount, Accent)];
 }
 
 TSharedRef<SWidget> SDCRoot::BuildDock()

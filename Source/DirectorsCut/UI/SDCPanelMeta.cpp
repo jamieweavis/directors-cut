@@ -409,24 +409,25 @@ TSharedRef<SWidget> SDCRoot::BuildTitle()
 		UKismetSystemLibrary::QuitGame(W, W ? W->GetFirstPlayerController() : nullptr, EQuitPreference::Quit, false);
 	}, EBtn::Ghost)];
 
+	// Smooth left-to-right shade: many thin slices with an eased falloff.
+	TSharedRef<SHorizontalBox> Shade = SNew(SHorizontalBox);
+	for (int32 i = 0; i < 48; ++i)
+	{
+		const float X = i / 47.f;
+		const float Alpha = X < 0.4f ? 0.84f : 0.84f * FMath::Pow(1.f - (X - 0.4f) / 0.6f, 1.6f);
+		Shade->AddSlot().FillWidth(1.f)[SNew(SImage).Image(WhiteBrush()).ColorAndOpacity(FLinearColor(0.01f, 0.012f, 0.016f, Alpha))];
+	}
+
 	return SNew(SOverlay)
 		// left-side shade so the wordmark reads over the scene
 		+ SOverlay::Slot().HAlign(HAlign_Left)
 		[
-			SNew(SBox).WidthOverride(980.f)
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(0.55f)[SNew(SImage).Image(WhiteBrush()).ColorAndOpacity(FLinearColor(0.01f, 0.012f, 0.016f, 0.82f))]
-				+ SHorizontalBox::Slot().FillWidth(0.15f)[SNew(SImage).Image(WhiteBrush()).ColorAndOpacity(FLinearColor(0.01f, 0.012f, 0.016f, 0.6f))]
-				+ SHorizontalBox::Slot().FillWidth(0.12f)[SNew(SImage).Image(WhiteBrush()).ColorAndOpacity(FLinearColor(0.01f, 0.012f, 0.016f, 0.38f))]
-				+ SHorizontalBox::Slot().FillWidth(0.10f)[SNew(SImage).Image(WhiteBrush()).ColorAndOpacity(FLinearColor(0.01f, 0.012f, 0.016f, 0.18f))]
-				+ SHorizontalBox::Slot().FillWidth(0.08f)[SNew(SImage).Image(WhiteBrush()).ColorAndOpacity(FLinearColor(0.01f, 0.012f, 0.016f, 0.06f))]
-			]
+			SNew(SBox).WidthOverride(1100.f)[Shade]
 		]
 		+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Center).Padding(FMargin(120.f, 0.f, 0.f, 40.f))
 		[
 			SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight()
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
 			[SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.f))[SNew(SBox).WidthOverride(56.f).HeightOverride(3.f)[SNew(SImage).Image(WhiteBrush()).ColorAndOpacity(Accent)]]]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 22.f, 0.f, 0.f)
 			[SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.05f))[Txt(TEXT("DIRECTOR'S"), Font(46.f, EW::Bold, 420), Text)]]
@@ -434,7 +435,7 @@ TSharedRef<SWidget> SDCRoot::BuildTitle()
 			[SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.12f))[Txt(TEXT("CUT"), Font(46.f, EW::Bold, 420), Accent)]]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 14.f, 0.f, 48.f)
 			[SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.2f))[Txt(TEXT("Run the crew. Plan the jobs. Take your cut."), Font(12.f), TextDim)]]
-			+ SVerticalBox::Slot().AutoHeight()
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
 			[SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.3f))[Menu]]
 		]
 		+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(FMargin(120.f, 0.f, 0.f, 40.f))

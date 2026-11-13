@@ -788,7 +788,7 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(22.f, 0.f, 4.f, 0.f)[SNew(SBox).WidthOverride(200.f)[Numbers]],
 				FMargin(18.f))
 		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 18.f, 0.f, 0.f)[CutRow]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 12.f, 0.f, 0.f)[CardBox(CutRow, FMargin(18.f, 14.f))]
 		+ SVerticalBox::Slot().FillHeight(1.f)[SNullWidget::NullWidget]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 18.f, 0.f, 0.f)[Actions];
 
@@ -944,16 +944,21 @@ TSharedRef<SWidget> SDCRoot::ReportCard(const FDCMissionReport& Rep)
 	if (T0 < 0.0) { ReportStung.Add(RId); }
 
 	TSharedRef<SWidget> Badge_ = SNew(SBorder)
-		.BorderImage(Box(A(OC, 0.14f), 6.f, A(OC, 0.6f), 1.f))
-		.Padding(FMargin(10.f, 3.f))
+		.BorderImage(NoBrush())
+		.Padding(0.f)
 		.RenderTransformPivot(FVector2D(0.5f, 0.5f))
 		.RenderTransform_Lambda([Phase]() { const float P = Phase() - 1.0f; const float S = P < 0.f ? 0.6f : 1.f + 0.25f * FMath::Max(0.f, 1.f - P / 0.25f) * FMath::Sin(FMath::Clamp(P / 0.25f, 0.f, 1.f) * PI); return TOptional<FSlateRenderTransform>(FSlateRenderTransform(S)); })
 		.ColorAndOpacity_Lambda([Phase, Sting]() { const float P = Phase() - 1.0f; if (P >= 0.f) { Sting(); } return FLinearColor(1, 1, 1, EaseOut(P / 0.15f)); })
 		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 6.f, 0.f)
-			[Icon(Outcome == EDCMissionOutcome::Success ? TEXT("circle-check") : (Outcome == EDCMissionOutcome::Busted ? TEXT("siren") : TEXT("circle-x")), 11.f, OC)]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Txt(DC::OutcomeName(Outcome), Font(9.5f, EW::Bold, 120), OC)]
+			SNew(SBorder)
+			.BorderImage(Box(A(OC, 0.14f), 6.f, A(OC, 0.6f), 1.f))
+			.Padding(FMargin(10.f, 3.f))
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 6.f, 0.f)
+				[Icon(Outcome == EDCMissionOutcome::Success ? TEXT("circle-check") : (Outcome == EDCMissionOutcome::Busted ? TEXT("siren") : TEXT("circle-x")), 11.f, OC)]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Txt(DC::OutcomeName(Outcome), Font(9.5f, EW::Bold, 120), OC)]
+			]
 		];
 
 	const int32 Take = Rep.DirectorTake;
@@ -987,8 +992,10 @@ TSharedRef<SWidget> SDCRoot::ReportCard(const FDCMissionReport& Rep)
 		const bool bLv = MR.bLevelledUp;
 		TSharedRef<SWidget> MCard = SNew(SBox).WidthOverride(240.f)
 			[
-				SNew(SBorder).BorderImage(Box(Inset, 8.f)).Padding(FMargin(8.f, 7.f))
+				SNew(SBorder).BorderImage(NoBrush()).Padding(0.f)
 				.ColorAndOpacity_Lambda([Phase, Delay]() { return FLinearColor(1, 1, 1, EaseOut((Phase() - Delay) / 0.2f)); })
+				[
+				SNew(SBorder).BorderImage(Box(Inset, 8.f)).Padding(FMargin(8.f, 7.f))
 				[
 					SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)
@@ -1012,6 +1019,7 @@ TSharedRef<SWidget> SDCRoot::ReportCard(const FDCMissionReport& Rep)
 								return FMath::Lerp(XPFrom, XPFrac, P);
 							}), FSlateColor(bLv ? Accent : Info), 3.f)]
 					]
+				]
 				]
 			];
 		Members->AddSlot()[MCard];
@@ -1058,7 +1066,7 @@ TSharedRef<SWidget> SDCRoot::ReportCard(const FDCMissionReport& Rep)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 12.f, 0.f, 0.f)[Members];
 
 	TSharedRef<SWidget> CardW = SNew(SBorder)
-		.BorderImage(Box(DCUI::Card, 10.f, bNew ? A(OC, 0.35f) : Line, 1.f))
+		.BorderImage(Box(DCUI::Card, 10.f, bNew ? A(Accent, 0.35f) : Line, 1.f))
 		.Padding(FMargin(16.f, 14.f))
 		.ColorAndOpacity_Lambda([T0]() { return FLinearColor(1, 1, 1, T0 < 0.0 ? 1.f : FMath::Max(0.25f, EaseOut((float)(Now() - T0 + 0.15) / 0.2f))); })
 		[Content];

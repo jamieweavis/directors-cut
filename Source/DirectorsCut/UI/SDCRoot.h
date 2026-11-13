@@ -52,6 +52,7 @@ private:
 
 	EDCPanel Current = EDCPanel::None;
 	EDCPanel Shown = EDCPanel::None;   // the panel whose content is in PanelSlot (kept during fade-out)
+	EDCPanel ShownModal = EDCPanel::None;
 	bool bPanelShown = false;
 	bool bModalShown = false;
 	double PanelT0 = -10.0;

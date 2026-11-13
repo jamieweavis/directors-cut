@@ -372,7 +372,8 @@ namespace DCUI
 			.ContentPadding(Pad)
 			.IsFocusable(false)
 			.IsEnabled(Enabled)
-			.HAlign(HAlign_Center).VAlign(VAlign_Center)
+			.HAlign((Kind == EBtn::Card || Kind == EBtn::CardSelected) ? HAlign_Fill : HAlign_Center)
+			.VAlign((Kind == EBtn::Card || Kind == EBtn::CardSelected) ? VAlign_Fill : VAlign_Center)
 			.OnHovered_Lambda([]() { Sfx(DCSfx::Hover, 0.35f); })
 			.OnClicked_Lambda([OnClick]() { if (OnClick) { OnClick(); } return FReply::Handled(); })
 			[Content];
@@ -431,13 +432,13 @@ namespace DCUI
 	{
 		return SNew(SBorder)
 			.BorderImage(Box(Col, -1.f, Hex(0x0B0D10), 2.f))
-			.Padding(FMargin(5.f, 0.f, 5.f, 1.f))
+			.Padding(FMargin(5.f, 1.f, 5.f, 2.f))
 			.Visibility_Lambda([Count]() { return Count.Get() > 0 ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 			.HAlign(HAlign_Center)
 			[
-				SNew(SBox).MinDesiredWidth(8.f).HAlign(HAlign_Center)
+				SNew(SBox).MinDesiredWidth(9.f).HAlign(HAlign_Center)
 				[
-					SNew(STextBlock).Font(Font(8.5f, EW::Bold)).ColorAndOpacity(FLinearColor::White)
+					SNew(STextBlock).Font(Font(9.f, EW::Bold)).ColorAndOpacity(Col == Accent ? AccentInk : FLinearColor::White)
 					.Text_Lambda([Count]() { const int32 N = Count.Get(); return FText::FromString(N > 9 ? TEXT("9+") : FString::FromInt(N)); })
 				]
 			];
