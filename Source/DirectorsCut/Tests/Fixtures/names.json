@@ -1,0 +1,40 @@
+{
+  "_comment": "Name pools. Generated as First 'Nickname' Last. No real famous people.",
+  "first": [
+    "Vinnie", "Dolores", "Marcus", "Rosa", "Augie", "Bernadette", "Cyrus", "Lorraine",
+    "Desmond", "Imelda", "Frankie", "Yolanda", "Ezra", "Mabel", "Rocco", "Priya",
+    "Leroy", "Constance", "Tomasz", "Gloria", "Hector", "Nadia", "Otis", "Wanda",
+    "Benny", "Ingrid", "Raymond", "Mei", "Sal", "Odessa", "Clement", "Lupe",
+    "Duke", "Marguerite", "Kofi", "Helga", "Archie", "Tallulah", "Ignatius", "Soledad",
+    "Floyd", "Junie", "Stavros", "Hazel", "Reuben", "Ximena", "Moe", "Pearl"
+  ],
+  "last": [
+    "Caruso", "Delacroix", "Okafor", "Mendez", "Kowalski", "Fairweather", "Nakamura", "Brannigan",
+    "Petrakis", "Lindqvist", "Washington", "Moreau", "Abernathy", "Castellano", "Haddad", "O'Rourke",
+    "Szabo", "Valentine", "Ferreira", "Gutierrez", "Lombardi", "Achebe", "Duchamp", "McGillicuddy",
+    "Tanaka", "Romanov", "Silverstein", "Albright", "Quintero", "Dubois", "Marchetti", "Oyelaran",
+    "Kaminski", "Beaumont", "Vasquez", "Thibodeaux", "Ng", "Hargreaves", "Esposito", "Larkspur",
+    "Chandrasekhar", "Pemberton", "Rooney", "Volkov"
+  ],
+  "nicknames": [
+    "The Wrench", "Two-Reels", "Sideburns", "The Matinee", "Fast Forward", "Boom Mic",
+    "The Closer", "Lipstick", "Spaghetti Western", "The Stand-In", "Velvet", "Overdub",
+    "The Critic", "Gaffer Tape", "Popcorn", "The Usher", "Encore", "Slow Fade",
+    "Box Office", "Monocle", "The Understudy", "Butterfingers", "Sugar Rush", "Cue Card",
+    "The Accountant", "Disco", "Half-Price", "The Extra", "Smoke Machine", "Dutch Angle",
+    "Three Takes", "Silk Stockings", "The Pigeon", "Jump Cut", "Last Reel", "Polaroid",
+    "Mood Lighting", "The Bishop", "Saxophone", "Quiet Please", "Buttons", "Clapperboard",
+    "Dry Ice", "The Rumour", "Shag Carpet", "Two-Tone", "Lucky Stub", "Ten-Percent",
+    "The Cameo", "Big Hair", "Static", "The Weatherman", "Fondue", "Bell-Bottoms",
+    "Freeze Frame", "Chopsticks", "The Duchess", "Nickel", "Mirrorball", "Stage Left",
+    "Grindhouse", "Pinstripe", "The Professor", "Coffee Run"
+  ],
+  "typeNicknames": {
+    "Wheelman": ["Hubcap", "Overdrive", "Burnout", "Choke", "Clutch", "Tailpipe", "Getaway", "Pit Stop"],
+    "Muscle": ["Fridge", "Knuckles", "The Wall", "Big Lou", "Bulldozer", "Mountain", "Tiny", "Sledge"],
+    "Hacker": ["Modem", "Punchcard", "Mainframe", "Dial Tone", "Vacuum Tube", "Floppy", "Byte", "Switchboard"],
+    "Ghost": ["Whisper", "The Draught", "Cobweb", "Shadow Puppet", "Slipper", "Moth", "Tiptoe", "Fog"],
+    "Face": ["Charming", "Silver Tongue", "Dimples", "The Pitch", "Smiles", "Velvet Voice", "Handshake", "Headliner"],
+    "Safecracker": ["Tumbler", "Fingers", "Dynamite", "Combination", "Stethoscope", "The Locksmith", "Click", "Deadbolt"]
+  }
+}
