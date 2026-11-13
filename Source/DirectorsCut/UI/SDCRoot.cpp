@@ -519,6 +519,8 @@ void SDCRoot::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime
 	{
 		if (!R->HasActiveRun() && R->GetPhase() == EDCGamePhase::Title && Current != EDCPanel::Title) { Open(EDCPanel::Title); }
 		if (IsPlaying() && Current == EDCPanel::Title) { Close(true); }
+		if (R->GetPhase() == EDCGamePhase::GameOver && Current != EDCPanel::GameOver && Current != EDCPanel::Title) { Open(EDCPanel::GameOver); }
+		if (R->GetPhase() == EDCGamePhase::Won && Current != EDCPanel::Victory && Current != EDCPanel::Title) { Open(EDCPanel::Victory); }
 		if (IsPlaying() && R->HasPendingPerkOffer() && (Current == EDCPanel::None || (bPerkQueued && Current == EDCPanel::Reports && R->GetUnseenReportCount() == 0)))
 		{
 			bPerkQueued = false;

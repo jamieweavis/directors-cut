@@ -114,7 +114,7 @@ void UDCUISubsystem::OpenMissionPlanner(int32 MissionId)
 
 void UDCUISubsystem::ClosePanel()
 {
-	if (Root.IsValid()) { Root->Close(true); }
+	if (Root.IsValid()) { Root->Close(false); }
 	else { OpenPanelType = EDCPanel::None; OnPanelChanged.Broadcast(EDCPanel::None); }
 }
 
