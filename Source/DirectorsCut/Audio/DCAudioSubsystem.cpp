@@ -232,6 +232,9 @@ bool UDCAudioSubsystem::EnsureComponents()
 		}
 	}
 	if (RT->NextOneShot <= RT->Now) { RT->NextOneShot = RT->Now + RT->Rand.FRandRange(15.f, 40.f); }
+	int32 Live = 0;
+	for (UAudioComponent* C : BedComps) { Live += C ? 1 : 0; }
+	UE_LOG(LogDC, Display, TEXT("DCAudio: bound to world %s, %d/%d ambience beds playing"), *W->GetName(), Live, (int32)DCAudio::BedCount);
 	return true;
 }
 
@@ -317,6 +320,7 @@ void UDCAudioSubsystem::Schedule(FName SfxName, float Delay, float VolumeMultipl
 	}
 	if (RT->Queue.Num() >= 24) { return; }
 	RT->Queue.Add({ At, SfxName, VolumeMultiplier });
+	UE_LOG(LogDC, Verbose, TEXT("DCAudio: queued %s in %.2fs"), *SfxName.ToString(), Delay);
 }
 
 void UDCAudioSubsystem::TickQueue()
