@@ -311,9 +311,28 @@ bool ADCWorldDirector::IsSleeper(const ADCCriminalPawn* P) const
 void ADCWorldDirector::BuildSleepSpots()
 {
 	SleepSpots.Reset();
+	SleepYaws.Reset();
 	SleepOwner.Reset();
 	const ADCRoomModule* Lounge = FindRoom(EDCRoomType::Lounge);
 	if (!Lounge) { return; }
+	// Preferred: bed anchors from the scene (any component in the Bunkroom tagged "DC.Bed": location = mattress top
+	// centre, +X = head-to-foot direction).
+	TArray<USceneComponent*> Comps;
+	Lounge->GetComponents<USceneComponent>(Comps);
+	for (const USceneComponent* C : Comps)
+	{
+		if (C && C->ComponentHasTag(TEXT("DC.Bed")))
+		{
+			SleepSpots.Add(C->GetComponentLocation());
+			SleepYaws.Add(C->GetComponentRotation().Yaw);
+		}
+	}
+	if (SleepSpots.Num() > 0)
+	{
+		SleepOwner.Init(INDEX_NONE, SleepSpots.Num());
+		UE_LOG(LogDC, Log, TEXT("WorldDirector: %d beds"), SleepSpots.Num());
+		return;
+	}
 	const ADCCriminalSpawnZone* Zone = nullptr;
 	for (const TWeakObjectPtr<ADCCriminalSpawnZone>& Z : Zones)
 	{
@@ -337,9 +356,9 @@ void ADCWorldDirector::BuildSleepSpots()
 			FVector P = T.TransformPosition(Local);
 			P.Z = Lounge->GetActorLocation().Z;
 			SleepSpots.Add(P);
+			SleepYaws.Add(T.GetRotation().Rotator().Yaw + (bLongX ? 90.f : 0.f) + ((r + c) % 2 ? 180.f : 0.f));
 		}
 	}
-	SleepYaw = T.GetRotation().Rotator().Yaw + (bLongX ? 90.f : 0.f);
 	SleepOwner.Init(INDEX_NONE, SleepSpots.Num());
 }
 
@@ -363,11 +382,12 @@ bool ADCWorldDirector::TrySendToBed(ADCCriminalPawn* P, bool bInstant)
 	if (Slot == INDEX_NONE) { return false; }
 	P->SetSleepSlot(Slot);
 	const FVector Spot = SleepSpots[Slot];
-	const float Yaw = SleepYaw + ((P->GetCriminalId() & 1) ? 180.f : 0.f);
+	const float Yaw = SleepYaws.IsValidIndex(Slot) ? SleepYaws[Slot] : 0.f;
 	TArray<FVector> Route;
 	if (bInstant) { P->PlaceAt(Spot); }
 	else { PlanPath(P->GetFeet(), Spot, Route); }
 	P->SetIdleGoal(Route, EDCPawnActivity::Sleep, Yaw, 0.f);
+	UE_LOG(LogDC, Log, TEXT("WorldDirector: %d -> bed %d %s%s"), P->GetCriminalId(), Slot, *Spot.ToCompactString(), bInstant ? TEXT(" (instant)") : TEXT(""));
 	return true;
 }
 
@@ -835,7 +855,7 @@ void ADCWorldDirector::LogPawns(const TCHAR* Tag) const
 		if (!P) { continue; }
 		const ADCRoomModule* R = RoomAt(P->GetFeet());
 		UE_LOG(LogDC, Display, TEXT("[WorldTest] %s pawn %d %s/%s%s%s hidden %d room %s loc %s"), Tag, P->GetCriminalId(), Modes[(int32)P->GetMode()], Acts[(int32)P->GetActivity()],
-			P->IsSleeping() ? TEXT(" lying") : TEXT(""), P->IsReturnQueued() ? TEXT(" return-queued") : TEXT(""), P->IsHidden() ? 1 : 0,
+			P->IsSleeping() ? TEXT(" lying") : P->IsInjured() ? TEXT(" injured") : TEXT(""), P->IsReturnQueued() ? TEXT(" return-queued") : TEXT(""), P->IsHidden() ? 1 : 0,
 			R ? DC::RoomName(R->RoomType) : TEXT("OUTSIDE"), *P->GetActorLocation().ToCompactString());
 	}
 }
@@ -874,7 +894,16 @@ void ADCWorldDirector::TickWorldTest(float Dt)
 	case 3: FinishBuild(); Rig->ResetFocus(); Next(0.9); break;
 	case 4: TestShot(TEXT("t_reveal_a")); Next(1.2); break;
 	case 5: TestShot(TEXT("t_reveal_b")); Next(3.0); break;
-	case 6: TestShot(TEXT("t_after_reveal")); LogPawns(TEXT("after_reveal")); Next(0.5); break;
+	case 6:
+		{
+			TestShot(TEXT("t_after_reveal")); LogPawns(TEXT("after_reveal"));
+			// Hire the cheapest recruit: walks in through the street door.
+			const FDCCriminal* Cheapest = nullptr;
+			for (const FDCCriminal& C : Run->GetRecruits()) { if (!Cheapest || C.HireCost < Cheapest->HireCost) { Cheapest = &C; } }
+			if (Cheapest) { FString E; const int32 Id = Cheapest->Id; const bool bOk = Run->Hire(Id, &E); UE_LOG(LogDC, Display, TEXT("[WorldTest] Hire %d: %d %s (cash $%d)"), Id, bOk ? 1 : 0, *E, Run->GetCash()); }
+			Next(1.5);
+		}
+		break;
 	// Garage, so crews use the roller door.
 	case 7: Build(EDCRoomType::Garage); FinishBuild(); Next(5.0); break;
 	// Start every staffable mission: crews walk (staggered) to the garage and leave.
@@ -902,19 +931,31 @@ void ADCWorldDirector::TickWorldTest(float Dt)
 	case 12: TestShot(TEXT("t_returning")); LogPawns(TEXT("returning")); Next(5.0); break;
 	case 13: TestShot(TEXT("t_returned")); LogPawns(TEXT("returned")); Next(0.5); break;
 	// Office upgrade: quick reveal of the new level.
-	case 14: Focus(EDCRoomType::Office, 0.35f); Build(EDCRoomType::Office); Run->AdvanceTime(5.0); Next(2.0); break;
-	case 15: TestShot(TEXT("t_upgrading")); FinishBuild(); Next(0.5); break;
+	case 14:
+		Focus(EDCRoomType::Office, 0.35f);
+		bTestFakeUpgrade = !Build(EDCRoomType::Office);
+		if (bTestFakeUpgrade)
+		{
+			// Not enough cash in the stub economy: drive the room visuals directly (same calls as the real events).
+			if (ADCRoomModule* M = FindRoom(EDCRoomType::Office)) { M->ApplyState(EDCRoomState::Building, 1); M->SetBuildProgress(0.4f, 42.0, 2); }
+		}
+		else { Run->AdvanceTime(5.0); }
+		Next(2.0);
+		break;
+	case 15:
+		TestShot(TEXT("t_upgrading"));
+		if (bTestFakeUpgrade) { if (ADCRoomModule* M = FindRoom(EDCRoomType::Office)) { M->PlayUpgradeReveal(2); } }
+		else { FinishBuild(); }
+		Next(0.5);
+		break;
 	case 16: TestShot(TEXT("t_upgrade_reveal")); Next(2.0); break;
 	// Dismiss one, hire one (street door).
 	case 17:
-		{
-			for (const FDCCriminal& C : Run->GetRoster()) { if (C.IsAvailable()) { UE_LOG(LogDC, Display, TEXT("[WorldTest] dismiss %d"), C.Id); Run->Dismiss(C.Id); break; } }
-			if (Run->GetRecruits().Num() > 0) { FString E; const bool bOk = Run->Hire(Run->GetRecruits()[0].Id, &E); UE_LOG(LogDC, Display, TEXT("[WorldTest] Hire %d %s (cash $%d)"), bOk ? 1 : 0, *E, Run->GetCash()); }
-			Focus(EDCRoomType::Office, 0.4f);
-			Next(2.0);
-		}
+		for (const FDCCriminal& C : Run->GetRoster()) { if (C.IsAvailable()) { UE_LOG(LogDC, Display, TEXT("[WorldTest] dismiss %d"), C.Id); Run->Dismiss(C.Id); break; } }
+		Focus(EDCRoomType::Office, 0.4f);
+		Next(2.0);
 		break;
-	case 18: TestShot(TEXT("t_fired_hired")); LogPawns(TEXT("fired_hired")); Next(4.0); break;
+	case 18: TestShot(TEXT("t_dismissed")); LogPawns(TEXT("dismissed")); Next(4.0); break;
 	case 19:
 		for (ADCCriminalPawn* P : Pawns) { if (P && !P->IsHidden() && P->GetMode() == EDCPawnMode::Wander) { Run->OnCriminalLevelUp.Broadcast(P->GetCriminalId(), 5); Rig->FocusOn(P->GetActorLocation(), 0.85f); break; } }
 		Next(0.6);

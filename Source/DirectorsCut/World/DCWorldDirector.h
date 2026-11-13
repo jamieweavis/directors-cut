@@ -75,7 +75,7 @@ protected:
 	bool IsSpotTaken(const FVector& P, const ADCCriminalPawn* Except) const;
 	bool IsSleeper(const ADCCriminalPawn* P) const;
 	TArray<FVector> SleepSpots;
-	float SleepYaw = 0.f;
+	TArray<float> SleepYaws;
 	TArray<int32> SleepOwner; // criminal id per spot, INDEX_NONE = free
 	void BuildSleepSpots();
 	int32 AcquireSleepSlot(ADCCriminalPawn* P);
@@ -123,6 +123,7 @@ protected:
 	double TestTime = 0.0;
 	double StepAt = 0.0;
 	int32 TestStep = 0;
+	bool bTestFakeUpgrade = false;
 	FString TestShotDir;
 	void TickWorldTest(float Dt);
 	void TestShot(const FString& Name);

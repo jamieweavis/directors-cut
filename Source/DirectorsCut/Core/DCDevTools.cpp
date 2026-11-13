@@ -4,6 +4,7 @@
 #include "World/DCPlayerController.h"
 #include "World/DCCameraRig.h"
 #include "World/DCRoomModule.h"
+#include "World/DCCriminalPawn.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -120,6 +121,17 @@ void UDCDevTools::PrepareShot(const FShot& Shot)
 	if (Rig)
 	{
 		if (Shot.Focus.Equals(TEXT("wide"), ESearchCase::IgnoreCase)) { Rig->ResetFocus(); }
+		else if (Shot.Focus.Equals(TEXT("crew"), ESearchCase::IgnoreCase))
+		{
+			// Close-up on a crew member (a sleeping one if any).
+			ADCCriminalPawn* Best = nullptr;
+			for (TActorIterator<ADCCriminalPawn> It(W); It; ++It)
+			{
+				if (It->IsHidden()) { continue; }
+				if (!Best || (It->IsSleeping() && !Best->IsSleeping())) { Best = *It; }
+			}
+			if (Best) { Rig->FocusOn(Best->GetActorLocation(), 1.f); }
+		}
 		else
 		{
 			const UEnum* E = StaticEnum<EDCRoomType>();
@@ -149,10 +161,11 @@ void UDCDevTools::PrepareShot(const FShot& Shot)
 bool UDCDevTools::Tick(float DeltaTime)
 {
 	Elapsed += DeltaTime;
+	// Run-setup flags apply as soon as the game world is up (independent of -DCShotDelay).
+	const bool bWorldUp = GetGameWorld() && GetGameWorld()->HasBegunPlay();
+	if (bContinue && bWorldUp) { ApplyContinue(); bContinue = false; }
+	if (bClockFlags && bWorldUp && Elapsed > 0.5) { ApplyClockFlags(); bClockFlags = false; }
 	if (Elapsed < NextAt) { return true; }
-
-	if (bContinue && GetGameWorld() && GetGameWorld()->HasBegunPlay()) { ApplyContinue(); bContinue = false; }
-	if (bClockFlags && Elapsed > 0.5) { ApplyClockFlags(); bClockFlags = false; }
 	if (Step == 0 && AutoPlaySeconds > 0) { RunAutoPlay(); AutoPlaySeconds = 0; NextAt = Elapsed + 1.0; return true; }
 
 	if (Shots.IsValidIndex(Step))

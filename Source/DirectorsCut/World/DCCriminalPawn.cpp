@@ -386,16 +386,14 @@ void ADCCriminalPawn::LieDown()
 {
 	if (bLying) { return; }
 	bLying = true;
-	USkeletalMeshComponent* M = GetMesh();
-	UAnimSequence* Lie = bUsingFallbackBody ? nullptr : LoadQuiet<UAnimSequence>(TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Back_01.MM_Death_Back_01"));
-	if (M && Lie)
+	// Lie on the back, head towards actor -X, face up: tip the (idle-animating) mesh over around the actor's Y axis.
+	if (USkeletalMeshComponent* M = GetMesh())
 	{
-		M->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-		M->SetAnimation(Lie);
-		M->SetPosition(Lie->GetPlayLength() - 0.02f, false);
-		M->SetPlayRate(0.f);
-		M->Play(false);
+		const FQuat Lying = FQuat(FRotator(90.f, 0.f, 0.f)) * FQuat(FRotator(0.f, -90.f, 0.f));
+		M->SetRelativeLocationAndRotation(FVector(88.f, 0.f, -HalfHeight + 14.f), Lying);
 	}
+	if (Plate) { Plate->SetRelativeLocation(FVector(0.f, 0.f, -HalfHeight + 60.f)); }
+	if (Bandage) { Bandage->SetVisibility(false); }
 	RefreshPlate();
 }
 
@@ -403,13 +401,12 @@ void ADCCriminalPawn::GetUp()
 {
 	if (!bLying) { return; }
 	bLying = false;
-	USkeletalMeshComponent* M = GetMesh();
-	if (M && AnimClass && !bUsingFallbackBody)
+	if (USkeletalMeshComponent* M = GetMesh())
 	{
-		M->SetPlayRate(1.f);
-		M->SetAnimationMode(EAnimationMode::AnimationBlueprint);
-		M->SetAnimInstanceClass(AnimClass);
+		M->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -HalfHeight), FRotator(0.f, -90.f, 0.f));
 	}
+	if (Plate) { Plate->SetRelativeLocation(FVector(0.f, 0.f, HalfHeight + 22.f)); }
+	if (Bandage) { Bandage->SetVisibility(bInjured && !IsHidden()); }
 	RefreshPlate();
 }
 
