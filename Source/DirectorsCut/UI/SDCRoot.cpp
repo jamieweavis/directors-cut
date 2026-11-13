@@ -521,7 +521,7 @@ void SDCRoot::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime
 		if (IsPlaying() && Current == EDCPanel::Title) { Close(true); }
 		if (R->GetPhase() == EDCGamePhase::GameOver && Current != EDCPanel::GameOver && Current != EDCPanel::Title) { Open(EDCPanel::GameOver); }
 		if (R->GetPhase() == EDCGamePhase::Won && Current != EDCPanel::Victory && Current != EDCPanel::Title) { Open(EDCPanel::Victory); }
-		if (IsPlaying() && R->HasPendingPerkOffer() && (Current == EDCPanel::None || (bPerkQueued && Current == EDCPanel::Reports && R->GetUnseenReportCount() == 0)))
+		if (IsPlaying() && R->HasPendingPerkOffer() && Current == EDCPanel::None && !bPanelShown && Now() - PanelT0 > 0.4)
 		{
 			bPerkQueued = false;
 			Open(EDCPanel::PerkDraft);

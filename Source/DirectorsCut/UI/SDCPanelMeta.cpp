@@ -82,12 +82,12 @@ TSharedRef<SWidget> SDCRoot::RoomTile(const FDCRoom& Room)
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[Req]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 			[
-				TextButton(bCan ? (bBuilt ? FName(TEXT("arrow-up")) : FName(TEXT("hammer"))) : BlockIcon(Block == EDCPlanBlock::None ? EDCPlanBlock::NoCapacity : Block), bBuilt ? TEXT("Upgrade") : TEXT("Build"), [this, Type]()
+				TextButton(bCan ? (bBuilt ? FName(TEXT("arrow-up")) : FName(TEXT("hammer"))) : (Block == EDCPlanBlock::None ? FName(TEXT("hourglass")) : BlockIcon(Block)), bBuilt ? TEXT("Upgrade") : TEXT("Build"), [this, Type]()
 				{
 					UDCRunSubsystem* X = Run(); EDCPlanBlock B = EDCPlanBlock::None;
 					if (X && X->BuildRoom(Type, &B)) { Sfx(DCSfx::BuildStart); }
 					else { Sfx(DCSfx::Error); Toast(BlockText(B), BlockIcon(B), true); }
-				}, bCan ? EBtn::Primary : EBtn::Secondary, bCan, bCan ? nullptr : TSharedPtr<IToolTip>(Tip(TEXT("Can't build yet"), BlockTip, BlockIcon(Block), Bad)), 10.f)
+				}, bCan ? EBtn::Primary : EBtn::Secondary, bCan, bCan ? nullptr : TSharedPtr<IToolTip>(Tip(TEXT("Can't build yet"), BlockTip, Block == EDCPlanBlock::None ? FName(TEXT("hourglass")) : BlockIcon(Block), Bad)), 10.f)
 			];
 	}
 
