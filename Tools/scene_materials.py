@@ -12,6 +12,7 @@
 #   M_DC_Screen    : unlit flickering film screen. Color, Strength
 #   M_DC_Smoke     : translucent drifting smoke wisps. Color, Opacity
 #   M_DC_Dust      : additive dust motes, WPO drift per instance (ISM). Color, Strength, Drift
+#   M_DC_GlassI    : translucent lit glass usable on instanced meshes. Color, Opacity, Roughness
 import unreal
 
 AT = unreal.AssetToolsHelpers.get_asset_tools()
@@ -25,7 +26,10 @@ def fresh_material(name):
     path = f"{MAT_DIR}/{name}"
     if EAL.does_asset_exist(path):
         EAL.delete_asset(path)
-    return AT.create_asset(name, MAT_DIR, unreal.Material, unreal.MaterialFactoryNew())
+    m = AT.create_asset(name, MAT_DIR, unreal.Material, unreal.MaterialFactoryNew())
+    # the scene batches decoration into instanced static meshes: every scene material must allow it
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    return m
 
 
 def vparam(m, name, default, x=-900, y=0):
@@ -237,9 +241,9 @@ def highlight():
     cam = expr(m, unreal.MaterialExpressionCameraVectorWS, -900, 350)
     t = expr(m, unreal.MaterialExpressionTime, -900, 450)
     code = r"""
-float fr = pow(1.0 - saturate(abs(dot(normalize(N), normalize(V)))), 2.5);
-// x8 gain: the scene runs at a dark manual exposure (EV bias ~-2.5), callers pass Strength ~0.7..1.4
-return Color.rgb * Strength * 8.0 * (0.08 + fr);
+float fr = pow(1.0 - saturate(abs(dot(normalize(N), normalize(V)))), 3.0);
+// x3 gain: the scene runs at a dark manual exposure (EV bias ~-2.5), callers pass Strength ~0.7..1.4
+return Color.rgb * Strength * 3.0 * (0.04 + fr);
 """
     cu = custom(m, code, [("N", nrm), ("V", cam), ("T", t), ("Color", c), ("Strength", s)])
     MEL.connect_material_property(cu, "", MP.MP_EMISSIVE_COLOR)
@@ -402,7 +406,19 @@ return float3(sin(T * 0.21 + r * 7.0) + 0.5 * sin(T * 0.53 + r * 3.0),
 
 import os
 _only = [x for x in os.environ.get("DC_MATS", "").split(",") if x]
-for f in (highlight, proc, neon, beam, rain, screen, smoke, dust):
+def glassi():
+    m = fresh_material("M_DC_GlassI")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    c = vparam(m, "Color", (0.4, 0.5, 0.55, 1), -600, 0)
+    o = sparam(m, "Opacity", 0.25, -600, 200)
+    r = sparam(m, "Roughness", 0.05, -600, 300)
+    MEL.connect_material_property(c, "", MP.MP_BASE_COLOR)
+    MEL.connect_material_property(o, "", MP.MP_OPACITY)
+    MEL.connect_material_property(r, "", MP.MP_ROUGHNESS)
+    return m
+
+
+for f in (highlight, proc, neon, beam, rain, screen, smoke, dust, glassi):
     if _only and f.__name__ not in _only:
         continue
     try:

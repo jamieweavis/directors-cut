@@ -56,15 +56,15 @@ void ADCHideoutBuilder::InitAssets()
 	const TCHAR* Paths[] = { DCPaths::Cube, DCPaths::Cylinder, DCPaths::Sphere, DCPaths::Cone, DCPaths::Plane };
 	for (const TCHAR* P : Paths) { Meshes.Add(LoadObject<UStaticMesh>(nullptr, P)); }
 
-	const FLinearColor Gold(0.62f, 0.42f, 0.14f);
+	const FLinearColor GoldCol(0.62f, 0.42f, 0.14f);
 	// --- architecture
 	Proc("Oak",        1, FLinearColor(0.20f, 0.105f, 0.05f), FLinearColor(0.085f, 0.04f, 0.018f), 0.45f, 0.f, 1.f, 0.4f, 0.f);
 	Proc("OakY",       1, FLinearColor(0.20f, 0.105f, 0.05f), FLinearColor(0.085f, 0.04f, 0.018f), 0.45f, 0.f, 1.f, 0.4f, 1.f);
 	Proc("DarkWood",   1, FLinearColor(0.075f, 0.032f, 0.016f), FLinearColor(0.03f, 0.013f, 0.007f), 0.4f, 0.f, 1.5f, 0.3f, 0.f);
 	Proc("DarkWoodY",  1, FLinearColor(0.075f, 0.032f, 0.016f), FLinearColor(0.03f, 0.013f, 0.007f), 0.4f, 0.f, 1.5f, 0.3f, 1.f);
 	Proc("Mahogany",   1, FLinearColor(0.17f, 0.045f, 0.022f), FLinearColor(0.055f, 0.013f, 0.008f), 0.3f, 0.f, 1.6f, 0.2f, 1.f);
-	Proc("PaperOffice",11, FLinearColor(0.03f, 0.06f, 0.045f), Gold, 0.7f, 0.f, 1.f, 0.6f);
-	Proc("PaperLounge",11, FLinearColor(0.10f, 0.02f, 0.025f), Gold, 0.7f, 0.f, 1.f, 0.6f);
+	Proc("PaperOffice",11, FLinearColor(0.03f, 0.06f, 0.045f), GoldCol, 0.7f, 0.f, 1.f, 0.6f);
+	Proc("PaperLounge",11, FLinearColor(0.10f, 0.02f, 0.025f), GoldCol, 0.7f, 0.f, 1.f, 0.6f);
 	Proc("PaperTeal",  11, FLinearColor(0.025f, 0.06f, 0.07f), FLinearColor(0.5f, 0.45f, 0.3f), 0.7f, 0.f, 1.f, 0.7f);
 	Proc("Brick",      2, FLinearColor(0.20f, 0.065f, 0.04f), FLinearColor(0.09f, 0.085f, 0.08f), 0.85f, 0.f, 1.f, 0.6f);
 	Proc("Concrete",   3, FLinearColor(0.16f, 0.155f, 0.15f), FLinearColor(0.07f, 0.07f, 0.07f), 0.8f, 0.f, 1.f, 0.8f);
@@ -141,13 +141,13 @@ void ADCHideoutBuilder::InitAssets()
 	Neon("CloseRed",   FLinearColor(1.f, 0.02f, 0.02f), 6.f, 0.5f, 11.f);
 	Neon("Marquee",    FLinearColor(1.f, 0.7f, 0.35f), 30.f, 0.1f, 13.f);
 	// --- special
-	Special("Glass", DCPaths::MatGlass, [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(0.4f, 0.5f, 0.55f)); D->SetScalarParameterValue("Opacity", 0.2f); });
+	Special("Glass", TEXT("/Game/DC/Materials/M_DC_GlassI.M_DC_GlassI"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(0.4f, 0.5f, 0.55f)); D->SetScalarParameterValue("Opacity", 0.2f); });
 	Special("Rain", TEXT("/Game/DC/Materials/M_DC_Rain.M_DC_Rain"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(1.2f, 2.f, 2.8f)); });
-	Special("Screen", TEXT("/Game/DC/Materials/M_DC_Screen.M_DC_Screen"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Strength", 14.f); });
+	Special("Screen", TEXT("/Game/DC/Materials/M_DC_Screen.M_DC_Screen"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Strength", 5.f); });
 	Special("ScreenOff", TEXT("/Game/DC/Materials/M_DC_Screen.M_DC_Screen"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Strength", 0.05f); });
 	Special("Smoke", TEXT("/Game/DC/Materials/M_DC_Smoke.M_DC_Smoke"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(2.2f, 2.2f, 2.5f)); D->SetScalarParameterValue("Opacity", 0.45f); });
-	Special("Beam", TEXT("/Game/DC/Materials/M_DC_Beam.M_DC_Beam"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Strength", 0.6f); });
-	Special("ShaftPink", TEXT("/Game/DC/Materials/M_DC_Beam.M_DC_Beam"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(1.f, 0.2f, 0.55f)); D->SetScalarParameterValue("Strength", 0.05f); D->SetScalarParameterValue("Flicker", 0.f); });
+	Special("Beam", TEXT("/Game/DC/Materials/M_DC_Beam.M_DC_Beam"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Strength", 0.9f); });
+	Special("ShaftPink", TEXT("/Game/DC/Materials/M_DC_Beam.M_DC_Beam"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(1.f, 0.2f, 0.55f)); D->SetScalarParameterValue("Strength", 0.35f); D->SetScalarParameterValue("Flicker", 0.f); });
 	Special("Dust", TEXT("/Game/DC/Materials/M_DC_Dust.M_DC_Dust"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Strength", 10.f); });
 	Special("DustPink", TEXT("/Game/DC/Materials/M_DC_Dust.M_DC_Dust"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(1.f, 0.4f, 0.7f)); D->SetScalarParameterValue("Strength", 10.f); });
 }
@@ -193,15 +193,8 @@ void ADCHideoutBuilder::Proc(FName Key, int32 Pattern, const FLinearColor& A, co
 
 void ADCHideoutBuilder::Emis(FName Key, const FLinearColor& Color, float Strength)
 {
-	if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, DCPaths::MatEmissive))
-	{
-		UMaterialInstanceDynamic* D = UMaterialInstanceDynamic::Create(Base, this);
-		D->SetVectorParameterValue("Color", Color);
-		D->SetScalarParameterValue("Strength", Strength);
-		Mats.Add(Key, D);
-		return;
-	}
-	Proc(Key, 0, Color, Color, 0.5f, 0.f, 1.f, 0.f, 0.f, Color, Strength);
+	// M_DC_Neon with no flicker (it carries the instanced-mesh usage flag; M_DC_Emissive does not).
+	Neon(Key, Color, Strength, 0.f, 0.f);
 }
 
 void ADCHideoutBuilder::Neon(FName Key, const FLinearColor& Color, float Strength, float Flicker, float Seed)
@@ -216,7 +209,15 @@ void ADCHideoutBuilder::Neon(FName Key, const FLinearColor& Color, float Strengt
 		Mats.Add(Key, D);
 		return;
 	}
-	Emis(Key, Color, Strength);
+	if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, DCPaths::MatEmissive))
+	{
+		UMaterialInstanceDynamic* D = UMaterialInstanceDynamic::Create(Base, this);
+		D->SetVectorParameterValue("Color", Color);
+		D->SetScalarParameterValue("Strength", Strength);
+		Mats.Add(Key, D);
+		return;
+	}
+	Proc(Key, 0, Color, Color, 0.5f, 0.f, 1.f, 0.f, 0.f, Color, Strength);
 }
 
 void ADCHideoutBuilder::Special(FName Key, const TCHAR* Path, TFunctionRef<void(UMaterialInstanceDynamic*)> Setup)
@@ -748,14 +749,14 @@ void ADCHideoutBuilder::SetCVars()
 	};
 	// Manual exposure lives around EV ~ -3..-1 (dim practicals). Centre Lumen's cached-lighting range on it so nothing clips
 	// (removes the "Cached lighting in Lumen ... r.EyeAdaptation.CachedLightingPreExposure" warning).
-	float EV = -2.5f;
+	float EV = -2.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("DCExposure="), EV);
 	float CachedEV = FMath::Clamp(2.f - EV, -16.f, 16.f);
 	FParse::Value(FCommandLine::Get(), TEXT("DCCachedEV="), CachedEV);
 	Set(TEXT("r.EyeAdaptation.CachedLightingPreExposure"), *FString::SanitizeFloat(CachedEV));
 	Set(TEXT("r.LocalFogVolume.RenderIntoVolumetricFog"), TEXT("1"));
-	Set(TEXT("r.LocalFogVolume.MaxDensityIntoVolumetricFog"), TEXT("0.02"));
-	Set(TEXT("r.VolumetricFog.GridPixelSize"), TEXT("8"));
+	Set(TEXT("r.LocalFogVolume.MaxDensityIntoVolumetricFog"), TEXT("0.5"));
+	Set(TEXT("r.VolumetricFog.GridPixelSize"), TEXT("12"));
 	Set(TEXT("r.VolumetricFog.GridSizeZ"), TEXT("96"));
 	Set(TEXT("r.VolumetricFog.HistoryWeight"), TEXT("0.9"));
 	Set(TEXT("r.MotionBlurQuality"), TEXT("0"));
@@ -769,7 +770,7 @@ void ADCHideoutBuilder::BuildLightingAndPost()
 	PPV->bUnbound = true;
 	PPV->Priority = -1.f; // gameplay (camera / reveal) volumes can override
 	FPostProcessSettings& S = PPV->Settings;
-	float EV = -2.5f;
+	float EV = -2.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("DCExposure="), EV);
 	S.bOverride_AutoExposureMethod = true; S.AutoExposureMethod = AEM_Manual;
 	S.bOverride_AutoExposureBias = true; S.AutoExposureBias = EV;
@@ -805,9 +806,9 @@ void ADCHideoutBuilder::BuildLightingAndPost()
 	AExponentialHeightFog* Fog = GetWorld()->SpawnActor<AExponentialHeightFog>();
 	if (UExponentialHeightFogComponent* F = Fog ? Fog->GetComponent() : nullptr)
 	{
-		F->SetFogDensity(0.f);
+		F->SetFogDensity(0.0002f);
 		F->SetSecondFogDensity(0.f);
-		F->SetFogMaxOpacity(0.f);
+		F->SetFogHeightFalloff(0.001f);
 		F->SetFogInscatteringColor(FLinearColor::Black);
 		F->SetDirectionalInscatteringColor(FLinearColor::Black);
 		F->SetVolumetricFog(true);
@@ -892,6 +893,7 @@ void ADCHideoutBuilder::BuildHideout()
 		ReviewCam->GetCameraComponent()->SetFieldOfView(18.f);
 		ReviewCam->GetCameraComponent()->SetConstraintAspectRatio(false);
 	}
+	if (UStaticMesh* Cone = Meshes[(int32)EDCShape::Cone]) { UE_LOG(LogDC, Display, TEXT("[Scene] cone bounds %s"), *Cone->GetBoundingBox().ToString()); }
 	int32 NumComps = 0;
 	for (ADCRoomModule* Room : RoomPtrs) { NumComps += Room->GetComponents().Num(); }
 	UE_LOG(LogDC, Display, TEXT("[Scene] BuildHideout: %d rooms, %d components, %.1f ms"), RoomPtrs.Num(), NumComps, (FPlatformTime::Seconds() - T0) * 1000.0);
@@ -915,6 +917,8 @@ void ADCHideoutBuilder::Tick(float DeltaSeconds)
 		const float K = 1.f - F.Depth * (Hash * 0.4f + Burst * (Hash > 0.5f ? 0.6f : 0.f));
 		L->SetIntensity(F.Base * K);
 	}
+	PerfAccum += DeltaSeconds; ++PerfFrames;
+	if (PerfAccum > 2.0) { PerfAccum = DeltaSeconds; PerfFrames = 1; }
 	if (ReviewShots.Num()) { TickReview(); }
 }
 
@@ -933,8 +937,8 @@ void ADCHideoutBuilder::FrameReview(const FString& Focus)
 	}
 	const FRotator Rot(-35.f, 45.f, 0.f);
 	const float Radius = B.GetExtent().Size2D();
-	const float Dist = Radius * 1.05f / FMath::Tan(FMath::DegreesToRadians(9.f));
-	const FVector Target = B.GetCenter() - FVector(0, 0, B.GetExtent().Z * 0.6f);
+	const float Dist = Radius * 1.12f / FMath::Tan(FMath::DegreesToRadians(9.f));
+	const FVector Target(B.GetCenter().X, B.GetCenter().Y, -60.f);
 	ReviewCam->SetActorLocationAndRotation(Target - Rot.Vector() * Dist, Rot);
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController()) { PC->SetViewTarget(ReviewCam); }
 }
@@ -954,6 +958,7 @@ void ADCHideoutBuilder::TickReview()
 		}
 		const FString File = ReviewDir / (TEXT("scene_") + Shot + TEXT(".png"));
 		FScreenshotRequest::RequestScreenshot(File, false, false);
+		UE_LOG(LogDC, Display, TEXT("[SceneShots] avg frame %.2f ms (%.0f fps)"), PerfFrames ? PerfAccum / PerfFrames * 1000.0 : 0.0, PerfFrames ? PerfFrames / PerfAccum : 0.0);
 		UE_LOG(LogDC, Display, TEXT("[SceneShots] %s"), *File);
 		bReviewPrepared = false;
 		++ReviewStep;

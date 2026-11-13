@@ -93,6 +93,13 @@ void ADCHideoutBuilder::BuildOffice()
 	UPointLightComponent* CyanGlow = Point(FVector(540, SY - 40, 560), FLinearColor(0.1f, 0.7f, 1.f), 60.f, 420.f, false, false, 10.f);
 	CyanGlow->SetVolumetricScatteringIntensity(0.f);
 	AddLocalFog(CurRoom, DCGroups::Level1, FVector(180, 80, 140), FVector(380, 300, 220), 0.6f);
+	// soft fake shaft (reads even where volumetric fog is too thin): cone from the window to the floor pool
+	{
+		const FVector Apex(560, 160, 300), Pool(-60, 50, 0);
+		const FVector Ax = Apex - Pool;
+		const float L = Ax.Size();
+		Deco(EDCShape::Cone, (Apex + Pool) * 0.5f, FVector(260, 160, L), "ShaftPink", FRotationMatrix::MakeFromZX(Ax / L, FVector(0, 1, 0)).Rotator(), false);
+	}
 	// dust motes drifting in the shaft
 	for (int32 i = 0; i < 240; ++i)
 	{
@@ -523,7 +530,21 @@ void ADCHideoutBuilder::BuildWorkshop()
 	Tube(FVector(-60, 300, 380), FVector(-60, 300, 285), 0.8f, "Black");
 	Deco(EDCShape::Cube, FVector(-60, 300, 280), FVector(150, 14, 6), "Iron");
 	Deco(EDCShape::Cylinder, FVector(-60, 300, 275), FVector(5, 5, 140), "BulbCool", FRotator(0, 0, 90) + FRotator(0, 90, 0), false);
-	Rect(FVector(-60, 300, 270), FVector(-60, 300, 0), Cool, 35.f, 140.f, 10.f, 900.f, false, true);
+	Rect(FVector(-60, 300, 270), FVector(-60, 300, 0), Cool, 110.f, 140.f, 10.f, 1000.f, false, true);
+	// centre: a safe on a pallet mid-crack, drill rig, blueprint pinned to an easel
+	Deco(EDCShape::Cube, FVector(-40, -60, 6), FVector(130, 110, 12), "Plank");
+	Deco(EDCShape::Cube, FVector(-40, -60, 62), FVector(90, 84, 100), "Iron");
+	Deco(EDCShape::Cylinder, FVector(-86, -60, 70), FVector(30, 30, 3), "Brass", FRotator(90, 0, 0));
+	Deco(EDCShape::Cube, FVector(-87, -40, 48), FVector(2, 6, 22), "Brass");
+	Tube(FVector(-130, -40, 0), FVector(-115, -60, 75), 4, "Hazard");
+	Tube(FVector(-115, -60, 75), FVector(-90, -68, 75), 6, "Iron");
+	Deco(EDCShape::Cube, FVector(-120, -60, 80), FVector(30, 16, 20), "Hazard");
+	for (int32 i = 0; i < 3; ++i) { Deco(EDCShape::Cube, FVector(150 + J(i, 30), -250 + i * 70.f, 30 + (i == 1 ? 50.f : 0.f)), FVector(70, 60, 60), "Plank", FRotator(0, J(i + 3, 10), 0)); }
+	Tube(FVector(200, 120, 0), FVector(185, 120, 170), 3, "DarkWood");
+	Tube(FVector(170, 140, 0), FVector(185, 120, 170), 3, "DarkWood");
+	Tube(FVector(170, 100, 0), FVector(185, 120, 170), 3, "DarkWood");
+	Deco(EDCShape::Cube, FVector(180, 120, 130), FVector(3, 90, 70), "Blueprint", FRotator(-12, 0, 0));
+	Spot(FVector(-40, -200, 260), FVector(-40, -60, 60), Warm, 60.f, 700.f, 20.f, 45.f, false, true);
 	// shelving with boxes along +X partition, oil drums
 	for (int32 s = 0; s < 2; ++s)
 	{
@@ -601,7 +622,14 @@ void ADCHideoutBuilder::BuildGarage()
 	Tube(FVector(0, 0, 380), FVector(0, 0, 270), 1.2f, "Black");
 	Deco(EDCShape::Sphere, FVector(0, 0, 262), FVector(14), "Bulb", FRotator::ZeroRotator, false);
 	Deco(EDCShape::Cone, FVector(0, 0, 272), FVector(44, 44, 14), "Iron");
-	Spot(FVector(0, 0, 258), FVector(0, 0, 0), Tungsten, 60.f, 800.f, 45.f, 80.f, true, true);
+	Spot(FVector(0, 0, 258), FVector(0, 0, 0), Tungsten, 180.f, 900.f, 45.f, 80.f, true, true);
+	// cold fill through the door slats from the street
+	Rect(FVector(360, 0, 200), FVector(-200, 0, 0), FLinearColor(0.45f, 0.6f, 1.f), 25.f, 300.f, 200.f, 1100.f, false, true);
+	// oil drum + workbench along the -X partition
+	Deco(EDCShape::Cube, FVector(-330, 150, 45), FVector(70, 200, 8), "Plank");
+	for (int32 i = 0; i < 4; ++i) { Deco(EDCShape::Cube, FVector(-330 + ((i % 2) ? 28.f : -28.f), 150 + ((i / 2) ? 92.f : -92.f), 21), FVector(6, 6, 42), "Iron"); }
+	Deco(EDCShape::Cylinder, FVector(-320, 120, 62), FVector(20, 20, 26), "Pin");
+	Deco(EDCShape::Cube, FVector(-330, 190, 55), FVector(40, 30, 12), "Iron");
 	// tyre stack, jerry cans, tool chest
 	for (int32 i = 0; i < 4; ++i) { Deco(EDCShape::Cylinder, FVector(-320, -400, 12 + i * 22.f), FVector(64, 64, 22), "Rubber"); }
 	for (int32 i = 0; i < 3; ++i) { Deco(EDCShape::Cube, FVector(-330 + i * 32.f, 430, 22), FVector(24, 14, 44), "Pin"); }
@@ -657,10 +685,10 @@ void ADCHideoutBuilder::BuildScreening()
 
 	CurGroup = DCGroups::Level1;
 	BeginStation(EDCStationType::ScreeningRoom, TEXT("Screening Room"), FVector(0, 545, 40), FVector(390, 50, 160));
-	SP(EDCShape::Cube, FVector(0, 37, 170), FVector(740, 2, 300), "Screen", FRotator::ZeroRotator, false);
+	SP(EDCShape::Cube, FVector(0, 30, 170), FVector(740, 2, 300), "Screen", FRotator::ZeroRotator, false);
 	SP(EDCShape::Cube, FVector(0, 36, 323), FVector(760, 4, 6), "Brass");
 	SP(EDCShape::Cube, FVector(0, 36, 17), FVector(760, 4, 6), "Brass");
-	Rect(FVector(0, 560, 210), FVector(0, -400, 120), FLinearColor(0.8f, 0.85f, 1.f), 22.f, 700.f, 280.f, 1800.f, true, true);
+	Rect(FVector(0, 560, 210), FVector(0, -400, 120), FLinearColor(0.8f, 0.85f, 1.f), 70.f, 700.f, 280.f, 1800.f, true, true);
 	// seats (velvet), raked rows on risers
 	auto Row = [&](float Y)
 	{

@@ -133,6 +133,8 @@ protected:
 	TArray<FFlicker> Flickers;
 	void AddFlicker(ULightComponent* L, float Rate, float Depth);
 	double Time = 0.0;
+	double PerfAccum = 0.0;
+	int32 PerfFrames = 0;
 
 	// scene review camera
 	UPROPERTY() TObjectPtr<ACameraActor> ReviewCam;
