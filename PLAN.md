@@ -8,10 +8,18 @@
 
 ---
 
-## Progress: as of Fri Nov 13, ~18:15 PST
+## Progress: as of Fri Nov 13, ~20:30 PST
 
-**Status: α playable** (tag `alpha` on `main`). Waves 0 and 1 are done and merged. Main builds and all 12 automation tests pass (9 Sim, 2 Audio, 1 Smoke). A bot autoplay of a seeded run works end to end on the real sim.
+**Status: v2 (realtime redesign, §R) playable on `main`.** All six Wave R1 agents (Sim, Data, UI, Scene, World, Audio) are merged. Main builds, and all 19 automation tests pass (13 Sim, 5 Audio, 1 Smoke). The audio is **muted** at your request (`DefaultGame.ini` `bMuteAll`). `PLAYTEST.md` has the v2 notes. **Your playtest is next.**
 
+- **Layout change (Scene):** the Garage now spans R3A+R3B (the yard is gone) and shares a wall and door with the Office.
+- **Data (B):** the balance sim median is first success at 1.4 min, first room at 4.3 min, tier 3 at about 26 min, and the Big Score unlocked at about 63 min. The bot wins 43% of runs and hits game over in 19.5% (`Content/Data/BALANCE.md`).
+- **Open items:**
+  - A failed Big Score re-posts with re-rolled values.
+  - The UI requests `FairCut` per crew member in the breakdown and `PostedAt` on missions.
+  - The Sim requests a perk effect kind for effective level and `bQuit` in member results.
+
+**Pre-v2 notes (v1, kept for history):**
 **Changes from the original plan:**
 - **The MCP has no level, actor, Python or screenshot tools** (only Sequencer/UMG/PCG/Fab and similar). So the hideout is **built procedurally in C++ at runtime** (`World/Scene/ADCHideoutBuilder`, spawned by `ADCGameMode::StartPlay`). `L_Hideout` is an empty map.
 - **Assets are authored headlessly:** `UnrealEditor-Cmd -run=pythonscript -script=… -AllowCommandletRendering` (Tools/*.py). This covers materials (D) and audio import (H).
