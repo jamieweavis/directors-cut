@@ -376,7 +376,7 @@ void ADCCriminalPawn::SetIdleGoal(const TArray<FVector>& FloorPath, EDCPawnActiv
 void ADCCriminalPawn::InterruptIdle(float Delay)
 {
 	if (Mode != EDCPawnMode::Wander) { return; }
-	GetUp();
+	// A sleeper stays down until the delay runs out (staggered wake-up), then gets up and asks for a goal.
 	Activity = EDCPawnActivity::Stand;
 	Path.Reset();
 	WaitTime = Delay;
@@ -582,8 +582,9 @@ void ADCCriminalPawn::Tick(float DeltaSeconds)
 				const FRotator R = GetActorRotation();
 				SetActorRotation(FMath::RInterpTo(R, FRotator(0.f, GoalYaw, 0.f), Dt, 5.f));
 			}
-			if (WaitTime <= 0.f && !bLying)
+			if (WaitTime <= 0.f && (!bLying || Activity != EDCPawnActivity::Sleep))
 			{
+				GetUp();
 				if (ADCWorldDirector* D = Director.Get()) { D->AssignIdleGoal(this); }
 				if (Path.Num() == 0 && WaitTime <= 0.f) { WaitTime = Rng.FRandRange(2.f, 5.f); }
 			}
