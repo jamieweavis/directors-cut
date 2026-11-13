@@ -5,194 +5,233 @@
     {
       "file": "SFX_Click.wav",
       "asset": "/Game/DC/Audio/SFX_Click.SFX_Click",
-      "category": "SFX",
-      "loop": false
+      "category": "UI",
+      "loop": false,
+      "loudness": -30
     },
     {
       "file": "SFX_Click_2.wav",
       "asset": "/Game/DC/Audio/SFX_Click_2.SFX_Click_2",
-      "category": "SFX",
-      "loop": false
+      "category": "UI",
+      "loop": false,
+      "loudness": -30
     },
     {
       "file": "SFX_Click_3.wav",
       "asset": "/Game/DC/Audio/SFX_Click_3.SFX_Click_3",
-      "category": "SFX",
-      "loop": false
+      "category": "UI",
+      "loop": false,
+      "loudness": -30
     },
     {
       "file": "SFX_Hover.wav",
       "asset": "/Game/DC/Audio/SFX_Hover.SFX_Hover",
-      "category": "SFX",
-      "loop": false
+      "category": "UI",
+      "loop": false,
+      "loudness": -38
+    },
+    {
+      "file": "SFX_Hover_2.wav",
+      "asset": "/Game/DC/Audio/SFX_Hover_2.SFX_Hover_2",
+      "category": "UI",
+      "loop": false,
+      "loudness": -38
     },
     {
       "file": "SFX_PanelOpen.wav",
       "asset": "/Game/DC/Audio/SFX_PanelOpen.SFX_PanelOpen",
-      "category": "SFX",
-      "loop": false
+      "category": "UI",
+      "loop": false,
+      "loudness": -33
     },
     {
       "file": "SFX_PanelClose.wav",
       "asset": "/Game/DC/Audio/SFX_PanelClose.SFX_PanelClose",
-      "category": "SFX",
-      "loop": false
+      "category": "UI",
+      "loop": false,
+      "loudness": -34
     },
     {
-      "file": "SFX_Typewriter.wav",
-      "asset": "/Game/DC/Audio/SFX_Typewriter.SFX_Typewriter",
-      "category": "SFX",
-      "loop": false
-    },
-    {
-      "file": "SFX_Typewriter_2.wav",
-      "asset": "/Game/DC/Audio/SFX_Typewriter_2.SFX_Typewriter_2",
-      "category": "SFX",
-      "loop": false
-    },
-    {
-      "file": "SFX_Typewriter_3.wav",
-      "asset": "/Game/DC/Audio/SFX_Typewriter_3.SFX_Typewriter_3",
-      "category": "SFX",
-      "loop": false
-    },
-    {
-      "file": "SFX_Stamp.wav",
-      "asset": "/Game/DC/Audio/SFX_Stamp.SFX_Stamp",
-      "category": "SFX",
-      "loop": false
-    },
-    {
-      "file": "SFX_Cash.wav",
-      "asset": "/Game/DC/Audio/SFX_Cash.SFX_Cash",
-      "category": "SFX",
-      "loop": false
-    },
-    {
-      "file": "SFX_CounterTick.wav",
-      "asset": "/Game/DC/Audio/SFX_CounterTick.SFX_CounterTick",
-      "category": "SFX",
-      "loop": false
-    },
-    {
-      "file": "SFX_Clapper.wav",
-      "asset": "/Game/DC/Audio/SFX_Clapper.SFX_Clapper",
-      "category": "SFX",
-      "loop": false
-    },
-    {
-      "file": "SFX_DiceRoll.wav",
-      "asset": "/Game/DC/Audio/SFX_DiceRoll.SFX_DiceRoll",
-      "category": "SFX",
-      "loop": false
-    },
-    {
-      "file": "SFX_Commit.wav",
-      "asset": "/Game/DC/Audio/SFX_Commit.SFX_Commit",
-      "category": "SFX",
-      "loop": false
+      "file": "SFX_Confirm.wav",
+      "asset": "/Game/DC/Audio/SFX_Confirm.SFX_Confirm",
+      "category": "UI",
+      "loop": false,
+      "loudness": -28
     },
     {
       "file": "SFX_Error.wav",
       "asset": "/Game/DC/Audio/SFX_Error.SFX_Error",
-      "category": "SFX",
-      "loop": false
+      "category": "UI",
+      "loop": false,
+      "loudness": -28
+    },
+    {
+      "file": "SFX_SlotFill.wav",
+      "asset": "/Game/DC/Audio/SFX_SlotFill.SFX_SlotFill",
+      "category": "UI",
+      "loop": false,
+      "loudness": -29
+    },
+    {
+      "file": "SFX_Cash.wav",
+      "asset": "/Game/DC/Audio/SFX_Cash.SFX_Cash",
+      "category": "Event",
+      "loop": false,
+      "loudness": -26
+    },
+    {
+      "file": "SFX_MissionStart.wav",
+      "asset": "/Game/DC/Audio/SFX_MissionStart.SFX_MissionStart",
+      "category": "Event",
+      "loop": false,
+      "loudness": -23
+    },
+    {
+      "file": "SFX_MissionComplete.wav",
+      "asset": "/Game/DC/Audio/SFX_MissionComplete.SFX_MissionComplete",
+      "category": "Event",
+      "loop": false,
+      "loudness": -24
+    },
+    {
+      "file": "SFX_Success.wav",
+      "asset": "/Game/DC/Audio/SFX_Success.SFX_Success",
+      "category": "Event",
+      "loop": false,
+      "loudness": -22
+    },
+    {
+      "file": "SFX_Fail.wav",
+      "asset": "/Game/DC/Audio/SFX_Fail.SFX_Fail",
+      "category": "Event",
+      "loop": false,
+      "loudness": -22
+    },
+    {
+      "file": "SFX_Busted.wav",
+      "asset": "/Game/DC/Audio/SFX_Busted.SFX_Busted",
+      "category": "Event",
+      "loop": false,
+      "loudness": -25
+    },
+    {
+      "file": "SFX_LevelUp.wav",
+      "asset": "/Game/DC/Audio/SFX_LevelUp.SFX_LevelUp",
+      "category": "Event",
+      "loop": false,
+      "loudness": -24
+    },
+    {
+      "file": "SFX_BuildStart.wav",
+      "asset": "/Game/DC/Audio/SFX_BuildStart.SFX_BuildStart",
+      "category": "Event",
+      "loop": false,
+      "loudness": -25
+    },
+    {
+      "file": "SFX_RoomBuilt.wav",
+      "asset": "/Game/DC/Audio/SFX_RoomBuilt.SFX_RoomBuilt",
+      "category": "Event",
+      "loop": false,
+      "loudness": -24
+    },
+    {
+      "file": "SFX_Perk.wav",
+      "asset": "/Game/DC/Audio/SFX_Perk.SFX_Perk",
+      "category": "Event",
+      "loop": false,
+      "loudness": -25
+    },
+    {
+      "file": "SFX_Payday.wav",
+      "asset": "/Game/DC/Audio/SFX_Payday.SFX_Payday",
+      "category": "Event",
+      "loop": false,
+      "loudness": -23
     },
     {
       "file": "SFX_GarageDoor.wav",
       "asset": "/Game/DC/Audio/SFX_GarageDoor.SFX_GarageDoor",
-      "category": "SFX",
-      "loop": false
+      "category": "Event",
+      "loop": false,
+      "loudness": -27
     },
     {
       "file": "SFX_CarDepart.wav",
       "asset": "/Game/DC/Audio/SFX_CarDepart.SFX_CarDepart",
-      "category": "SFX",
-      "loop": false
+      "category": "Event",
+      "loop": false,
+      "loudness": -26
     },
     {
-      "file": "SFX_StingWrap.wav",
-      "asset": "/Game/DC/Audio/SFX_StingWrap.SFX_StingWrap",
-      "category": "Stinger",
-      "loop": false
+      "file": "SFX_CarArrive.wav",
+      "asset": "/Game/DC/Audio/SFX_CarArrive.SFX_CarArrive",
+      "category": "Event",
+      "loop": false,
+      "loudness": -27
     },
     {
-      "file": "SFX_StingCut.wav",
-      "asset": "/Game/DC/Audio/SFX_StingCut.SFX_StingCut",
-      "category": "Stinger",
-      "loop": false
+      "file": "AMB_Interior.wav",
+      "asset": "/Game/DC/Audio/AMB_Interior.AMB_Interior",
+      "category": "Ambience",
+      "loop": true,
+      "loudness": -36
     },
     {
-      "file": "SFX_StingLevelUp.wav",
-      "asset": "/Game/DC/Audio/SFX_StingLevelUp.SFX_StingLevelUp",
-      "category": "Stinger",
-      "loop": false
+      "file": "AMB_CityDay.wav",
+      "asset": "/Game/DC/Audio/AMB_CityDay.AMB_CityDay",
+      "category": "Ambience",
+      "loop": true,
+      "loudness": -32
     },
     {
-      "file": "SFX_StingRoom.wav",
-      "asset": "/Game/DC/Audio/SFX_StingRoom.SFX_StingRoom",
-      "category": "Stinger",
-      "loop": false
-    },
-    {
-      "file": "SFX_StingPerk.wav",
-      "asset": "/Game/DC/Audio/SFX_StingPerk.SFX_StingPerk",
-      "category": "Stinger",
-      "loop": false
-    },
-    {
-      "file": "MUS_Title.wav",
-      "asset": "/Game/DC/Audio/MUS_Title.MUS_Title",
-      "category": "Music",
-      "loop": true
-    },
-    {
-      "file": "MUS_Planning.wav",
-      "asset": "/Game/DC/Audio/MUS_Planning.MUS_Planning",
-      "category": "Music",
-      "loop": true
-    },
-    {
-      "file": "MUS_Dailies.wav",
-      "asset": "/Game/DC/Audio/MUS_Dailies.MUS_Dailies",
-      "category": "Music",
-      "loop": true
-    },
-    {
-      "file": "MUS_Win.wav",
-      "asset": "/Game/DC/Audio/MUS_Win.MUS_Win",
-      "category": "Music",
-      "loop": false
-    },
-    {
-      "file": "MUS_GameOver.wav",
-      "asset": "/Game/DC/Audio/MUS_GameOver.MUS_GameOver",
-      "category": "Music",
-      "loop": false
+      "file": "AMB_CityNight.wav",
+      "asset": "/Game/DC/Audio/AMB_CityNight.AMB_CityNight",
+      "category": "Ambience",
+      "loop": true,
+      "loudness": -34
     },
     {
       "file": "AMB_Rain.wav",
       "asset": "/Game/DC/Audio/AMB_Rain.AMB_Rain",
       "category": "Ambience",
-      "loop": true
-    },
-    {
-      "file": "AMB_Projector.wav",
-      "asset": "/Game/DC/Audio/AMB_Projector.AMB_Projector",
-      "category": "Ambience",
-      "loop": true
-    },
-    {
-      "file": "AMB_Neon.wav",
-      "asset": "/Game/DC/Audio/AMB_Neon.AMB_Neon",
-      "category": "Ambience",
-      "loop": true
+      "loop": true,
+      "loudness": -31
     },
     {
       "file": "AMB_Siren.wav",
       "asset": "/Game/DC/Audio/AMB_Siren.AMB_Siren",
-      "category": "Ambience",
-      "loop": false
+      "category": "AmbienceOneShot",
+      "loop": false,
+      "loudness": -33
+    },
+    {
+      "file": "AMB_DogBark.wav",
+      "asset": "/Game/DC/Audio/AMB_DogBark.AMB_DogBark",
+      "category": "AmbienceOneShot",
+      "loop": false,
+      "loudness": -34
+    },
+    {
+      "file": "AMB_TrainHorn.wav",
+      "asset": "/Game/DC/Audio/AMB_TrainHorn.AMB_TrainHorn",
+      "category": "AmbienceOneShot",
+      "loop": false,
+      "loudness": -35
+    },
+    {
+      "file": "AMB_Construction.wav",
+      "asset": "/Game/DC/Audio/AMB_Construction.AMB_Construction",
+      "category": "AmbienceOneShot",
+      "loop": false,
+      "loudness": -34
+    },
+    {
+      "file": "AMB_CarPass.wav",
+      "asset": "/Game/DC/Audio/AMB_CarPass.AMB_CarPass",
+      "category": "AmbienceOneShot",
+      "loop": false,
+      "loudness": -32
     }
   ]
 }

@@ -1,11 +1,13 @@
 """Director's Cut: import Content/RawAudio/*.wav into /Game/DC/Audio as USoundWave assets.
 
 Headless:
-  /usr/bin/lockf -k /private/tmp/claude-501/dc_ue_run.lock "$UE/Engine/Binaries/Mac/UnrealEditor-Cmd" \
+  lockf /private/tmp/claude-501/dc_ue_run.lock "$UE/Engine/Binaries/Mac/UnrealEditor-Cmd" \
     "$PWD/DirectorsCut.uproject" -run=pythonscript -script="$PWD/Tools/audio_import.py" -unattended \
-    -AllowCommandletRendering -nosplash -nosound -abslog="$PWD/Saved/Logs/audio_import.log"
+    -nosplash -abslog="$PWD/Saved/Logs/audio_import.log" \
+    '-ini:EditorPerProjectUserSettings:[/Script/ModelContextProtocol.ModelContextProtocolSettings]:bAutoStartServer=False'
 
-Reads Content/RawAudio/manifest.json (written by Tools/audio_gen.py), replaces existing assets,
+Reads Content/RawAudio/manifest.json (written by Tools/audio_gen.py), deletes any asset under
+/Game/DC/Audio that is not in the manifest (old music / theatre sounds), replaces existing assets,
 sets looping on loops, and saves.
 """
 import json
@@ -25,6 +27,19 @@ def main():
     raw = os.path.join(proj, "Content", "RawAudio")
     with open(os.path.join(raw, "manifest.json")) as f:
         manifest = json.load(f)
+
+    keep = set(os.path.splitext(s["file"])[0] for s in manifest["sounds"])
+    removed = []
+    for path in unreal.EditorAssetLibrary.list_assets(DEST, recursive=True, include_folder=False):
+        name = path.rsplit("/", 1)[-1].split(".")[0]
+        if name not in keep:
+            unreal.EditorAssetLibrary.delete_asset(path.split(".")[0])
+            # In a commandlet the package file can survive delete_asset; remove it explicitly.
+            f = os.path.join(proj, "Content", "DC", "Audio", name + ".uasset")
+            if os.path.exists(f):
+                os.remove(f)
+            removed.append(name)
+    log("removed stale assets: %s" % (", ".join(sorted(removed)) if removed else "none"))
 
     tasks = []
     for s in manifest["sounds"]:

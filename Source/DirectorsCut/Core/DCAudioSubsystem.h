@@ -55,7 +55,36 @@ public:
 
 private:
 	// ═══ Agent H owns everything below this line ═══
-	float Volumes[3] = { 1.f, 1.f, 0.7f };
+	friend struct FDCAudioTestAccess; // automation tests (Audio/DCAudioTests.cpp)
+
+	float Volumes[3] = { 1.f, 1.f, 0.8f };
+
 	UPROPERTY(Transient) TMap<FName, TObjectPtr<class USoundBase>> SoundCache;
-	class USoundBase* LoadSound(FName SfxName);
+	/** Looping ambience beds (DCAudio::EBed order), living in the game instance's current world. */
+	UPROPERTY(Transient) TArray<TObjectPtr<class UAudioComponent>> BedComps;
+
+	/** Non-UObject runtime state (ticker, timers, event queue); defined in Audio/DCAudioSubsystem.cpp. */
+	TSharedPtr<struct FDCAudioRuntime> RT;
+
+	bool TickAudio(float DeltaTime);
+	UWorld* GetAudioWorld() const;
+	bool EnsureComponents();
+	void TearDownComponents();
+	void UpdateAmbience(float DeltaTime, bool bSnap);
+	void TickAmbienceOneShots();
+	void TickQueue();
+	/** Queues an SFX after Delay real seconds; dropped if the same SFX is already queued close by (burst throttle). */
+	void Schedule(FName SfxName, float Delay, float VolumeMultiplier = 1.f);
+	class USoundBase* LoadSound(const FSoftObjectPath& Path);
+	class UAudioComponent* MakeComponent(class USoundBase* Sound);
+	void LoadVolumes();
+	void SaveVolumes();
+
+	void HandleMissionStarted(const struct FDCMission& Mission);
+	void HandleMissionCompleted(const struct FDCMissionReport& Report);
+	void HandleLevelUp(int32 CriminalId, int32 NewLevel);
+	void HandleRoomChanged(const struct FDCRoom& Room);
+	void HandlePerkOffered(const TArray<struct FDCPerk>& Perks);
+	void HandlePayday(int32 Day, int32 Amount);
+	void HandlePhaseChanged(EDCGamePhase Phase);
 };
