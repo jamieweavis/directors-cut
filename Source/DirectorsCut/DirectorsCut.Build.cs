@@ -5,6 +5,7 @@ public class DirectorsCut : ModuleRules
 	public DirectorsCut(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+		bUseUnity = false; // parallel agents: avoid cross-file name clashes
 
 		PublicIncludePaths.AddRange(new string[] { ModuleDirectory });
 
