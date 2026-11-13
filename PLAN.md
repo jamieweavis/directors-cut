@@ -8,6 +8,49 @@
 
 ---
 
+## Progress: as of Fri Nov 13, ~18:15 PST
+
+**Status: α playable** (tag `alpha` on `main`). Waves 0 and 1 are done, apart from Agent D's final polish. Main builds and all 12 automation tests pass (9 Sim, 2 Audio, 1 Smoke). A bot autoplay of a seeded run works end to end on the real sim.
+
+**Changes from the original plan:**
+- **The MCP has no level, actor, Python or screenshot tools** (only Sequencer/UMG/PCG/Fab and similar). So the hideout is **built procedurally in C++ at runtime** (`World/Scene/ADCHideoutBuilder`, spawned by `ADCGameMode::StartPlay`). `L_Hideout` is an empty map.
+- **Assets are authored headlessly:** `UnrealEditor-Cmd -run=pythonscript -script=… -AllowCommandletRendering` (Tools/*.py). This covers materials (D) and audio import (H).
+- **Visual verification uses dev flags** (`Core/DCDevTools`): `-DCShots=name:focus[:panel]`, `-DCSeed`, `-DCAutoPlay=N`, `-DCBuildAll`, `-DCShotDir`.
+- **Parallel-agent hygiene:**
+  - Every editor or game run is wrapped in `lockf /private/tmp/claude-501/dc_ue_run.lock` and given its own `-abslog`, because the machine has 16 GB of RAM.
+  - `bUseUnity = false` in Build.cs, because unity builds caused cross-agent name clashes.
+  - Worktrees sometimes hold LFS pointers; fix with `git lfs checkout`.
+- **Audio is 100% procedurally generated** (`Tools/audio_gen.py`), because kenney.nl blocked downloads. It's project-owned, with nothing to attribute. The WAVs are no longer staged in the package; only the imported assets ship.
+- The data balance was tuned by Agent B (see `Content/Data/balance_check.py`): difficultyPerHeist 0.05, willSlope 3.0, refusal 0.45, payouts +25–40%. `schema.md` now ends with a Clarifications section covering how modifiers stack and the exact rules.
+- Keep the DirectorsCut editor **closed** while building main. With it open, UBT writes hot-reload dylibs and the tests run stale code.
+
+**Wave status:**
+| Wave / agent | Status |
+|---|---|
+| 0 Foundation | ✅ contracts, stubs, greybox, dev tools, materials, map, smoke test |
+| 1A Sim | ✅ merged: full §2.7 resolver, modifier stack (every kind), rooms, perks, retakes, Final Cut, Clinic, Lawyer, 9 tests |
+| 1B Data | ✅ merged: all JSON, validate.py, balance_check.py |
+| 1C UI | ✅ merged: every panel, Dailies reveal, perk draft, game over, credits, settings, tutorial, fonts (OFL/Apache) |
+| 1D Scene | 🟡 snapshot `fab611a` merged; final polish (materials, lighting, L2/L3) still landing |
+| 1E World | ✅ merged: camera rig, input, hover/click, room reveal, pawns, departures/returns |
+| 1H Audio | ✅ merged: 32 procedural sounds, music state machine, ambience, volumes, 2 tests (**not yet listened to by a human**) |
+| 2 Integration | ✅ α built and screenshot-checked. Your playtest is next |
+| 3 / 4 | ⏳ waiting. **Big changes incoming (per you) before Wave 3** |
+
+**Known α issues:**
+- Pawn accent rim reads too gold.
+- Some pawns wander outside the office.
+- The Lumen exposure debug warning shows on screen.
+- The Workbench always shows 3 gear slots (needs a per-criminal slot count in the API).
+- Gear "unavailable" reasons are guessed (needs an `UnavailableReason` field on `FDCGearItem`).
+- Low-loyalty crew treat the default 30% cut as greedy.
+- The bot won 0 of 9 runs in AutoPlay200, which is input for balance work.
+- Retakes after night end don't regenerate the board difficulty.
+
+**Open contract requests:** `FDCGearItem::UnavailableReason`; a per-criminal gear slot count; `FDCSuccessBreakdown::BustedThreshold` + `bIntel`; a smarter DevTools autoplay bot (bonus roles).
+
+---
+
 ## 0. Jam context: 2026 Epic AI MegaJam
 
 Jam page: https://itch.io/jam/2026-epic-ai-megajam. The binding Official Rules are linked from that page and are worth a read before submitting.
@@ -478,31 +521,31 @@ Wave 1 has six agents running at once. Only D touches the editor, and it starts 
 ## 6. Jam build definition of done
 
 **Must** (core loop, never cut):
-- [ ] A title screen, then a new seeded run in the lit hideout on a black void
-- [ ] Random roster (4) and random job board every run; the seed shows on the end screen
-- [ ] All 6 criminal types and 8 job templates are in the game, and required roles are enforced
-- [ ] Gear can be bought and equipped, and it visibly changes stats and success %
-- [ ] The cut slider changes willingness and success %, with refusal warnings
-- [ ] "Why this %" breakdown is accurate to the resolver
-- [ ] The Dailies reveal shows four outcome bands; injuries and arrests are applied
-- [ ] XP/levelling raises stats and luck; lucky-break re-rolls fire
-- [ ] Difficulty, tiers and upkeep scale with heists completed
-- [ ] **Office, Lounge, Workshop and Garage** can be built and upgraded, each with a lights-on reveal
-- [ ] Game over ("CANCELLED") plus a run summary, and "New Run" works
-- [ ] Clickable stations with hover highlight and a camera focus dolly; pawns idle and depart/return through the garage
-- [ ] Moody Lumen lighting, volumetric shafts, neon spill, dust/smoke FX, filmic post
-- [ ] **Music, ambience and UI SFX**, with volume settings
+- [x] A title screen, then a new seeded run in the lit hideout on a black void
+- [x] Random roster (4) and random job board every run; the seed shows on the end screen
+- [x] All 6 criminal types and 8 job templates are in the game, and required roles are enforced
+- [x] Gear can be bought and equipped, and it visibly changes stats and success %
+- [x] The cut slider changes willingness and success %, with refusal warnings
+- [x] "Why this %" breakdown is accurate to the resolver
+- [x] The Dailies reveal shows four outcome bands; injuries and arrests are applied
+- [x] XP/levelling raises stats and luck; lucky-break re-rolls fire
+- [x] Difficulty, tiers and upkeep scale with heists completed
+- [x] **Office, Lounge, Workshop and Garage** can be built and upgraded, each with a lights-on reveal
+- [x] Game over ("CANCELLED") plus a run summary, and "New Run" works
+- [x] Clickable stations with hover highlight and a camera focus dolly; pawns idle and depart/return through the garage
+- [~] (D finishing) Moody Lumen lighting, volumetric shafts, neon spill, dust/smoke FX, filmic post
+- [x] **Music, ambience and UI SFX**, with volume settings
 - [ ] A packaged build runs outside the editor, and the zip is under 1 GB
 
 **Should:**
-- [ ] The perk draft (≥15 perks)
-- [ ] The Screening Room with Retakes, the **Final Cut** job, and the **win end credits**
-- [ ] Back-Alley Clinic
-- [ ] Tutorial hints
-- [ ] Room L2/L3 visual dressing
+- [x] The perk draft (≥15 perks)
+- [x] The Screening Room with Retakes, the **Final Cut** job, and the **win end credits**
+- [x] Back-Alley Clinic
+- [x] Tutorial hints
+- [~] (D finishing) Room L2/L3 visual dressing
 
 **Could:**
-- [ ] Server Closet, Lawyer's Office
+- [x] Server Closet, Lawyer's Office
 - [ ] Endless mode after a win
 - [ ] A Windows build
 
