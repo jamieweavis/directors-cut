@@ -119,7 +119,7 @@ void ADCHideoutBuilder::BuildOffice()
 	Point(FVector(-120, 30, 270), Warm, 22.f, 900.f, false, true, 4.f);
 
 	// ---------------- Director's Desk
-	BeginStation(EDCStationType::DirectorDesk, TEXT("Director's Desk"), FVector(40, -30, 0), FVector(80, 130, 75));
+	BeginStation(EDCStationType::Desk, TEXT("Director's Desk"), FVector(40, -30, 0), FVector(80, 130, 75));
 	SP(EDCShape::Cube, FVector(0, 0, 76), FVector(104, 224, 6), "Mahogany");
 	SP(EDCShape::Cube, FVector(0, -78, 37), FVector(94, 60, 72), "Mahogany");
 	SP(EDCShape::Cube, FVector(0, 78, 37), FVector(94, 60, 72), "Mahogany");
@@ -177,7 +177,7 @@ void ADCHideoutBuilder::BuildOffice()
 	CurGroup = DCGroups::Level1;
 
 	// ---------------- Job Board (on the booth wall)
-	BeginStation(EDCStationType::JobBoard, TEXT("Job Board"), FVector(-220, 370, 85), FVector(128, 20, 82));
+	BeginStation(EDCStationType::MissionBoard, TEXT("Job Board"), FVector(-220, 370, 85), FVector(128, 20, 82));
 	SP(EDCShape::Cube, FVector(0, 9, 80), FVector(244, 6, 162), "DarkWood");
 	SP(EDCShape::Cube, FVector(0, 5, 80), FVector(228, 4, 146), "Cork");
 	TArray<FVector> Pins;
@@ -206,7 +206,7 @@ void ADCHideoutBuilder::BuildOffice()
 	Spot(FVector(-220, 352, 262), FVector(-220, 384, 150), Tungsten, 30.f, 420.f, 35.f, 70.f, false, true);
 
 	// ---------------- Projector (corner, shoots through the booth port into the auditorium)
-	BeginStation(EDCStationType::Projector, TEXT("Projector"), FVector(300, 300, 0), FVector(42, 55, 92));
+	BeginStation(EDCStationType::OpsRoom, TEXT("Projector"), FVector(300, 300, 0), FVector(42, 55, 92));
 	SP(EDCShape::Cylinder, FVector(0, 0, 3), FVector(56, 56, 6), "Iron");
 	SP(EDCShape::Cylinder, FVector(0, 0, 45), FVector(30, 30, 80), "Iron");
 	SP(EDCShape::Cube, FVector(0, 4, 105), FVector(32, 58, 36), "Iron");
@@ -239,7 +239,7 @@ void ADCHideoutBuilder::BuildOffice()
 	}
 
 	// ---------------- Blueprint Table (front-left)
-	BeginStation(EDCStationType::BlueprintTable, TEXT("Blueprint Table"), FVector(-300, -235, 0), FVector(78, 95, 80));
+	BeginStation(EDCStationType::BuildTable, TEXT("Blueprint Table"), FVector(-300, -235, 0), FVector(78, 95, 80));
 	for (int32 sx = -1; sx <= 1; sx += 2) for (int32 sy = -1; sy <= 1; sy += 2)
 	{
 		SPTube(FVector(sx * 46, sy * 62, 0), FVector(sx * 40, sy * 56, 90), 3.5f, "Iron");
@@ -668,7 +668,7 @@ void ADCHideoutBuilder::BuildGarage()
 // =====================================================================================================================
 void ADCHideoutBuilder::BuildScreening()
 {
-	CurRoom = GetRoom(EDCRoomType::ScreeningRoom);
+	CurRoom = GetRoom(EDCRoomType::OpsRoom);
 	const FBox2D R(FVector2D(-900, -600), FVector2D(900, 600));
 
 	CurGroup = DCGroups::Shell;
@@ -684,7 +684,7 @@ void ADCHideoutBuilder::BuildScreening()
 	Deco(EDCShape::Cube, FVector(0, 540, 345), FVector(1100, 2, 4), "Trim");
 
 	CurGroup = DCGroups::Level1;
-	BeginStation(EDCStationType::ScreeningRoom, TEXT("Screening Room"), FVector(0, 545, 40), FVector(390, 50, 160));
+	BeginStation(EDCStationType::OpsRoom, TEXT("Screening Room"), FVector(0, 545, 40), FVector(390, 50, 160));
 	SP(EDCShape::Cube, FVector(0, 30, 170), FVector(740, 2, 300), "Screen", FRotator::ZeroRotator, false);
 	SP(EDCShape::Cube, FVector(0, 36, 323), FVector(760, 4, 6), "Brass");
 	SP(EDCShape::Cube, FVector(0, 36, 17), FVector(760, 4, 6), "Brass");
@@ -802,7 +802,7 @@ void ADCHideoutBuilder::BuildClinic()
 // =====================================================================================================================
 void ADCHideoutBuilder::BuildServerCloset()
 {
-	CurRoom = GetRoom(EDCRoomType::ServerCloset);
+	CurRoom = GetRoom(EDCRoomType::ServerRoom);
 	const FBox2D R(FVector2D(-400, -400), FVector2D(400, 400));
 	CurGroup = DCGroups::Level1;
 	auto RackAt = [&](const FVector& P, int32 Seed, bool bStation)
@@ -820,7 +820,7 @@ void ADCHideoutBuilder::BuildServerCloset()
 			for (int32 l = 0; l < 3; ++l) { Box(P + FVector(-32.5f, -26 + l * 6.f, 22 + u * 20.f), FVector(1, 2.5f, 2.5f), Leds[(Seed + u * 3 + l) % 5], false); }
 		}
 	};
-	BeginStation(EDCStationType::ServerCloset, TEXT("Server Closet"), FVector(200, 0, 0), FVector(50, 130, 105));
+	BeginStation(EDCStationType::ServerRack, TEXT("Server Closet"), FVector(200, 0, 0), FVector(50, 130, 105));
 	RackAt(FVector(0, -85, 0), 1, true);
 	RackAt(FVector(0, 0, 0), 2, true);
 	RackAt(FVector(0, 85, 0), 3, true);

@@ -9,29 +9,30 @@
 #include "Core/DCTypes.h"
 #include "DCAudioSubsystem.generated.h"
 
-// Canonical SFX names. Anyone may call UDCAudioSubsystem::Play(DCSfx::Click).
+// Canonical SFX names. Anyone may call UDCAudioSubsystem::Play(DCSfx::Click). v2: no music anywhere in the game.
 namespace DCSfx
 {
-	inline const FName Click        = TEXT("Click");         // generic UI click
-	inline const FName Hover        = TEXT("Hover");         // soft tick
-	inline const FName PanelOpen    = TEXT("PanelOpen");     // paper slide
-	inline const FName PanelClose   = TEXT("PanelClose");
-	inline const FName Typewriter   = TEXT("Typewriter");    // typewriter clack
-	inline const FName Stamp        = TEXT("Stamp");         // rubber stamp thunk
-	inline const FName Cash         = TEXT("Cash");          // cash register
-	inline const FName CounterTick  = TEXT("CounterTick");   // number ticker
-	inline const FName Clapper      = TEXT("Clapper");       // clapperboard snap
-	inline const FName DiceRoll     = TEXT("DiceRoll");      // film sprocket / dice roll
-	inline const FName Commit       = TEXT("Commit");        // plan committed
-	inline const FName Error        = TEXT("Error");         // can't do that
-	inline const FName GarageDoor   = TEXT("GarageDoor");
-	inline const FName CarDepart    = TEXT("CarDepart");
-	// Stingers
-	inline const FName StingWrap    = TEXT("StingWrap");     // clean/messy success
-	inline const FName StingCut     = TEXT("StingCut");      // failed/busted
-	inline const FName StingLevelUp = TEXT("StingLevelUp");
-	inline const FName StingRoom    = TEXT("StingRoom");     // room built
-	inline const FName StingPerk    = TEXT("StingPerk");
+	inline const FName Click           = TEXT("Click");           // crisp UI click
+	inline const FName Hover           = TEXT("Hover");           // very soft tick
+	inline const FName PanelOpen       = TEXT("PanelOpen");       // short soft whoosh
+	inline const FName PanelClose      = TEXT("PanelClose");
+	inline const FName Confirm         = TEXT("Confirm");         // positive confirm (hire, buy, start)
+	inline const FName Error           = TEXT("Error");           // can't do that
+	inline const FName Cash            = TEXT("Cash");            // money in (bill counter)
+	inline const FName SlotFill        = TEXT("SlotFill");        // crew dropped into a mission slot
+	inline const FName MissionStart    = TEXT("MissionStart");    // radio chirp + engine start
+	inline const FName MissionComplete = TEXT("MissionComplete"); // phone notification ping
+	inline const FName Success         = TEXT("Success");         // short positive sting (not musical)
+	inline const FName Fail            = TEXT("Fail");            // short negative thud
+	inline const FName Busted          = TEXT("Busted");          // distant siren whoop
+	inline const FName LevelUp         = TEXT("LevelUp");
+	inline const FName BuildStart      = TEXT("BuildStart");      // power tools
+	inline const FName RoomBuilt       = TEXT("RoomBuilt");       // breaker switch + lights hum on
+	inline const FName Perk            = TEXT("Perk");
+	inline const FName Payday          = TEXT("Payday");          // cash out at dawn
+	inline const FName GarageDoor      = TEXT("GarageDoor");
+	inline const FName CarDepart       = TEXT("CarDepart");
+	inline const FName CarArrive       = TEXT("CarArrive");
 }
 
 UCLASS()
@@ -48,47 +49,13 @@ public:
 	virtual void Deinitialize() override;
 
 	void PlaySFX(FName SfxName, float VolumeMultiplier = 1.f, float PitchMultiplier = 1.f);
-	void SetMusicState(EDCMusicState State);
-	EDCMusicState GetMusicState() const;
 
 	void SetVolume(EDCVolumeChannel Channel, float Volume01);
 	float GetVolume(EDCVolumeChannel Channel) const;
 
 private:
 	// ═══ Agent H owns everything below this line ═══
-	EDCMusicState MusicState = EDCMusicState::None;
-	float Volumes[4] = { 1.f, 0.8f, 1.f, 0.7f };
-
-	// Components live in the game instance's current world; rebuilt when that world changes.
-	UPROPERTY(Transient) TObjectPtr<class UAudioComponent> MusicA;
-	UPROPERTY(Transient) TObjectPtr<class UAudioComponent> MusicB;
-	UPROPERTY(Transient) TArray<TObjectPtr<class UAudioComponent>> AmbienceComps;
+	float Volumes[3] = { 1.f, 1.f, 0.7f };
 	UPROPERTY(Transient) TMap<FName, TObjectPtr<class USoundBase>> SoundCache;
-
-	/** Non-UObject runtime state (ticker, preload handle, timers); defined in Audio/DCAudioSubsystem.cpp. */
-	TSharedPtr<struct FDCAudioRuntime> RT;
-
-	bool TickAudio(float DeltaTime);
-	UWorld* GetAudioWorld() const;
-	bool EnsureComponents();
-	void TearDownComponents();
-	void StartMusic(EDCMusicState State);
-	void StartAmbience();
-	void ApplyVolumes();
-	void SetAmbienceDucked(bool bDuck);
-	void DuckMusic(float Seconds);
-	class USoundBase* LoadSound(const FSoftObjectPath& Path);
-	class UAudioComponent* MakeComponent(class USoundBase* Sound);
-	class UAudioComponent* ActiveMusic() const;
-	float MusicGain() const;
-	float AmbienceGain(int32 Index) const;
-	void LoadVolumes();
-	void SaveVolumes();
-
-	void HandlePhaseChanged(EDCGamePhase Phase);
-	void HandlePlanCommitted(const FDCCrewPlan& Plan);
-	void HandleNightResolved(const FDCNightReport& Report);
-	void HandleLevelUp(int32 CriminalId, int32 NewLevel);
-	void HandleRoomChanged(const FDCRoom& Room);
-	void HandlePerkOffered(const TArray<FDCPerk>& Perks);
+	class USoundBase* LoadSound(FName SfxName);
 };

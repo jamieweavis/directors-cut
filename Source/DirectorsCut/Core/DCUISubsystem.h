@@ -25,31 +25,28 @@ public:
 
 	/** Open a panel (closes the current one). Stations call this when clicked. */
 	void OpenPanel(EDCPanel Panel);
-	/** Open the crew planner for a specific job. */
-	void OpenCrewPlanner(int32 JobId);
+	/** Open the mission planner for a specific mission. */
+	void OpenMissionPlanner(int32 MissionId);
 	void ClosePanel();
 	EDCPanel GetOpenPanel() const;
 	bool IsAnyPanelOpen() const;
-	/** True while a modal flow (title, dailies, perk draft, game over, credits) should block world clicks. */
+	/** True while a modal flow (title, pause, perk draft, game over, victory) should block world clicks. */
 	bool IsWorldInputBlocked() const;
-	/** Esc: back out of the current panel (or open settings when nothing is open). */
+	/** Esc: back out of the current panel (or open Pause when nothing is open). */
 	void HandleBack();
-	/** Space: "Roll Camera" if any crew is committed. */
-	void HandleRollCamera();
 
-	/** Short floating toast at the top of the screen. */
-	void ShowToast(const FString& Message, bool bIsWarning = false);
+	/** Short floating toast (icon + a few words). Icon is a Lucide name. */
+	void ShowToast(const FString& Message, FName Icon = NAME_None, bool bIsWarning = false);
 
 	FDCOnPanelChanged OnPanelChanged;
 
 private:
 	// ═══ Agent C owns everything below this line ═══
-	friend class SDCRoot;
 	virtual void Deinitialize() override;
 	void RemoveRoot();
 
 	EDCPanel OpenPanelType = EDCPanel::None;
 	TWeakObjectPtr<APlayerController> OwningPC;
-	TSharedPtr<class SDCRoot> Root;
+	TSharedPtr<class SWidget> Root;
 	TWeakObjectPtr<class UGameViewportClient> RootViewport;
 };

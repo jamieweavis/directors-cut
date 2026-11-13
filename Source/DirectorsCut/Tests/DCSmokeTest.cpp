@@ -7,12 +7,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCSmokeTest, "DirectorsCut.Smoke.Pipeline", EA
 
 bool FDCSmokeTest::RunTest(const FString& Parameters)
 {
-	FDCStatBlock A; A.Muscle = 10;
-	FDCStatBlock B; B.Muscle = 5; B.Tech = 3;
-	const FDCStatBlock C = A + B;
-	TestEqual(TEXT("Stat add muscle"), C.Get(EDCStat::Muscle), 15);
-	TestEqual(TEXT("Stat add tech"), C.Get(EDCStat::Tech), 3);
-	TestEqual(TEXT("Stamp text"), FString(DC::OutcomeStamp(EDCHeistOutcome::Clean)), FString(TEXT("IT'S A WRAP")));
+	TestEqual(TEXT("Clock m:ss"), DC::Clock(65.0), FString(TEXT("1:05")));
+	TestEqual(TEXT("Clock h:mm:ss"), DC::Clock(3725.0), FString(TEXT("1:02:05")));
+	TestEqual(TEXT("Outcome"), FString(DC::OutcomeName(EDCMissionOutcome::Busted)), FString(TEXT("BUSTED")));
+	TestEqual(TEXT("Threat icon"), DC::ThreatIcon(EDCThreat::Cameras), FName(TEXT("cctv")));
 	return true;
 }
 

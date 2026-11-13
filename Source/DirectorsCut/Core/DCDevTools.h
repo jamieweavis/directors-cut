@@ -1,13 +1,15 @@
 // Director's Cut — dev/automation helpers driven by the command line (LEAD-OWNED).
 //
 //   -DCShots=name:focus[:panel],name2:focus2   take screenshots then quit.
-//        focus = wide | Office | Lounge | Workshop | Garage | ScreeningRoom | Clinic | ServerCloset | LawyerOffice
-//        panel = optional EDCPanel name to open before the shot (e.g. JobBoard, CrewPlanner, Dailies)
+//        focus = wide | Office | Lounge | Workshop | Garage | OpsRoom | Clinic | ServerRoom | LawyerOffice
+//        panel = optional EDCPanel name to open before the shot (e.g. Missions, MissionPlanner, Reports)
 //   -DCShotDir=/abs/dir     where PNGs go (default <Project>/Saved/DCShots)
 //   -DCShotDelay=6          seconds before the first shot (default 6; shaders/Lumen settle)
 //   -DCBuildAll             show every room as Built level 3 (scene review)
 //   -DCSeed=1234            start the run with this seed (skips the title)
-//   -DCAutoPlay=N           bot plays N nights (commit best job, end night) before the shots; logs results
+//   -DCAutoPlay=S           bot plays S run-seconds instantly (starts every staffable mission >= 50%) before the shots; logs results
+//   -DCTimeScale=N          run the clock N x faster (testing)
+//   -DCHour=H               jump the clock forward to hour H (0..24) shortly after start (day/night screenshots)
 //   -DCQuitAfter=S          quit after S seconds (when not taking shots)
 #pragma once
 
@@ -33,7 +35,8 @@ private:
 	FString ShotDir;
 	float Delay = 6.f;
 	float QuitAfter = -1.f;
-	int32 AutoPlayNights = 0;
+	float AutoPlaySeconds = 0.f;
+	bool bClockFlags = false;
 	double Elapsed = 0.0;
 	int32 Step = 0;
 	double NextAt = 0.0;
@@ -43,5 +46,6 @@ private:
 	bool Tick(float DeltaTime);
 	void PrepareShot(const FShot& Shot);
 	void RunAutoPlay();
+	void ApplyClockFlags();
 	UWorld* GetGameWorld() const;
 };

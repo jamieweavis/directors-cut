@@ -39,7 +39,8 @@ void ADCWorldDirector::Initialize(ADCPlayerController* InPC)
 	{
 		HState = Run->OnRunStateChanged.AddUObject(this, &ADCWorldDirector::OnRunStateChanged);
 		HPhase = Run->OnPhaseChanged.AddUObject(this, &ADCWorldDirector::OnPhaseChanged);
-		HNight = Run->OnNightResolved.AddUObject(this, &ADCWorldDirector::OnNightResolved);
+		HNight = Run->OnMissionStarted.AddUObject(this, &ADCWorldDirector::OnMissionStarted);
+		HDone = Run->OnMissionCompleted.AddUObject(this, &ADCWorldDirector::OnMissionCompleted);
 		HRoom = Run->OnRoomChanged.AddUObject(this, &ADCWorldDirector::OnRoomChanged);
 		HLevel = Run->OnCriminalLevelUp.AddUObject(this, &ADCWorldDirector::OnCriminalLevelUp);
 		HHired = Run->OnCriminalHired.AddUObject(this, &ADCWorldDirector::OnCriminalHired);
@@ -58,7 +59,8 @@ void ADCWorldDirector::EndPlay(const EEndPlayReason::Type Reason)
 	{
 		Run->OnRunStateChanged.Remove(HState);
 		Run->OnPhaseChanged.Remove(HPhase);
-		Run->OnNightResolved.Remove(HNight);
+		Run->OnMissionStarted.Remove(HNight);
+		Run->OnMissionCompleted.Remove(HDone);
 		Run->OnRoomChanged.Remove(HRoom);
 		Run->OnCriminalLevelUp.Remove(HLevel);
 		Run->OnCriminalHired.Remove(HHired);
@@ -131,14 +133,14 @@ bool ADCWorldDirector::IsDetectingNewRun()
 	const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
 	if (!Run || !Run->HasActiveRun()) { return false; }
 	if (!bHadRun) { return true; }
-	return Run->GetSeed() != LastSeed || Run->GetNight() < LastNight;
+	return Run->GetSeed() != LastSeed || Run->GetRunTime() < LastRunTime;
 }
 
 void ADCWorldDirector::OnPhaseChanged(EDCGamePhase Phase)
 {
 	const EDCGamePhase Prev = LastPhase;
 	LastPhase = Phase;
-	if (Phase == EDCGamePhase::Planning && (Prev == EDCGamePhase::Title || Prev == EDCGamePhase::GameOver || Prev == EDCGamePhase::Won || IsDetectingNewRun()))
+	if (Phase == EDCGamePhase::Playing && (Prev == EDCGamePhase::Title || Prev == EDCGamePhase::GameOver || Prev == EDCGamePhase::Won || IsDetectingNewRun()))
 	{
 		ResetForNewRun();
 		return;
@@ -149,26 +151,33 @@ void ADCWorldDirector::OnPhaseChanged(EDCGamePhase Phase)
 void ADCWorldDirector::OnRunStateChanged()
 {
 	if (IsDetectingNewRun()) { ResetForNewRun(); return; }
-	if (const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this)) { LastNight = Run->GetNight(); }
+	if (const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this)) { LastRunTime = Run->GetRunTime(); }
 	SyncRooms(false);
 	SyncPawns();
 }
 
-void ADCWorldDirector::OnNightResolved(const FDCNightReport& Report)
+void ADCWorldDirector::OnMissionStarted(const FDCMission& Mission)
 {
+	// R0: crew walk out to the garage when a mission starts (Agent E: cars, staggering, polish).
 	ADCGarageDoor* Door = GetActiveDoor();
 	float Delay = 0.3f;
-	for (const FDCHeistResult& R : Report.Results)
+	for (int32 Id : Mission.CrewIds)
 	{
-		for (const FDCCrewMemberResult& M : R.Members)
-		{
-			if (ADCCriminalPawn* P = FindPawn(M.CriminalId))
-			{
-				if (P->GetMode() == EDCPawnMode::Away && !M.bArrested) { continue; }
-				P->Depart(Door, Delay, M.bArrested);
-				Delay += 0.55f;
-			}
-		}
+		if (ADCCriminalPawn* P = FindPawn(Id)) { P->Depart(Door, Delay, false); Delay += 0.55f; }
+	}
+}
+
+void ADCWorldDirector::OnMissionCompleted(const FDCMissionReport& Report)
+{
+	ADCGarageDoor* Door = GetActiveDoor();
+	float Delay = 0.4f;
+	for (const FDCCrewMemberResult& M : Report.Members)
+	{
+		ADCCriminalPawn* P = FindPawn(M.CriminalId);
+		if (!P) { continue; }
+		if (M.bArrested) { P->MarkLeaveForever(); continue; }
+		P->ReturnHome(Door, Delay);
+		Delay += 0.7f;
 	}
 }
 
@@ -214,7 +223,7 @@ void ADCWorldDirector::ResetForNewRun()
 	if (Rooms.Num() == 0) { GatherWorld(); }
 	bHadRun = true;
 	LastSeed = Run->GetSeed();
-	LastNight = Run->GetNight();
+	LastRunTime = Run->GetRunTime();
 	LastPhase = Run->GetPhase();
 
 	for (ADCCriminalPawn* P : Pawns) { if (P) { P->Destroy(); } }
@@ -301,22 +310,6 @@ void ADCWorldDirector::SyncPawns()
 		else if (Pawns.Num() < MaxPawns) { SpawnPawn(C, false); }
 	}
 
-	// Back in the hideout after the Dailies.
-	if (Run->GetPhase() == EDCGamePhase::Planning)
-	{
-		float Delay = 0.4f;
-		for (ADCCriminalPawn* P : Pawns)
-		{
-			if (!P || P->IsLeavingForever()) { continue; }
-			const bool bAway = P->IsAway() && P->GetMode() != EDCPawnMode::WalkIn;
-			const bool bLeaving = P->GetMode() == EDCPawnMode::WalkOut && !P->IsReturnQueued();
-			if (bAway || bLeaving)
-			{
-				P->ReturnHome(Door, Delay);
-				Delay += 0.7f;
-			}
-		}
-	}
 }
 
 void ADCWorldDirector::UpdateBounds()
@@ -439,30 +432,22 @@ void ADCWorldDirector::TickWorldTest(float Dt)
 	{
 	case 0: if (At(6.0)) { LogPawns(TEXT("start")); FocusFirstPawn(1.f); ++TestStep; } break;
 	case 1: if (At(8.0)) { TestShot(TEXT("t_pawn_close")); ++TestStep; } break;
-	case 2: if (At(9.0)) { Rig->ResetFocus(); FString E; Run->BuildRoom(EDCRoomType::Lounge, &E); UE_LOG(LogDC, Display, TEXT("[WorldTest] BuildRoom Lounge: %s"), *E); ++TestStep; } break;
+	case 2: if (At(9.0)) { Rig->ResetFocus(); const bool bOk = Run->BuildRoom(EDCRoomType::Lounge); Run->AdvanceTime(60.0); UE_LOG(LogDC, Display, TEXT("[WorldTest] BuildRoom Lounge: %d"), bOk ? 1 : 0); ++TestStep; } break;
 	case 3: if (At(9.7)) { TestShot(TEXT("t_reveal_a")); ++TestStep; } break;
 	case 4: if (At(10.6)) { TestShot(TEXT("t_reveal_b")); ++TestStep; } break;
 	case 5: if (At(13.5)) { TestShot(TEXT("t_after_reveal")); LogPawns(TEXT("after_reveal")); ++TestStep; } break;
 	case 6: if (At(15.0))
 		{
-			// Commit every job we can staff, then Roll Camera (no FinishDailies yet).
-			for (const FDCJob& J : Run->GetJobs())
+			for (const FDCMission& M : Run->GetMissions())
 			{
-				if (Run->GetCommittedPlans().Num() >= Run->GetMaxCrewsPerNight()) { break; }
-				FDCCrewPlan Plan; Plan.JobId = J.Id; Plan.Cut = 0.3f;
-				for (EDCCriminalType Role : J.RequiredRoles)
-				{
-					for (const FDCCriminal& C : Run->GetRoster()) { if (C.IsAvailable() && C.Type == Role && !Plan.CriminalIds.Contains(C.Id)) { Plan.CriminalIds.Add(C.Id); break; } }
-				}
-				Run->CommitPlan(Plan);
+				if (!M.bInProgress && Run->GetActiveMissionCount() < Run->GetMaxActiveMissions()) { Run->StartMission(Run->SuggestPlan(M.Id)); }
 			}
-			UE_LOG(LogDC, Display, TEXT("[WorldTest] committed %d plans"), Run->GetCommittedPlans().Num());
-			Run->EndNight();
+			UE_LOG(LogDC, Display, TEXT("[WorldTest] active missions %d"), Run->GetActiveMissionCount());
 			++TestStep;
 		}
 		break;
 	case 7: if (At(16.5)) { TestShot(TEXT("t_departing")); LogPawns(TEXT("departing")); ++TestStep; } break;
-	case 8: if (At(21.0)) { LogPawns(TEXT("away")); Run->FinishDailies(); ++TestStep; } break;
+	case 8: if (At(21.0)) { LogPawns(TEXT("away")); Run->AdvanceTime(1200.0); ++TestStep; } break;
 	case 9: if (At(23.0)) { TestShot(TEXT("t_returning")); LogPawns(TEXT("returning")); ++TestStep; } break;
 	case 10: if (At(25.0))
 		{
@@ -490,7 +475,7 @@ void ADCWorldDirector::TickWorldTest(float Dt)
 			// Station hover + click (focus, then panel opens).
 			for (TActorIterator<ADCStation> It(GetWorld()); It; ++It)
 			{
-				if (It->StationType == EDCStationType::JobBoard) { It->OnHoverBegin(); It->OnClicked(); break; }
+				if (It->StationType == EDCStationType::MissionBoard) { It->OnHoverBegin(); It->OnClicked(); break; }
 			}
 			++TestStep;
 		}

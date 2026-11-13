@@ -1,17 +1,59 @@
-// Director's Cut — UDCRunSubsystem: the real simulation (Agent A).
-// Public API in Core/DCRunSubsystem.h; logic helpers in Sim/DCSimImpl.*; data in Sim/DCSimData.*.
+// Director's Cut — UDCRunSubsystem. R0 STUB (lead), so UI, World and Audio can build against the v2 API.
+// Believable fake data and working timers: the clock ticks, missions run and resolve with a plain roll, and rooms build.
+// No JSON, no saves, no traits/perks logic. Agent A replaces this whole file (and adds Sim/*) with the real simulation.
 #include "Core/DCRunSubsystem.h"
-#include "Sim/DCSimImpl.h"
-#include "Sim/DCSimData.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
-#include "HAL/PlatformTime.h"
-#include "DirectorsCut.h"
 
-using DCImpl = FDCSimImpl;
+namespace
+{
+	constexpr float StartHour = 7.f, DawnHour = 6.f, DuskHour = 20.f, GameMinPerSec = 1.f;
+	const TCHAR* Firsts[] = { TEXT("Marco"), TEXT("Dana"), TEXT("Vic"), TEXT("Lena"), TEXT("Theo"), TEXT("Rosa"), TEXT("Kai"), TEXT("Nina") };
+	const TCHAR* Nicks[] = { TEXT("Wrench"), TEXT("Static"), TEXT("Ghost"), TEXT("Silk"), TEXT("Brick"), TEXT("Tumbler"), TEXT("Spark"), TEXT("Lucky") };
+	const TCHAR* Lasts[] = { TEXT("Reyes"), TEXT("Kowalski"), TEXT("Okafor"), TEXT("Brandt"), TEXT("Moreau"), TEXT("Sato"), TEXT("Quinn"), TEXT("Vance") };
 
-static void SetErr(FString* OutError, const FString& Msg) { if (OutError) { *OutError = Msg; } }
+	FName StubAbility(EDCCriminalType T, int32 K)
+	{
+		static const TCHAR* A[6][2] = {
+			{ TEXT("getaway"), TEXT("boost") }, { TEXT("intimidate"), TEXT("brawler") }, { TEXT("loop_feed"), TEXT("bypass") },
+			{ TEXT("shadow"), TEXT("climber") }, { TEXT("smooth_talk"), TEXT("insider") }, { TEXT("lockpick"), TEXT("drill") } };
+		return A[(int32)T][K & 1];
+	}
+	const TMap<FName, FDCAbility>& StubAbilities()
+	{
+		static TMap<FName, FDCAbility> M;
+		if (M.Num() == 0)
+		{
+			auto Add = [](const TCHAR* Id, const TCHAR* N, const TCHAR* Icon, EDCThreat T) { FDCAbility A; A.Id = Id; A.DisplayName = N; A.Icon = Icon; A.Counters = T; M.Add(A.Id, A); };
+			Add(TEXT("getaway"), TEXT("Getaway Driver"), TEXT("car-front"), EDCThreat::Pursuit);
+			Add(TEXT("boost"), TEXT("Hotwire"), TEXT("key-round"), EDCThreat::Locks);
+			Add(TEXT("intimidate"), TEXT("Intimidate"), TEXT("hand"), EDCThreat::Witnesses);
+			Add(TEXT("brawler"), TEXT("Brawler"), TEXT("swords"), EDCThreat::Guards);
+			Add(TEXT("loop_feed"), TEXT("Loop the Feed"), TEXT("cctv"), EDCThreat::Cameras);
+			Add(TEXT("bypass"), TEXT("Bypass"), TEXT("zap-off"), EDCThreat::Alarms);
+			Add(TEXT("shadow"), TEXT("Shadow"), TEXT("moon"), EDCThreat::Patrols);
+			Add(TEXT("climber"), TEXT("Climber"), TEXT("mountain"), EDCThreat::Guards);
+			Add(TEXT("smooth_talk"), TEXT("Smooth Talk"), TEXT("message-circle"), EDCThreat::Witnesses);
+			Add(TEXT("insider"), TEXT("Insider"), TEXT("id-card"), EDCThreat::Alarms);
+			Add(TEXT("lockpick"), TEXT("Lockpick"), TEXT("key"), EDCThreat::Locks);
+			Add(TEXT("drill"), TEXT("Drill"), TEXT("drill"), EDCThreat::Vault);
+		}
+		return M;
+	}
+	const TMap<FName, FDCTrait>& StubTraits()
+	{
+		static TMap<FName, FDCTrait> M;
+		if (M.Num() == 0)
+		{
+			auto Add = [](const TCHAR* Id, const TCHAR* N, const TCHAR* D, const TCHAR* Icon, bool bNeg) { FDCTrait T; T.Id = Id; T.DisplayName = N; T.Description = D; T.Icon = Icon; T.bNegative = bNeg; M.Add(T.Id, T); };
+			Add(TEXT("night_owl"), TEXT("Night Owl"), TEXT("+15% at night"), TEXT("moon"), false);
+			Add(TEXT("lead_foot"), TEXT("Lead Foot"), TEXT("-25% duration"), TEXT("gauge"), false);
+			Add(TEXT("greedy"), TEXT("Greedy"), TEXT("Wants a bigger cut"), TEXT("hand-coins"), true);
+		}
+		return M;
+	}
+}
 
 UDCRunSubsystem* UDCRunSubsystem::Get(const UObject* WorldContext)
 {
@@ -20,596 +62,386 @@ UDCRunSubsystem* UDCRunSubsystem::Get(const UObject* WorldContext)
 	return GI ? GI->GetSubsystem<UDCRunSubsystem>() : nullptr;
 }
 
-void UDCRunSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+void UDCRunSubsystem::Initialize(FSubsystemCollectionBase& Collection) { Super::Initialize(Collection); }
+void UDCRunSubsystem::Deinitialize() { bActive = false; Super::Deinitialize(); }
+TStatId UDCRunSubsystem::GetStatId() const { RETURN_QUICK_DECLARE_CYCLE_STAT(UDCRunSubsystem, STATGROUP_Tickables); }
+bool UDCRunSubsystem::IsTickable() const { return bActive && !bPaused && Phase == EDCGamePhase::Playing && !IsTemplate(); }
+
+// ─── stub generation ─────────────────────────────────────────────────────────
+
+static FDCCriminal MakeStubCriminal(FRandomStream& Rng, int32 Id, EDCCriminalType T)
 {
-	Super::Initialize(Collection);
-	Data = FDCSimData::Load(DataDirOverride);
+	FDCCriminal C;
+	C.Id = Id;
+	C.FirstName = Firsts[Rng.RandHelper(8)]; C.Nickname = Nicks[Rng.RandHelper(8)]; C.LastName = Lasts[Rng.RandHelper(8)];
+	C.Type = T;
+	C.Quality = (EDCQuality)FMath::Min(2, Rng.RandHelper(10) / 5);
+	C.Seed = Rng.GetUnsignedInt();
+	C.Level = 1 + Rng.RandHelper(3);
+	C.XPToNext = 100 * C.Level;
+	C.Abilities.Add(StubAbility(T, Rng.RandHelper(2)));
+	if (C.Quality == EDCQuality::Elite) { C.Abilities.AddUnique(StubAbility(T, 0)); C.Abilities.AddUnique(StubAbility(T, 1)); }
+	TArray<FName> TraitIds; StubTraits().GetKeys(TraitIds);
+	C.Traits.Add(TraitIds[Rng.RandHelper(TraitIds.Num())]);
+	C.HireCost = 1500 + 500 * C.Level;
+	return C;
 }
 
-void UDCRunSubsystem::Deinitialize()
+static FDCMission MakeStubMission(FRandomStream& Rng, int32 Id, double Now)
 {
-	Super::Deinitialize();
+	struct FT { const TCHAR* Name; const TCHAR* Line; const TCHAR* Icon; int32 Tier; int32 Size; float Dur; TArray<EDCThreat> Threats; int32 Cost; int32 Pay; float Arrest; bool bNight; };
+	static const FT Ts[] = {
+		{ TEXT("Corner Store"), TEXT("Till's full on Fridays."), TEXT("store"), 1, 1, 60.f, { EDCThreat::Witnesses }, 0, 1800, 0.05f, false },
+		{ TEXT("Car Boost"), TEXT("Valet's on a smoke break."), TEXT("car"), 1, 1, 90.f, { EDCThreat::Locks, EDCThreat::Pursuit }, 200, 2600, 0.05f, true },
+		{ TEXT("Phone Shop"), TEXT("New stock arrived today."), TEXT("smartphone"), 1, 2, 120.f, { EDCThreat::Cameras, EDCThreat::Alarms }, 400, 4200, 0.08f, true },
+		{ TEXT("Warehouse Job"), TEXT("Container 14. Don't ask."), TEXT("container"), 2, 2, 300.f, { EDCThreat::Guards, EDCThreat::Locks, EDCThreat::Patrols }, 1200, 11000, 0.15f, true },
+		{ TEXT("Jewellery Store"), TEXT("Diamonds in the back case."), TEXT("gem"), 3, 3, 600.f, { EDCThreat::Cameras, EDCThreat::Vault, EDCThreat::Witnesses, EDCThreat::Pursuit }, 3000, 30000, 0.25f, false },
+		{ TEXT("Armoured Truck"), TEXT("Route 9, Thursday 4 a.m."), TEXT("truck"), 4, 4, 1200.f, { EDCThreat::Guards, EDCThreat::Guards, EDCThreat::Vault, EDCThreat::Pursuit, EDCThreat::Patrols }, 8000, 90000, 0.35f, true },
+	};
+	const FT& T = Ts[Rng.RandHelper(UE_ARRAY_COUNT(Ts))];
+	FDCMission M;
+	M.Id = Id; M.TemplateId = FName(T.Name); M.DisplayName = T.Name; M.Flavour = T.Line; M.Icon = T.Icon;
+	M.Tier = T.Tier; M.Level = T.Tier * 2 - 1 + Rng.RandHelper(2); M.CrewSize = T.Size; M.Duration = T.Dur;
+	M.Threats = T.Threats; M.Cost = T.Cost; M.Payout = T.Pay; M.XPReward = 40 * T.Tier; M.ArrestRisk = T.Arrest; M.bNight = T.bNight;
+	M.bRare = Rng.FRand() < 0.1f;
+	M.ExpiresAt = Now + 300.0 + Rng.RandHelper(300);
+	return M;
 }
 
-// ─── Run lifecycle ──────────────────────────────────────────────────────────
+// ─── lifecycle ───────────────────────────────────────────────────────────────
 
 void UDCRunSubsystem::StartNewRun(int32 InSeed)
 {
-	Data = FDCSimData::Load(DataDirOverride); // re-read each run: JSON balance tweaks apply without a restart
-	const FDCBalance& Bal = Data->Balance;
-
-	Seed = InSeed;
-	if (Seed == 0)
-	{
-		FRandomStream Seeder((int32)(FPlatformTime::Cycles64() ^ (uint64)FMath::Rand()));
-		while (Seed == 0) { Seed = FMath::Abs((int32)(Seeder.GetUnsignedInt() & 0x7fffffff)) % 999999 + 1; }
-	}
+	Seed = InSeed != 0 ? InSeed : FMath::RandRange(1, 999999);
 	Rng.Initialize(Seed);
-
-	bActive = true;
-	Cash = Bal.StartingCash;
-	Night = 1;
-	HeistsCompleted = HeistsAttempted = TotalTake = BestHeistTake = 0;
-	BestHeistName.Reset();
-	NextId = 1;
-	RecruitRefreshIn = Bal.RecruitRefreshNights;
-	PerkOffersGiven = 0;
-	RetakesRemaining = 0;
-	bFirstArrestPrevented = false;
-	bWonRun = false;
-	EndReason.Reset();
-	Roster.Reset(); Fallen.Reset(); Recruits.Reset(); Jobs.Reset(); Plans.Reset();
-	PerkOffer.Reset(); PerksTaken.Reset();
-	JobRollSeeds.Reset(); ArrestedOnNight.Reset();
-	RetakeSnapshots.Reset(); RetakeJobs.Reset(); RetakeBreakdowns.Reset();
-	LastReport = FDCNightReport();
-
+	bActive = true; bPaused = false; RunTime = 0.0; Cash = 5000; NextId = 1;
+	Roster.Reset(); Fallen.Reset(); Recruits.Reset(); Missions.Reset(); Reports.Reset(); Stash.Reset(); PerkOffer.Reset(); PerksTaken.Reset();
+	for (int32 i = 0; i < 4; ++i) { Roster.Add(MakeStubCriminal(Rng, NextId++, (EDCCriminalType)(i % 6))); Roster.Last().HireCost = 0; }
+	for (int32 i = 0; i < 3; ++i) { Recruits.Add(MakeStubCriminal(Rng, NextId++, (EDCCriminalType)Rng.RandHelper(6))); }
+	for (int32 i = 0; i < 4; ++i) { Missions.Add(MakeStubMission(Rng, NextId++, RunTime)); }
+	Missions[0].Tier = 1; Missions[0].CrewSize = 1; Missions[0].Duration = 60.f;
 	Rooms.Reset();
 	for (int32 i = 0; i < (int32)EDCRoomType::MAX; ++i)
 	{
-		FDCRoom R;
-		R.Type = (EDCRoomType)i;
-		R.State = R.Type == EDCRoomType::Office ? EDCRoomState::Built : EDCRoomState::Locked;
-		R.Level = R.Type == EDCRoomType::Office ? 1 : 0;
+		FDCRoom R; R.Type = (EDCRoomType)i;
+		R.State = i == 0 ? EDCRoomState::Built : EDCRoomState::Locked; R.Level = i == 0 ? 1 : 0;
 		Rooms.Add(R);
 	}
-	LastUnlockedTier = DCImpl::UnlockedTier(*this);
-
-	DCImpl::GenerateStartingRoster(*this);
-	DCImpl::GenerateRecruits(*this);
-	DCImpl::GenerateBoard(*this);
-	LastReport.Events.Reset();
-
-	UE_LOG(LogDC, Log, TEXT("[Sim] New run, seed %d: %d crew, %d jobs, $%d"), Seed, Roster.Num(), Jobs.Num(), Cash);
-	DCImpl::SetPhase(*this, EDCGamePhase::Planning);
-	DCImpl::Changed(*this);
+	Phase = EDCGamePhase::Playing;
+	OnPhaseChanged.Broadcast(Phase);
+	OnRunStateChanged.Broadcast();
 }
 
+bool UDCRunSubsystem::HasSave() const { return false; }
+bool UDCRunSubsystem::ContinueRun() { return false; }
+void UDCRunSubsystem::SaveRun() {}
+void UDCRunSubsystem::ExitToTitle() { bActive = false; Phase = EDCGamePhase::Title; OnPhaseChanged.Broadcast(Phase); OnRunStateChanged.Broadcast(); }
+void UDCRunSubsystem::AbandonRun() { ExitToTitle(); }
 bool UDCRunSubsystem::HasActiveRun() const { return bActive; }
 EDCGamePhase UDCRunSubsystem::GetPhase() const { return Phase; }
 int32 UDCRunSubsystem::GetSeed() const { return Seed; }
+void UDCRunSubsystem::SetPaused(bool b) { if (bPaused != b) { bPaused = b; OnPauseChanged.Broadcast(b); } }
+bool UDCRunSubsystem::IsPaused() const { return bPaused; }
+void UDCRunSubsystem::SetTimeScale(float S) { TimeScale = FMath::Max(0.f, S); }
+float UDCRunSubsystem::GetTimeScale() const { return TimeScale; }
 
-void UDCRunSubsystem::FinishDailies()
+// ─── ticking ─────────────────────────────────────────────────────────────────
+
+void UDCRunSubsystem::Tick(float DeltaTime) { AdvanceTime(DeltaTime * TimeScale); }
+
+void UDCRunSubsystem::AdvanceTime(double Seconds)
 {
-	if (!bActive || Phase != EDCGamePhase::Dailies) { return; }
-	RetakesRemaining = 0;
-	if (LastReport.bWon)
+	if (!bActive || Seconds <= 0.0) { return; }
+	auto DawnIndex = [this]() { return FMath::FloorToInt((StartHour + RunTime * GameMinPerSec / 60.0 - DawnHour) / 24.0); };
+	const int32 DawnBefore = DawnIndex();
+	RunTime += Seconds;
+	bool bChanged = false;
+
+	for (int32 i = Missions.Num() - 1; i >= 0; --i)
 	{
-		EndReason = Data->Strings.WinReason;
-		DCImpl::SetPhase(*this, EDCGamePhase::Won);
-		OnRunWon.Broadcast(GetRunSummary());
+		FDCMission& M = Missions[i];
+		if (M.bInProgress && RunTime >= M.EndsAt)
+		{
+			FDCMissionReport R;
+			R.ReportId = NextId++; R.Mission = M; R.Roll = Rng.FRand(); R.CompletedAt = RunTime;
+			R.Outcome = R.Roll < M.LockedChance ? EDCMissionOutcome::Success : (R.Roll > 0.9f ? EDCMissionOutcome::Busted : EDCMissionOutcome::Failed);
+			R.bBonus = R.Outcome == EDCMissionOutcome::Success && M.LockedChance > 1.f && Rng.FRand() < M.LockedChance - 1.f;
+			R.PayoutTotal = R.Outcome == EDCMissionOutcome::Success ? M.Payout * (R.bBonus ? 2 : 1) : 0;
+			R.DirectorTake = FMath::RoundToInt(R.PayoutTotal * M.Cut);
+			Cash += R.DirectorTake;
+			for (int32 Id : M.CrewIds)
+			{
+				if (FDCCriminal* C = Roster.FindByPredicate([Id](const FDCCriminal& X) { return X.Id == Id; }))
+				{
+					FDCCrewMemberResult MR; MR.CriminalId = Id; MR.Name = C->GetDisplayName();
+					MR.XPGained = R.Outcome == EDCMissionOutcome::Success ? M.XPReward : M.XPReward / 4;
+					C->XP += MR.XPGained; C->MissionsRun++;
+					C->Status = EDCCriminalStatus::Available; C->ActiveMissionId = INDEX_NONE;
+					if (C->XP >= C->XPToNext) { C->XP -= C->XPToNext; C->Level++; C->XPToNext = 100 * C->Level; MR.bLevelledUp = true; MR.NewLevel = C->Level; OnCriminalLevelUp.Broadcast(Id, C->Level); }
+					if (R.Outcome != EDCMissionOutcome::Success && Rng.FRand() < 0.4f)
+					{
+						MR.bInjured = true; MR.InjurySeconds = 120.f;
+						C->Status = EDCCriminalStatus::Injured; C->InjuredUntil = RunTime + MR.InjurySeconds;
+					}
+					R.Members.Add(MR);
+				}
+			}
+			Reports.Insert(R, 0);
+			Missions.RemoveAt(i);
+			OnMissionCompleted.Broadcast(R);
+			bChanged = true;
+		}
+		else if (!M.bInProgress && M.ExpiresAt >= 0.0 && RunTime >= M.ExpiresAt)
+		{
+			Missions.RemoveAt(i);
+			bChanged = true;
+		}
 	}
-	else if (LastReport.bGameOver)
+	for (FDCCriminal& C : Roster)
 	{
-		DCImpl::SetPhase(*this, EDCGamePhase::GameOver);
-		OnGameOver.Broadcast(GetRunSummary());
+		if (C.Status == EDCCriminalStatus::Injured && RunTime >= C.InjuredUntil) { C.Status = EDCCriminalStatus::Available; OnCriminalHealed.Broadcast(C.Id); bChanged = true; }
 	}
-	else
+	for (FDCRoom& R : Rooms)
 	{
-		DCImpl::SetPhase(*this, EDCGamePhase::Planning);
-		if (HasPendingPerkOffer()) { OnPerkOffered.Broadcast(PerkOffer); }
+		if (R.State == EDCRoomState::Building && RunTime >= R.BuildEndsAt) { R.State = EDCRoomState::Built; R.Level++; OnRoomChanged.Broadcast(GetRoom(R.Type)); bChanged = true; }
 	}
-	DCImpl::Changed(*this);
+	if (Missions.FilterByPredicate([](const FDCMission& M) { return !M.bInProgress; }).Num() < 4 && FMath::Fmod(RunTime, 30.0) < Seconds)
+	{
+		Missions.Add(MakeStubMission(Rng, NextId++, RunTime));
+		OnMissionAdded.Broadcast(Missions.Last());
+		bChanged = true;
+	}
+	if (DawnIndex() > DawnBefore)
+	{
+		const int32 Due = GetUpkeepDue();
+		Cash -= Due;
+		OnPayday.Broadcast(GetDay(), Due);
+		OnDayStarted.Broadcast(GetDay());
+		bChanged = true;
+	}
+	if (bChanged) { OnRunStateChanged.Broadcast(); }
 }
 
-// ─── Read state ─────────────────────────────────────────────────────────────
+// ─── clock ───────────────────────────────────────────────────────────────────
+
+double UDCRunSubsystem::GetRunTime() const { return RunTime; }
+static double TotalHours(double RunTime) { return StartHour + RunTime * GameMinPerSec / 60.0; }
+int32 UDCRunSubsystem::GetDay() const { return 1 + (int32)(TotalHours(RunTime) / 24.0); }
+float UDCRunSubsystem::GetHourOfDay() const { return (float)FMath::Fmod(TotalHours(RunTime), 24.0); }
+bool UDCRunSubsystem::IsNight() const { const float H = GetHourOfDay(); return H >= DuskHour || H < DawnHour; }
+float UDCRunSubsystem::GetSunAlpha() const { const float H = GetHourOfDay(); return FMath::Clamp(FMath::Sin((H - DawnHour) / (DuskHour - DawnHour) * PI), 0.f, 1.f); }
+double UDCRunSubsystem::GetSecondsUntilPayday() const
+{
+	const double H = GetHourOfDay();
+	const double HoursLeft = H < DawnHour ? DawnHour - H : 24.0 - H + DawnHour;
+	return HoursLeft * 60.0 / GameMinPerSec;
+}
+float UDCRunSubsystem::GetGameMinutesPerSecond() const { return GameMinPerSec; }
+
+// ─── reads ───────────────────────────────────────────────────────────────────
 
 const TArray<FDCCriminal>& UDCRunSubsystem::GetRoster() const { return Roster; }
 const TArray<FDCCriminal>& UDCRunSubsystem::GetFallen() const { return Fallen; }
-const TArray<FDCJob>& UDCRunSubsystem::GetJobs() const { return Jobs; }
+const TArray<FDCMission>& UDCRunSubsystem::GetMissions() const { return Missions; }
 const TArray<FDCCriminal>& UDCRunSubsystem::GetRecruits() const { return Recruits; }
-
 TArray<FDCGearItem> UDCRunSubsystem::GetGearCatalogue() const
 {
 	TArray<FDCGearItem> Out;
-	if (!Data.IsValid()) { return Out; }
-	const FDCModStack M = DCImpl::BuildMods(*this);
-	const int32 Tier = DCImpl::GearTier(M);
-	const int32 Slots = DCImpl::GearSlots(*this, M);
-	for (const FDCGearDef& G : Data->Gear)
-	{
-		FDCGearItem I = G.Item;
-		I.Price = DCImpl::GearPrice(G, M);
-		I.bAvailable = I.Tier <= Tier && (int32)I.Slot < Slots;
-		Out.Add(I);
-	}
+	auto Add = [&](const TCHAR* Id, const TCHAR* N, const TCHAR* Icon, EDCGearSlot S, int32 Price, float Power, EDCThreat Ctr)
+	{ FDCGearItem G; G.Id = Id; G.DisplayName = N; G.Icon = Icon; G.Slot = S; G.Price = Price; G.Power = Power; G.Counters = Ctr; G.bAvailable = Cash >= Price; G.UnavailableReason = G.bAvailable ? FString() : TEXT("$"); Out.Add(G); };
+	Add(TEXT("bolt_cutters"), TEXT("Bolt Cutters"), TEXT("scissors"), EDCGearSlot::Tool, 800, 0.f, EDCThreat::Locks);
+	Add(TEXT("jammer"), TEXT("Signal Jammer"), TEXT("radio-tower"), EDCGearSlot::Gadget, 1500, 0.5f, EDCThreat::Alarms);
+	Add(TEXT("hoodie"), TEXT("Dark Hoodie"), TEXT("shirt"), EDCGearSlot::Outfit, 600, 0.5f, EDCThreat::MAX);
 	return Out;
 }
-
-const FDCCriminal* UDCRunSubsystem::FindCriminal(int32 Id) const { return Roster.FindByPredicate([Id](const FDCCriminal& C) { return C.Id == Id; }); }
-FDCCriminal* UDCRunSubsystem::FindCriminalMutable(int32 Id) { return Roster.FindByPredicate([Id](const FDCCriminal& C) { return C.Id == Id; }); }
-const FDCJob* UDCRunSubsystem::FindJob(int32 Id) const { return Jobs.FindByPredicate([Id](const FDCJob& J) { return J.Id == Id; }); }
-const FDCGearItem* UDCRunSubsystem::FindGear(FName Id) const
+const TArray<FName>& UDCRunSubsystem::GetStash() const { return Stash; }
+const FDCCriminal* UDCRunSubsystem::FindCriminal(int32 Id) const
 {
-	const FDCGearDef* G = Data.IsValid() ? Data->FindGear(Id) : nullptr;
-	return G ? &G->Item : nullptr; // base price; GetGearCatalogue() has discounted prices
+	if (const FDCCriminal* C = Roster.FindByPredicate([Id](const FDCCriminal& X) { return X.Id == Id; })) { return C; }
+	if (const FDCCriminal* C = Recruits.FindByPredicate([Id](const FDCCriminal& X) { return X.Id == Id; })) { return C; }
+	return Fallen.FindByPredicate([Id](const FDCCriminal& X) { return X.Id == Id; });
 }
-
-FDCStatBlock UDCRunSubsystem::GetEffectiveStats(int32 CriminalId) const
+const FDCMission* UDCRunSubsystem::FindMission(int32 Id) const { return Missions.FindByPredicate([Id](const FDCMission& M) { return M.Id == Id; }); }
+const FDCGearItem* UDCRunSubsystem::FindGear(FName) const { return nullptr; }
+const FDCAbility* UDCRunSubsystem::FindAbility(FName Id) const { return StubAbilities().Find(Id); }
+const FDCTrait* UDCRunSubsystem::FindTrait(FName Id) const { return StubTraits().Find(Id); }
+const FDCPerk* UDCRunSubsystem::FindPerk(FName) const { return nullptr; }
+float UDCRunSubsystem::GetEffectiveLevel(int32 Id) const { const FDCCriminal* C = FindCriminal(Id); return C ? (float)C->Level : 0.f; }
+TArray<FName> UDCRunSubsystem::GetAllTraits(int32 Id) const { const FDCCriminal* C = FindCriminal(Id); return C ? C->Traits : TArray<FName>(); }
+TArray<EDCThreat> UDCRunSubsystem::GetCounters(int32 Id) const
 {
-	const FDCCriminal* C = FindCriminal(CriminalId);
-	if (!C) { C = Recruits.FindByPredicate([CriminalId](const FDCCriminal& X) { return X.Id == CriminalId; }); }
-	return C && Data.IsValid() ? DCImpl::EffStats(*this, DCImpl::BuildMods(*this), *C) : FDCStatBlock();
+	TArray<EDCThreat> Out;
+	if (const FDCCriminal* C = FindCriminal(Id)) { for (FName A : C->Abilities) { if (const FDCAbility* Ab = FindAbility(A)) { Out.Add(Ab->Counters); } } }
+	return Out;
 }
-
-int32 UDCRunSubsystem::GetEffectiveLuck(int32 CriminalId) const
-{
-	const FDCCriminal* C = FindCriminal(CriminalId);
-	if (!C) { C = Recruits.FindByPredicate([CriminalId](const FDCCriminal& X) { return X.Id == CriminalId; }); }
-	return C && Data.IsValid() ? DCImpl::EffLuck(*this, DCImpl::BuildMods(*this), *C) : 0;
-}
-
+int32 UDCRunSubsystem::GetGearSlotCount() const { return IsRoomBuilt(EDCRoomType::Workshop) ? 3 : 2; }
 int32 UDCRunSubsystem::GetCash() const { return Cash; }
-int32 UDCRunSubsystem::GetNight() const { return Night; }
-int32 UDCRunSubsystem::GetHeistsCompleted() const { return HeistsCompleted; }
-int32 UDCRunSubsystem::GetUpkeepDue() const { return Data.IsValid() ? DCImpl::Upkeep(*this, DCImpl::BuildMods(*this)) : 0; }
-int32 UDCRunSubsystem::GetRosterCap() const { return Data.IsValid() ? DCImpl::RosterCap(*this, DCImpl::BuildMods(*this)) : 4; }
-int32 UDCRunSubsystem::GetMaxCrewsPerNight() const { return Data.IsValid() ? DCImpl::CrewsPerNight(*this, DCImpl::BuildMods(*this)) : 1; }
-int32 UDCRunSubsystem::GetRecruitRefreshIn() const { return RecruitRefreshIn; }
-int32 UDCRunSubsystem::GetUnlockedTier() const { return Data.IsValid() ? DCImpl::UnlockedTier(*this) : 1; }
-const TArray<FDCCrewPlan>& UDCRunSubsystem::GetCommittedPlans() const { return Plans; }
-const FDCNightReport& UDCRunSubsystem::GetLastNightReport() const { return LastReport; }
-
+int32 UDCRunSubsystem::GetMissionsSucceeded() const { return Reports.FilterByPredicate([](const FDCMissionReport& R) { return R.Outcome == EDCMissionOutcome::Success; }).Num(); }
+int32 UDCRunSubsystem::GetUnlockedTier() const { return 4; }
+int32 UDCRunSubsystem::GetRosterCap() const { return 4 + 2 * GetRoom(EDCRoomType::Lounge).Level; }
+int32 UDCRunSubsystem::GetMaxActiveMissions() const { return 2 + GetRoom(EDCRoomType::Garage).Level; }
+int32 UDCRunSubsystem::GetActiveMissionCount() const { return Missions.FilterByPredicate([](const FDCMission& M) { return M.bInProgress; }).Num(); }
+int32 UDCRunSubsystem::GetUpkeepDue() const { return 250 * Roster.Num(); }
+double UDCRunSubsystem::GetRecruitRefreshIn() const { return 600.0 - FMath::Fmod(RunTime, 600.0); }
+int32 UDCRunSubsystem::GetRecruitRefreshCost() const { return 500; }
+double UDCRunSubsystem::GetNextMissionIn() const { return 30.0 - FMath::Fmod(RunTime, 30.0); }
+double UDCRunSubsystem::GetMissionTimeRemaining(int32 Id) const { const FDCMission* M = FindMission(Id); return (M && M->bInProgress) ? FMath::Max(0.0, M->EndsAt - RunTime) : 0.0; }
+float UDCRunSubsystem::GetMissionProgress(int32 Id) const
+{
+	const FDCMission* M = FindMission(Id);
+	return (M && M->bInProgress && M->EndsAt > M->StartedAt) ? (float)FMath::Clamp((RunTime - M->StartedAt) / (M->EndsAt - M->StartedAt), 0.0, 1.0) : 0.f;
+}
 FDCRunSummary UDCRunSubsystem::GetRunSummary() const
 {
-	FDCRunSummary S;
-	S.Seed = Seed;
-	S.bWon = bWonRun;
-	S.EndReason = EndReason;
-	S.NightsSurvived = FMath::Max(0, Night - 1);
-	S.HeistsCompleted = HeistsCompleted;
-	S.HeistsAttempted = HeistsAttempted;
-	S.TotalTake = TotalTake;
-	S.BestHeistName = BestHeistName;
-	S.BestHeistTake = BestHeistTake;
-	for (const FDCRoom& R : Rooms) { if (R.State == EDCRoomState::Built && R.Type != EDCRoomType::Office) { S.RoomsBuilt++; } }
-	for (const FDCCriminal& C : Roster) { S.Starring.Add(FString::Printf(TEXT("%s (%s)"), *C.GetDisplayName(), DC::TypeName(C.Type))); }
-	for (const FDCCriminal& C : Fallen) { S.InMemoriam.Add(FString::Printf(TEXT("%s (%s)"), *C.GetDisplayName(), DC::TypeName(C.Type))); }
-	for (const FDCPerk& P : PerksTaken) { S.PerksTaken.Add(P.DisplayName); }
+	FDCRunSummary S; S.Seed = Seed; S.DaysSurvived = GetDay(); S.PlayTime = RunTime; S.MissionsSucceeded = GetMissionsSucceeded(); S.MissionsAttempted = Reports.Num();
+	for (const FDCCriminal& C : Roster) { S.Crew.Add(C.GetDisplayName()); }
 	return S;
 }
 
-// ─── Planning ───────────────────────────────────────────────────────────────
+// ─── missions ────────────────────────────────────────────────────────────────
 
 FDCSuccessBreakdown UDCRunSubsystem::PreviewPlan(const FDCCrewPlan& Plan) const
 {
-	return DCImpl::Breakdown(*this, Plan, true);
+	FDCSuccessBreakdown B;
+	const FDCMission* M = FindMission(Plan.MissionId);
+	if (!M) { B.Block = EDCPlanBlock::Expired; return B; }
+	TArray<int32> Used;
+	for (EDCThreat T : M->Threats)
+	{
+		FDCThreatSlot S; S.Threat = T;
+		for (int32 Id : Plan.CriminalIds)
+		{
+			if (const FDCCriminal* C = FindCriminal(Id))
+			{
+				for (FName A : C->Abilities)
+				{
+					const FDCAbility* Ab = FindAbility(A);
+					if (Ab && Ab->Counters == T && !Used.Contains(Id * 100 + C->Abilities.IndexOfByKey(A))) { S.CounteredBy = Id; S.Source = A; Used.Add(Id * 100 + C->Abilities.IndexOfByKey(A)); break; }
+				}
+			}
+			if (S.IsCountered()) { break; }
+		}
+		B.Threats.Add(S);
+	}
+	float Crew = 0.f;
+	for (int32 Id : Plan.CriminalIds)
+	{
+		const FDCCriminal* C = FindCriminal(Id);
+		const float F = C ? FMath::Clamp(1.f - 0.25f * FMath::Max(0, M->Level - C->Level), 0.1f, 1.f) : 0.f;
+		B.MemberFactor.Add(Id, F); B.Willingness.Add(Id, 1.f); Crew += F;
+	}
+	const float Points = M->CrewSize + 1.5f * M->Threats.Num();
+	B.CrewChance = Crew / Points;
+	B.ThreatChance = 1.5f * B.Threats.FilterByPredicate([](const FDCThreatSlot& S) { return S.IsCountered(); }).Num() / Points;
+	if (M->bNight && IsNight()) { FDCModifierHit H; H.Id = TEXT("night"); H.Icon = TEXT("moon"); H.Label = TEXT("Night"); H.ChanceDelta = 0.1f; B.Modifiers.Add(H); B.ModifierChance += 0.1f; }
+	B.SuccessChance = FMath::Clamp(B.CrewChance + B.ThreatChance + B.ModifierChance, 0.f, 2.f);
+	B.BonusChance = FMath::Max(0.f, B.SuccessChance - 1.f);
+	B.ArrestChance = M->ArrestRisk; B.Duration = M->Duration; B.Cost = M->Cost; B.Payout = M->Payout;
+	B.DirectorTake = FMath::RoundToInt(M->Payout * Plan.Cut);
+	B.Block = Plan.CriminalIds.Num() < M->CrewSize ? EDCPlanBlock::SlotsEmpty
+		: M->bInProgress ? EDCPlanBlock::Expired
+		: Cash < M->Cost ? EDCPlanBlock::NoCash
+		: GetActiveMissionCount() >= GetMaxActiveMissions() ? EDCPlanBlock::NoCapacity : EDCPlanBlock::None;
+	for (int32 Id : Plan.CriminalIds) { const FDCCriminal* C = FindCriminal(Id); if (!C || !C->IsAvailable()) { B.Block = EDCPlanBlock::CrewUnavailable; } }
+	B.bValid = B.Block == EDCPlanBlock::None;
+	return B;
 }
 
-bool UDCRunSubsystem::CommitPlan(const FDCCrewPlan& Plan, FString* OutError)
+FDCCrewPlan UDCRunSubsystem::SuggestPlan(int32 MissionId, float Cut) const
 {
-	const FDCSuccessBreakdown Bd = PreviewPlan(Plan);
-	if (!Bd.bValid) { SetErr(OutError, Bd.InvalidReason); return false; }
-	FDCCrewPlan P = Plan;
-	P.Cut = FMath::Clamp(Plan.Cut, Data->Balance.CutMin, Data->Balance.CutMax);
-	// Re-casting a committed job replaces its plan.
-	Plans.RemoveAll([&P](const FDCCrewPlan& X) { return X.JobId == P.JobId; });
-	Plans.Add(P);
-	DCImpl::RefreshStatuses(*this);
-	OnPlanCommitted.Broadcast(P);
-	DCImpl::Changed(*this);
+	FDCCrewPlan P; P.MissionId = MissionId; P.Cut = Cut;
+	if (const FDCMission* M = FindMission(MissionId))
+	{
+		for (const FDCCriminal& C : Roster) { if (P.CriminalIds.Num() < M->CrewSize && C.IsAvailable()) { P.CriminalIds.Add(C.Id); } }
+	}
+	return P;
+}
+
+bool UDCRunSubsystem::StartMission(const FDCCrewPlan& Plan, EDCPlanBlock* OutBlock)
+{
+	const FDCSuccessBreakdown B = PreviewPlan(Plan);
+	if (OutBlock) { *OutBlock = B.Block; }
+	if (!B.bValid) { return false; }
+	FDCMission* M = Missions.FindByPredicate([&](const FDCMission& X) { return X.Id == Plan.MissionId; });
+	Cash -= M->Cost;
+	M->bInProgress = true; M->StartedAt = RunTime; M->EndsAt = RunTime + B.Duration; M->CrewIds = Plan.CriminalIds; M->Cut = Plan.Cut; M->LockedChance = B.SuccessChance;
+	for (int32 Id : Plan.CriminalIds)
+	{
+		if (FDCCriminal* C = Roster.FindByPredicate([Id](const FDCCriminal& X) { return X.Id == Id; })) { C->Status = EDCCriminalStatus::OnMission; C->ActiveMissionId = M->Id; }
+	}
+	OnMissionStarted.Broadcast(*M);
+	OnRunStateChanged.Broadcast();
 	return true;
 }
 
-void UDCRunSubsystem::CancelPlan(int32 JobId)
-{
-	if (Plans.RemoveAll([JobId](const FDCCrewPlan& P) { return P.JobId == JobId; }) == 0) { return; }
-	DCImpl::RefreshStatuses(*this);
-	OnPlanCancelled.Broadcast(JobId);
-	DCImpl::Changed(*this);
-}
+const TArray<FDCMissionReport>& UDCRunSubsystem::GetReports() const { return Reports; }
+int32 UDCRunSubsystem::GetUnseenReportCount() const { return Reports.FilterByPredicate([](const FDCMissionReport& R) { return !R.bSeen; }).Num(); }
+void UDCRunSubsystem::MarkReportSeen(int32 Id) { for (FDCMissionReport& R : Reports) { if (R.ReportId == Id) { R.bSeen = true; } } OnRunStateChanged.Broadcast(); }
+void UDCRunSubsystem::MarkAllReportsSeen() { for (FDCMissionReport& R : Reports) { R.bSeen = true; } OnRunStateChanged.Broadcast(); }
 
-// ─── Economy ────────────────────────────────────────────────────────────────
+// ─── economy ─────────────────────────────────────────────────────────────────
 
-bool UDCRunSubsystem::BuyGear(FName ItemId, int32 CriminalId, FString* OutError)
-{
-	if (!bActive || Phase != EDCGamePhase::Planning) { SetErr(OutError, TEXT("The fence only deals during planning.")); return false; }
-	const FDCGearDef* G = Data->FindGear(ItemId);
-	FDCCriminal* C = FindCriminalMutable(CriminalId);
-	if (!G) { SetErr(OutError, TEXT("Unknown item.")); return false; }
-	if (!C) { SetErr(OutError, TEXT("Unknown crew member.")); return false; }
-	const FDCModStack M = DCImpl::BuildMods(*this);
-	if ((int32)G->Item.Slot >= DCImpl::GearSlots(*this, M)) { SetErr(OutError, FString::Printf(TEXT("The %s slot needs the Workshop."), DC::SlotName(G->Item.Slot))); return false; }
-	if (G->Item.Tier > DCImpl::GearTier(M)) { SetErr(OutError, G->Item.Tier >= 3 ? TEXT("Needs a Workshop upgrade.") : TEXT("Needs the Workshop.")); return false; }
-	const int32 Price = DCImpl::GearPrice(*G, M);
-	if (Cash < Price) { SetErr(OutError, TEXT("Not enough cash.")); return false; }
-	if (C->Equipped.FindRef(G->Item.Slot) == ItemId) { SetErr(OutError, TEXT("Already equipped.")); return false; }
-	Cash -= Price;
-	C->Equipped.Add(G->Item.Slot, ItemId);
-	DCImpl::Changed(*this);
-	return true;
-}
-
-void UDCRunSubsystem::Unequip(int32 CriminalId, EDCGearSlot Slot)
-{
-	FDCCriminal* C = FindCriminalMutable(CriminalId);
-	if (C && C->Equipped.Remove(Slot) > 0) { DCImpl::Changed(*this); }
-}
-
+bool UDCRunSubsystem::BuyGear(FName, int32, FString* OutError) { if (OutError) { *OutError = TEXT("stub"); } return false; }
+bool UDCRunSubsystem::EquipFromStash(FName, int32, FString* OutError) { if (OutError) { *OutError = TEXT("stub"); } return false; }
+void UDCRunSubsystem::Unequip(int32, EDCGearSlot) {}
+bool UDCRunSubsystem::SellFromStash(FName) { return false; }
 bool UDCRunSubsystem::Hire(int32 RecruitId, FString* OutError)
 {
-	if (!bActive || Phase != EDCGamePhase::Planning) { SetErr(OutError, TEXT("You can only hire during planning.")); return false; }
 	const int32 Idx = Recruits.IndexOfByPredicate([RecruitId](const FDCCriminal& C) { return C.Id == RecruitId; });
-	if (Idx == INDEX_NONE) { SetErr(OutError, TEXT("That recruit has moved on.")); return false; }
-	if (Roster.Num() >= GetRosterCap()) { SetErr(OutError, TEXT("Roster full. Build or upgrade the Lounge.")); return false; }
-	if (Cash < Recruits[Idx].HireCost) { SetErr(OutError, TEXT("Not enough cash.")); return false; }
+	if (Idx == INDEX_NONE || Cash < Recruits[Idx].HireCost || Roster.Num() >= GetRosterCap()) { if (OutError) { *OutError = TEXT("Can't hire"); } return false; }
 	Cash -= Recruits[Idx].HireCost;
-	FDCCriminal C = Recruits[Idx];
-	C.Status = EDCCriminalStatus::Available;
+	Roster.Add(Recruits[Idx]); Roster.Last().HireCost = 0;
 	Recruits.RemoveAt(Idx);
-	Roster.Add(C);
 	OnCriminalHired.Broadcast(Roster.Last());
-	DCImpl::Changed(*this);
+	OnRunStateChanged.Broadcast();
 	return true;
 }
+void UDCRunSubsystem::Dismiss(int32 Id) { Roster.RemoveAll([Id](const FDCCriminal& C) { return C.Id == Id && C.IsAvailable(); }); OnRunStateChanged.Broadcast(); }
+bool UDCRunSubsystem::RefreshRecruits() { return false; }
 
-void UDCRunSubsystem::Dismiss(int32 CriminalId)
-{
-	if (!FindCriminal(CriminalId)) { return; }
-	TArray<int32> Cancelled;
-	for (const FDCCrewPlan& P : Plans) { if (P.CriminalIds.Contains(CriminalId)) { Cancelled.Add(P.JobId); } }
-	Plans.RemoveAll([CriminalId](const FDCCrewPlan& P) { return P.CriminalIds.Contains(CriminalId); });
-	Roster.RemoveAll([CriminalId](const FDCCriminal& C) { return C.Id == CriminalId; });
-	DCImpl::RefreshStatuses(*this);
-	for (int32 J : Cancelled) { OnPlanCancelled.Broadcast(J); }
-	DCImpl::Changed(*this);
-}
-
-// ─── Rooms ──────────────────────────────────────────────────────────────────
+// ─── rooms ───────────────────────────────────────────────────────────────────
 
 TArray<FDCRoom> UDCRunSubsystem::GetRooms() const
 {
 	TArray<FDCRoom> Out;
-	if (!Data.IsValid()) { return Rooms; }
-	for (const FDCRoom& State : Rooms)
-	{
-		const FDCRoomDef& Def = Data->GetRoom(State.Type);
-		FDCRoom R = State;
-		R.DisplayName = Def.DisplayName;
-		R.Description = Def.Description;
-		R.LevelEffects.Reset();
-		for (const FDCRoomLevelDef& L : Def.Levels) { R.LevelEffects.Add(L.EffectText); }
-		R.RequiredHeists = Def.RequiredHeists;
-		R.UpkeepPerNight = Def.UpkeepPerNight;
-		const bool bBuilt = R.State == EDCRoomState::Built;
-		R.NextCost = !bBuilt ? Def.BuildCost : (R.Level < 3 && Def.UpgradeCosts.IsValidIndex(R.Level - 1)) ? Def.UpgradeCosts[R.Level - 1] : 0;
-		if (bBuilt && R.Level >= 3) { R.BlockedReason = TEXT("Max level"); }
-		else if (!bBuilt && HeistsCompleted < Def.RequiredHeists) { R.BlockedReason = FString::Printf(TEXT("Needs %d heist%s"), Def.RequiredHeists, Def.RequiredHeists == 1 ? TEXT("") : TEXT("s")); }
-		else if (Cash < R.NextCost) { R.BlockedReason = TEXT("Not enough cash"); }
-		else if (Phase != EDCGamePhase::Planning) { R.BlockedReason = TEXT("Only during planning"); }
-		else { R.BlockedReason.Reset(); }
-		R.bCanAct = bActive && R.BlockedReason.IsEmpty();
-		Out.Add(R);
-	}
+	for (const FDCRoom& R : Rooms) { Out.Add(GetRoom(R.Type)); }
 	return Out;
 }
-
 FDCRoom UDCRunSubsystem::GetRoom(EDCRoomType Type) const
 {
-	for (const FDCRoom& R : GetRooms()) { if (R.Type == Type) { return R; } }
-	return FDCRoom();
+	FDCRoom R; R.Type = Type;
+	if (const FDCRoom* S = Rooms.FindByPredicate([Type](const FDCRoom& X) { return X.Type == Type; })) { R = *S; }
+	R.DisplayName = DC::RoomName(Type); R.Icon = DC::RoomIcon(Type);
+	R.Description = TEXT("Stub room");
+	R.LevelEffects = { TEXT("Level 1"), TEXT("Level 2"), TEXT("Level 3") };
+	R.bMaxLevel = R.Level >= 3;
+	R.NextCost = 2000 * (R.Level + 1); R.NextBuildTime = 30.f * (R.Level + 1);
+	R.Block = R.bMaxLevel ? EDCPlanBlock::Locked : (Cash < R.NextCost ? EDCPlanBlock::NoCash : EDCPlanBlock::None);
+	R.bCanAct = R.Block == EDCPlanBlock::None && R.State != EDCRoomState::Building && !IsAnyRoomBuilding();
+	return R;
 }
-
-bool UDCRunSubsystem::IsRoomBuilt(EDCRoomType Type) const
+bool UDCRunSubsystem::IsRoomBuilt(EDCRoomType Type) const { return GetRoom(Type).Level >= 1; }
+bool UDCRunSubsystem::BuildRoom(EDCRoomType Type, EDCPlanBlock* OutBlock)
 {
-	return Rooms.ContainsByPredicate([Type](const FDCRoom& R) { return R.Type == Type && R.State == EDCRoomState::Built; });
-}
-
-bool UDCRunSubsystem::BuildRoom(EDCRoomType Type, FString* OutError)
-{
-	const FDCRoom R = GetRoom(Type);
-	if (R.State == EDCRoomState::Built) { SetErr(OutError, TEXT("Already built.")); return false; }
-	if (!R.bCanAct) { SetErr(OutError, R.BlockedReason.IsEmpty() ? FString(TEXT("Can't build that now.")) : R.BlockedReason); return false; }
-	FDCRoom* X = Rooms.FindByPredicate([Type](const FDCRoom& Q) { return Q.Type == Type; });
-	if (!X) { return false; }
-	Cash -= R.NextCost;
-	X->State = EDCRoomState::Built;
-	X->Level = 1;
-	DCImpl::TopUpBoard(*this);
+	const FDCRoom V = GetRoom(Type);
+	if (OutBlock) { *OutBlock = V.Block; }
+	if (!V.bCanAct) { return false; }
+	FDCRoom* R = Rooms.FindByPredicate([Type](const FDCRoom& X) { return X.Type == Type; });
+	Cash -= V.NextCost;
+	R->State = EDCRoomState::Building; R->BuildStartedAt = RunTime; R->BuildEndsAt = RunTime + V.NextBuildTime;
 	OnRoomChanged.Broadcast(GetRoom(Type));
-	DCImpl::Changed(*this);
+	OnRunStateChanged.Broadcast();
 	return true;
 }
+bool UDCRunSubsystem::IsAnyRoomBuilding() const { return Rooms.ContainsByPredicate([](const FDCRoom& R) { return R.State == EDCRoomState::Building; }); }
+int32 UDCRunSubsystem::GetPatchUpCost(int32) const { return -1; }
+bool UDCRunSubsystem::PatchUp(int32) { return false; }
+int32 UDCRunSubsystem::GetBailCost(int32) const { return -1; }
+bool UDCRunSubsystem::BailOut(int32) { return false; }
 
-bool UDCRunSubsystem::UpgradeRoom(EDCRoomType Type, FString* OutError)
-{
-	const FDCRoom R = GetRoom(Type);
-	if (R.State != EDCRoomState::Built) { SetErr(OutError, TEXT("Build it first.")); return false; }
-	if (!R.bCanAct) { SetErr(OutError, R.BlockedReason.IsEmpty() ? FString(TEXT("Can't upgrade that now.")) : R.BlockedReason); return false; }
-	FDCRoom* X = Rooms.FindByPredicate([Type](const FDCRoom& Q) { return Q.Type == Type; });
-	if (!X) { return false; }
-	Cash -= R.NextCost;
-	X->Level = FMath::Min(3, X->Level + 1);
-	DCImpl::TopUpBoard(*this);
-	OnRoomChanged.Broadcast(GetRoom(Type));
-	DCImpl::Changed(*this);
-	return true;
-}
-
-int32 UDCRunSubsystem::GetPatchUpCost(int32 CriminalId) const
-{
-	if (!bActive || !Data.IsValid()) { return -1; }
-	const FDCCriminal* C = FindCriminal(CriminalId);
-	if (!C || C->Status != EDCCriminalStatus::Injured || C->InjuredNights <= 0) { return -1; }
-	const float PerNight = DCImpl::BuildMods(*this).Max(EDCModKind::PatchUp, 0.f);
-	return PerNight > 0.f ? FMath::RoundToInt(PerNight * C->InjuredNights) : -1;
-}
-
-bool UDCRunSubsystem::PatchUp(int32 CriminalId, FString* OutError)
-{
-	if (Phase != EDCGamePhase::Planning) { SetErr(OutError, TEXT("Only during planning.")); return false; }
-	const int32 Cost = GetPatchUpCost(CriminalId);
-	if (Cost < 0) { SetErr(OutError, IsRoomBuilt(EDCRoomType::Clinic) ? TEXT("Nothing to patch up (needs Clinic L2).") : TEXT("Needs the Back-Alley Clinic.")); return false; }
-	if (Cash < Cost) { SetErr(OutError, TEXT("Not enough cash.")); return false; }
-	FDCCriminal* C = FindCriminalMutable(CriminalId);
-	Cash -= Cost;
-	C->InjuredNights = 0;
-	C->Status = EDCCriminalStatus::Available;
-	DCImpl::Changed(*this);
-	return true;
-}
-
-int32 UDCRunSubsystem::GetBailCost(int32 CriminalId) const
-{
-	if (!bActive || !Data.IsValid()) { return -1; }
-	const FDCCriminal* C = Fallen.FindByPredicate([CriminalId](const FDCCriminal& X) { return X.Id == CriminalId; });
-	if (!C) { return -1; }
-	const int32* When = ArrestedOnNight.Find(CriminalId);
-	if (!When || Night - *When > 1) { return -1; } // only within 1 night of the arrest
-	const FDCModStack M = DCImpl::BuildMods(*this);
-	const float Mult = M.Max(EDCModKind::Bail, 0.f);
-	if (Mult <= 0.f) { return -1; }
-	const int32 Hire = C->HireCost > 0 ? C->HireCost : Data->GetType(C->Type).HireCostBase;
-	return FMath::Max(100, DCImpl::RoundTo(Mult * Hire, 100));
-}
-
-bool UDCRunSubsystem::BailOut(int32 CriminalId, FString* OutError)
-{
-	if (Phase != EDCGamePhase::Planning) { SetErr(OutError, TEXT("Only during planning.")); return false; }
-	const int32 Cost = GetBailCost(CriminalId);
-	if (Cost < 0) { SetErr(OutError, IsRoomBuilt(EDCRoomType::LawyerOffice) ? TEXT("Too late to post bail.") : TEXT("Needs the Lawyer's Office.")); return false; }
-	if (Cash < Cost) { SetErr(OutError, TEXT("Not enough cash.")); return false; }
-	if (Roster.Num() >= GetRosterCap()) { SetErr(OutError, TEXT("Roster full.")); return false; }
-	const int32 Idx = Fallen.IndexOfByPredicate([CriminalId](const FDCCriminal& X) { return X.Id == CriminalId; });
-	FDCCriminal C = Fallen[Idx];
-	Fallen.RemoveAt(Idx);
-	ArrestedOnNight.Remove(CriminalId);
-	C.Status = EDCCriminalStatus::Available;
-	C.InjuredNights = 0;
-	Cash -= Cost;
-	Roster.Add(C);
-	LastReport.Events.Add(DCImpl::Fill(Data->Strings.Event(TEXT("bailed")), C.GetShortName()));
-	DCImpl::Changed(*this);
-	return true;
-}
-
-// ─── Perks ──────────────────────────────────────────────────────────────────
+// ─── perks ───────────────────────────────────────────────────────────────────
 
 bool UDCRunSubsystem::HasPendingPerkOffer() const { return PerkOffer.Num() > 0; }
 TArray<FDCPerk> UDCRunSubsystem::GetPerkOffer() const { return PerkOffer; }
+bool UDCRunSubsystem::PickPerk(FName) { PerkOffer.Reset(); return true; }
 TArray<FDCPerk> UDCRunSubsystem::GetPerksTaken() const { return PerksTaken; }
-
-bool UDCRunSubsystem::PickPerk(FName PerkId)
-{
-	if (!bActive) { return false; }
-	const FDCPerk* P = PerkOffer.FindByPredicate([PerkId](const FDCPerk& X) { return X.Id == PerkId; });
-	if (!P) { return false; }
-	PerksTaken.Add(*P);
-	PerkOffer.Reset();
-	TArray<FString> Events;
-	DCImpl::CheckProgression(*this, Events); // another offer may already be earned
-	if (Phase == EDCGamePhase::Planning)
-	{
-		DCImpl::TopUpBoard(*this);
-		if (HasPendingPerkOffer()) { OnPerkOffered.Broadcast(PerkOffer); }
-	}
-	DCImpl::Changed(*this);
-	return true;
-}
-
-// ─── Night ──────────────────────────────────────────────────────────────────
-
-TArray<FDCHeistResult> UDCRunSubsystem::EndNight()
-{
-	if (!bActive || Phase != EDCGamePhase::Planning) { return {}; }
-	const FDCBalance& Bal = Data->Balance;
-
-	LastReport = FDCNightReport();
-	LastReport.Night = Night;
-	LastReport.CashBefore = Cash;
-	RetakeSnapshots.Reset(); RetakeJobs.Reset(); RetakeBreakdowns.Reset();
-
-	// 1. Every breakdown is computed before anything mutates: identical to what PreviewPlan showed.
-	TArray<FDCSuccessBreakdown> Bds;
-	for (const FDCCrewPlan& P : Plans) { Bds.Add(DCImpl::Breakdown(*this, P, false)); }
-
-	// 2. Resolve each heist with its own dice stream.
-	TSet<int32> CastTonight;
-	TMap<int32, int32> JobsPerCriminal;
-	for (int32 i = 0; i < Plans.Num(); ++i)
-	{
-		const FDCCrewPlan& P = Plans[i];
-		const FDCJob* JobPtr = FindJob(P.JobId);
-		if (!JobPtr) { continue; }
-		const FDCJob Job = *JobPtr;
-		for (int32 Id : P.CriminalIds) { CastTonight.Add(Id); JobsPerCriminal.FindOrAdd(Id)++; }
-
-		TArray<FDCCriminal> Snapshot;
-		for (int32 Id : P.CriminalIds) { if (const FDCCriminal* C = FindCriminal(Id)) { Snapshot.Add(*C); } }
-
-		FRandomStream Dice(JobRollSeeds.Contains(Job.Id) ? JobRollSeeds[Job.Id] : (int32)(Rng.GetUnsignedInt() & 0x7fffffff));
-		FDCHeistResult R;
-		R.ResultId = NextId++;
-		DCImpl::ResolveHeist(*this, P, Bds[i], Job, Dice, R);
-		HeistsAttempted++;
-		if (R.Outcome == EDCHeistOutcome::Failed || R.Outcome == EDCHeistOutcome::Busted)
-		{
-			RetakeSnapshots.Add(R.ResultId, Snapshot);
-			RetakeJobs.Add(R.ResultId, Job);
-			RetakeBreakdowns.Add(R.ResultId, Bds[i]);
-		}
-		LastReport.TotalTake += R.DirectorTake;
-		LastReport.Results.Add(R);
-	}
-
-	const FDCModStack M = DCImpl::BuildMods(*this);
-
-	// 3. Overtime loyalty cost.
-	const float OvertimeCost = M.Max(EDCModKind::Overtime, 0.f);
-	for (const TPair<int32, int32>& E : JobsPerCriminal)
-	{
-		if (E.Value < 2) { continue; }
-		if (FDCCriminal* C = FindCriminalMutable(E.Key))
-		{
-			C->Loyalty = FMath::Clamp(C->Loyalty - FMath::RoundToInt(OvertimeCost), Bal.LoyaltyMin, Bal.LoyaltyMax);
-		}
-	}
-
-	// 4. Idle loyalty, healing.
-	const int32 IdleLoy = FMath::RoundToInt(M.Sum(EDCModKind::IdleLoyalty));
-	const int32 HealRate = FMath::Max(1, FMath::RoundToInt(M.Max(EDCModKind::InjuryHealRate, 1.f)));
-	int32 IdleCount = 0;
-	for (FDCCriminal& C : Roster)
-	{
-		if (CastTonight.Contains(C.Id))
-		{
-			continue; // injuries from tonight start healing tomorrow
-		}
-		if (C.Status == EDCCriminalStatus::Injured)
-		{
-			C.InjuredNights = FMath::Max(0, C.InjuredNights - HealRate);
-			if (C.InjuredNights == 0)
-			{
-				C.Status = EDCCriminalStatus::Available;
-				LastReport.Events.Add(DCImpl::Fill(Data->Strings.Event(TEXT("healed")), C.GetShortName()));
-			}
-		}
-		else if (IdleLoy != 0)
-		{
-			C.Loyalty = FMath::Clamp(C.Loyalty + IdleLoy, Bal.LoyaltyMin, Bal.LoyaltyMax);
-			++IdleCount;
-		}
-	}
-	if (IdleCount > 0) { LastReport.Events.Add(DCImpl::Fill(Data->Strings.Event(TEXT("idleLoyalty")), FString(), FString(), 0, FString::FromInt(IdleCount))); }
-	for (const FDCHeistResult& R : LastReport.Results)
-	{
-		for (const FDCCrewMemberResult& MR : R.Members)
-		{
-			if (MR.bArrested) { LastReport.Events.Add(DCImpl::Fill(Data->Strings.Event(TEXT("arrested")), MR.Name)); }
-			if (MR.bArrestPrevented) { LastReport.Events.Add(DCImpl::Fill(Data->Strings.Event(TEXT("arrestPrevented")), MR.Name)); }
-			if (MR.bInjured) { LastReport.Events.Add(DCImpl::Fill(Data->Strings.Event(TEXT("injured")), MR.Name)); }
-			if (MR.bLevelledUp) { LastReport.Events.Add(FString::Printf(TEXT("%s (level %d)"), *DCImpl::Fill(Data->Strings.Event(TEXT("levelUp")), MR.Name), MR.NewLevel)); }
-		}
-	}
-
-	// 5. Upkeep.
-	Plans.Reset();
-	DCImpl::RefreshStatuses(*this);
-	LastReport.UpkeepPaid = DCImpl::Upkeep(*this, M);
-	Cash -= LastReport.UpkeepPaid;
-	LastReport.Events.Add(DCImpl::Fill(Data->Strings.Event(TEXT("upkeepPaid")), FString(), FString(), 0, DCImpl::Money(LastReport.UpkeepPaid)));
-
-	// 6. Age the world.
-	Night++;
-	DCImpl::CheckProgression(*this, LastReport.Events);
-	if (--RecruitRefreshIn <= 0)
-	{
-		DCImpl::GenerateRecruits(*this);
-		RecruitRefreshIn = Bal.RecruitRefreshNights;
-		LastReport.Events.Add(Data->Strings.RecruitsRefreshed);
-	}
-	DCImpl::GenerateBoard(*this);
-	RetakesRemaining = DCImpl::RetakesPerNight(DCImpl::BuildMods(*this));
-	for (FDCHeistResult& R : LastReport.Results)
-	{
-		R.bRetakeAvailable = RetakesRemaining > 0 && RetakeSnapshots.Contains(R.ResultId);
-	}
-
-	// 7. Win / game over.
-	LastReport.CashAfter = Cash;
-	LastReport.bWon = bWonRun;
-	FString Reason;
-	LastReport.bGameOver = !bWonRun && DCImpl::ComputeGameOver(*this, Reason);
-	if (LastReport.bGameOver) { EndReason = Reason; }
-	if (bWonRun) { EndReason = Data->Strings.WinReason; }
-
-	DCImpl::SetPhase(*this, EDCGamePhase::Dailies);
-	OnNightResolved.Broadcast(LastReport);
-	DCImpl::Changed(*this);
-	return LastReport.Results;
-}
-
-int32 UDCRunSubsystem::GetRetakesRemaining() const { return Phase == EDCGamePhase::Dailies ? RetakesRemaining : 0; }
-
-bool UDCRunSubsystem::UseRetake(int32 HeistResultId, FDCHeistResult* OutNewResult)
-{
-	if (!bActive || Phase != EDCGamePhase::Dailies || RetakesRemaining <= 0) { return false; }
-	const int32 Idx = LastReport.Results.IndexOfByPredicate([HeistResultId](const FDCHeistResult& R) { return R.ResultId == HeistResultId; });
-	if (Idx == INDEX_NONE || !RetakeSnapshots.Contains(HeistResultId)) { return false; }
-	const FDCHeistResult Old = LastReport.Results[Idx];
-	if (Old.Outcome != EDCHeistOutcome::Failed && Old.Outcome != EDCHeistOutcome::Busted) { return false; }
-
-	// Undo the failure: restore the crew as they were before the heist.
-	for (const FDCCrewMemberResult& MR : Old.Members) { if (MR.bArrestPrevented) { bFirstArrestPrevented = false; } }
-	for (const FDCCriminal& Snap : RetakeSnapshots[HeistResultId])
-	{
-		FDCCriminal C = Snap;
-		C.Status = EDCCriminalStatus::Available;
-		C.InjuredNights = 0;
-		Fallen.RemoveAll([&C](const FDCCriminal& X) { return X.Id == C.Id; });
-		ArrestedOnNight.Remove(C.Id);
-		if (FDCCriminal* Existing = FindCriminalMutable(C.Id)) { *Existing = C; } else { Roster.Add(C); }
-	}
-
-	// Re-shoot with a fresh roll.
-	FRandomStream Dice((int32)(Rng.GetUnsignedInt() & 0x7fffffff));
-	FDCHeistResult R;
-	R.ResultId = HeistResultId;
-	const int32 CashBefore = Cash;
-	DCImpl::ResolveHeist(*this, Old.Plan, RetakeBreakdowns[HeistResultId], RetakeJobs[HeistResultId], Dice, R);
-	R.FirstRoll = Old.FirstRoll;
-	R.bRetaken = true;
-	RetakesRemaining--;
-
-	LastReport.TotalTake += Cash - CashBefore;
-	LastReport.Results[Idx] = R;
-	if (R.Outcome == EDCHeistOutcome::Clean || R.Outcome == EDCHeistOutcome::Messy)
-	{
-		RetakeSnapshots.Remove(HeistResultId);
-		LastReport.Events.Add(FString::Printf(TEXT("%s %s: %s"), *Data->Strings.Event(TEXT("retake")), *R.JobName, DC::OutcomeStamp(R.Outcome)));
-	}
-	for (FDCHeistResult& X : LastReport.Results) { X.bRetakeAvailable = RetakesRemaining > 0 && RetakeSnapshots.Contains(X.ResultId); }
-	DCImpl::RefreshStatuses(*this);
-	DCImpl::CheckProgression(*this, LastReport.Events);
-
-	LastReport.CashAfter = Cash;
-	LastReport.bWon = bWonRun;
-	FString Reason;
-	LastReport.bGameOver = !bWonRun && DCImpl::ComputeGameOver(*this, Reason);
-	EndReason = bWonRun ? Data->Strings.WinReason : LastReport.bGameOver ? Reason : FString();
-
-	if (OutNewResult) { *OutNewResult = R; }
-	OnRetakeResolved.Broadcast(R);
-	DCImpl::Changed(*this);
-	return true;
-}

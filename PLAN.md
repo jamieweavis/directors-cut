@@ -52,6 +52,64 @@
 
 ---
 
+## §R. Redesign v2: realtime crew & missions (Fri Nov 13 evening). **Supersedes §2, §3.1, §3.3 (neon/cinema parts), §3.5 and §2.13 music.**
+
+**Your direction (Nov 13):**
+- Drop the theatre/cinema aesthetic. The game should feel dark, realistic and modern-criminal, with a modern UI and **no background music**.
+- The game runs in **real time**, with a **day/night cycle** whose light comes through the windows according to the time.
+- Missions take real time: 1–2 min early on, up to 20 min for group jobs later, with more risk and reward.
+- The loop: **crew followers sent on timed missions** from a mission table.
+- UI panels have **less text, more icons**.
+
+**Decisions:**
+- **Clock:** compressed, 1 real second = 1 game minute (a 24 min day).
+- **Saving:** the run autosaves and Continue resumes it. **No offline progress**: time is frozen while the game is closed. Going broke at payday still ends the run, and the save is deleted on game over or victory.
+- **Hideout:** an industrial warehouse.
+- **Build:** parallel agent wave R1.
+
+**Jam theme:** you are still **the Director** (the boss) and you still set **your cut** of every job. That keeps the "Director's Cut" theme without any film dressing.
+
+### R.1 The loop
+| System | Design |
+|---|---|
+| **Crew** | 6 types (Wheelman, Muscle, Hacker, Ghost, Face, Safecracker). Quality Street/Pro/Elite (1+1 / 1+2 / 2+3 abilities+traits), level 1–10 |
+| **Mission board** | A screen wall in the Office. Missions have **threats** (Guards, Cameras, Alarms, Locks, Vault, Patrols, Witnesses, Pursuit), and crew **abilities** and **gear** counter them |
+| **Success %** | Crew level vs mission level, plus threats countered, plus traits (`Content/Data/schema.md`). Above 100% gives a bonus payout chance |
+| **Durations** | Real time: 60 s (tier 1) to 20 min (tier 4 / The Big Score). Lead Foot, Marathoner and Quick Hands traits |
+| **Postings** | Expire after 5–10 min; a new one posts about every 40 s while the board has room |
+| **Economy** | Upfront **cost** (gear, bribes) → **payout**, XP, sometimes **loot gear** |
+| **Risk** | **Busted**: crew can be **arrested** (permanently lost) on high-tier jobs, which is where the risk/reward lives |
+| **Rooms** | Take real time to build (60 s → about 5 min), one at a time |
+| **Your cut** | Greed lowers willingness (and odds) and loyalty. Fair or generous cuts build loyalty |
+| **Day/night** | Wages paid at **dawn**; **night jobs** (moon icon) get +10% if started after dark; Night Owl / Early Bird traits |
+| **Progression** | Perk draft every 3 successes; **The Big Score** (5 crew, 20 min, unlocked by the Ops Room plus 15 successes) **wins the run** |
+
+### R.2 Real time
+- `UDCRunSubsystem` ticks itself (`FTickableGameObject`). Every timer is in *run seconds*. The Esc menu pauses the clock, and opening ordinary panels does **not** pause it.
+- The clock starts at 07:00 on day 1. Dawn is 06:00 (payday), dusk is 20:00.
+- Dev flags: `-DCTimeScale=N`, `-DCHour=H` (jump to an hour, for screenshots), `-DCAutoPlay=S` (bot simulates S run-seconds instantly), `-DCSeed`.
+
+### R.3 Look & feel
+- **Hideout:** an industrial warehouse converted into a crew base. Same diorama/cutaway, same room grid, now in concrete, brick, steel, chain-link, LED strips, monitors, roller doors and workbenches. **No** neon cinema signs, marquee bulbs, velvet, projectors, film grain or art deco.
+- **Day/night:** a sun directional light moves through the day along an arc **behind the back walls**, so light pours through big **factory windows** (steel mullions) and casts window-pane patterns on the floor that sweep across it over the day. Golden hour → blue dusk → night, when moonlight is cool and dim and the interior practicals dominate. Exterior street lamps come on at dusk, and window glass emissive follows the sky.
+- **UI:** modern dark glass panels (a near-black translucent fill, 1 px hairlines, rounded corners), Inter for text, JetBrains Mono for numbers and timers, **Lucide icons** everywhere (names in `Content/Fonts/lucide_codepoints.json`). Icons are paired with numbers; text is limited to names; detail goes in tooltips. One accent colour plus semantic colours (success green, danger red, warning amber), with quality colours for crew.
+- **Audio:** **no music**. Clean modern UI sfx and real-world one-shots (engine, radio chirp, phone ping, siren). The ambience crossfades **day city** (traffic, birds, distant construction) ↔ **night city** (distant sirens, hum, crickets, occasional dog) by clock, under an interior room tone.
+
+### R.4 Wave R1: parallel agents (worktrees), launched Nov 13 about 19:15
+| Agent | Owns | Deliverable |
+|---|---|---|
+| **A Sim** | `Sim/`, `Tests/Sim/`, `Core/DCRunSubsystem.h` private section | Real realtime sim to `schema.md`: tick, clock, board posting/expiry, missions, success formula, outcomes, injuries/arrests, XP/levels, loyalty/cut, gear/stash/loot, rooms with build timers, perks, payday/game over, The Big Score, **save/continue** (USaveGame), `SuggestPlan`, tests |
+| **B Data** | `Content/Data/` (not schema.md) | All JSON to schema, `validate.py` (including icon names), `balance_check.py` (a Monte-Carlo of a bot run over about 90 min of play) |
+| **C UI** | `UI/`, `Core/DCUISubsystem.h` private section | The whole modern icon-first UI: HUD (clock and day, sun/moon, cash, payday countdown, active-mission chips with timers, report badge), every panel, toasts, title (Continue/New), pause menu with volume settings |
+| **D Scene** | `World/Scene/`, `Tools/scene_materials.py`, `/Game/DC/Materials` | Warehouse reskin, factory windows, the day/night lighting rig (`ADCDayNight`, driven by the clock), exposure that works day and night, performance |
+| **E World** | `World/` (except Scene), `Core/DCDevTools.*` | Stations retyped for v2, pawns leave at mission start and come back at completion (garage door, car), injured look, camera, the new world test |
+| **H Audio** | `Audio/`, `Tools/audio_gen.py`, `Tools/audio_import.py`, `Content/RawAudio/` | Music removed, new SFX set (`DCSfx::*`), day/night ambience crossfade, tests |
+
+The contracts (`Core/DCTypes.h`, `Core/DCRunSubsystem.h` public, `Core/DCUISubsystem.h` public, `Core/DCAudioSubsystem.h` public, `Content/Data/schema.md`) are **frozen**. Request changes in your report.
+R0 ships stubs: a working fake sim (timers, fake missions), a placeholder one-line HUD, and a silent-if-missing audio stub.
+
+---
+
 ## 0. Jam context: 2026 Epic AI MegaJam
 
 Jam page: https://itch.io/jam/2026-epic-ai-megajam. The binding Official Rules are linked from that page and are worth a read before submitting.
@@ -90,7 +148,7 @@ Scope uses **MoSCoW**. If we're running late, cut the *Could* items first, then 
 
 ---
 
-## 2. Game design (MVP scope)
+## 2. Game design (MVP scope): ⚠️ SUPERSEDED by §R (kept for history)
 
 ### 2.1 Core loop (turn-based, one "night" per turn)
 
@@ -256,7 +314,7 @@ Every **3 successful heists** you **pick 1 of 3 random perks**. Each run gets a 
 
 ---
 
-## 3. Visual & art direction
+## 3. Visual & art direction: ⚠️ §3.1, §3.3 (neon/cinema) and §3.5 SUPERSEDED by §R.3
 
 ### 3.1 The space: the Director's office in an abandoned art-deco cinema
 
@@ -379,7 +437,7 @@ PROJ="$PWD/DirectorsCut.uproject"
 
 # Headless automation tests: MCP autostart DISABLED so it never fights the live editor for port 8000
 "$UE/Engine/Binaries/Mac/UnrealEditor-Cmd" "$PROJ" -unattended -nullrhi -nosplash -nosound -log \
-  -ini:EditorPerProjectUserSettings:[/Script/ModelContextProtocol.ModelContextProtocolSettings]:bAutoStartServer=False \
+  '-ini:EditorPerProjectUserSettings:[/Script/ModelContextProtocol.ModelContextProtocolSettings]:bAutoStartServer=False' \
   -ExecCmds="Automation RunTests DirectorsCut.;Quit"
 ```
 

@@ -1,197 +1,214 @@
-# Director's Cut — data schema (LEAD-OWNED contract)
+# Data schema v2: realtime crew & missions
 
-All files live in `Content/Data/`, UTF-8 JSON, loaded at runtime from `FPaths::ProjectContentDir()/Data/`.
-Enum values are written as strings exactly as in `DCTypes.h`:
+> **LEAD-OWNED contract (Wave R1).** Agent B writes the data and Agent A writes the loader. Both build against this file.
+> If a field is missing, the loader uses the default given here and logs a warning. Unknown fields are ignored.
+> Ids are `snake_case`. Icons are Lucide names, which must exist in `Content/Fonts/lucide_codepoints.json`
+> (validate.py checks this). **Time is always in run seconds**, which are real seconds at time scale 1.
+> The UI is icon-first, so every display string must be **short**: names ≤ 22 chars, `description` ≤ 40 chars,
+> flavour ≤ 60 chars, level effects ≤ 28 chars.
 
-- **types**: `Wheelman, Muscle, Hacker, Ghost, Face, Safecracker`
-- **stats**: `Driving, Muscle, Tech, Stealth, Charm, Finesse`
-- **slots**: `Tool, Outfit, Gadget`
-- **rooms**: `Office, Lounge, Workshop, Garage, ScreeningRoom, Clinic, ServerCloset, LawyerOffice`
-
-Unknown keys are ignored by the loader (add `"_comment"` freely). Missing optional keys use the defaults shown.
-Money is integer dollars. Probabilities and percentages are floats from 0 to 1.
+Files are all in `Content/Data/`: `balance.json`, `criminal_types.json`, `names.json`, `abilities.json`, `traits.json`,
+`missions.json`, `gear.json`, `rooms.json`, `perks.json`.
 
 ---
 
-## criminal_types.json
-```json
-{ "types": [
-  { "type": "Wheelman", "displayName": "Wheelman", "fantasy": "Getaway, car boosts",
-    "primary": "Driving", "secondary": "Muscle",
-    "primaryRange": [45, 65], "secondaryRange": [30, 45], "otherRange": [10, 30],
-    "luckRange": [0, 3], "loyaltyRange": [35, 65],
-    "hireCostBase": 3500,
-    "props": "flat cap" }
-] }
-```
-There must be exactly 6 entries.
+## Enums (match C++ `DCTypes.h` names exactly)
 
-## names.json
-```json
-{ "first": ["Vinnie", "..."], "last": ["Caruso", "..."], "nicknames": ["The Wrench", "..."],
-  "typeNicknames": { "Hacker": ["Modem", "..."] } }
-```
-The minimums are 40 first names, 40 last names and 60 nicknames. `typeNicknames` is optional; when present, the loader picks from it 50% of the time.
+- **type:** `Wheelman Muscle Hacker Ghost Face Safecracker`
+- **threat:** `Guards Cameras Alarms Locks Vault Patrols Witnesses Pursuit`
+- **quality:** `Street Pro Elite`
+- **slot:** `Tool Outfit Gadget`
+- **room:** `Office Lounge Workshop Garage OpsRoom Clinic ServerRoom LawyerOffice`
 
-## jobs.json
-```json
-{ "jobs": [
-  { "id": "corner_store", "displayName": "Corner Store Stickup", "tier": 1,
-    "requiredRoles": ["Muscle"], "bonusRoles": ["Wheelman"],
-    "minCrew": 1, "maxCrew": 2,
-    "statWeights": { "Muscle": 0.6, "Driving": 0.4 },
-    "baseDifficulty": 40, "payoutRange": [4000, 7000],
-    "xpReward": 40, "arrestRisk": 0.15,
-    "heavy": false, "finalCut": false,
-    "flavour": ["Three variants of the 'script'...", "...", "..."] }
-] }
-```
-- `statWeights` must sum to 1 (±0.01).
-- `tier` is the job's minimum tier. Jobs appear on the board when `tier <= unlockedTier`. A job above tier 1 can also appear "upscaled": its payout is multiplied by `tierPayoutMult^(boardTier - 1)` and its difficulty is scaled by the formula.
-- `heavy: true` means the job needs the Garage.
-- `finalCut: true` (exactly one job: "The Premiere") means the job needs the Screening Room plus `balance.finalCut.requiredHeists`. It is always offered on the board once unlocked.
+---
 
-## gear.json
-```json
-{ "gear": [
-  { "id": "crowbar", "displayName": "Crowbar", "description": "Persuasive, in a blunt way.",
-    "slot": "Tool", "price": 800, "tier": 1,
-    "stats": { "Muscle": 8 }, "luck": 0, "arrestRiskMult": 1.0,
-    "typeAffinity": "Muscle" }
-] }
-```
-- `tier`: 1 = office fence crate (always available); 2 = needs the Workshop L1; 3 = needs the Workshop L2.
-- There must be at least 4 tier-1 items. Aim for about 15 items in total.
-- `typeAffinity` is optional and only used by perks such as "Practical Effects".
+## Effects vocabulary (shared by traits, gear traits, perks and rooms)
 
-## rooms.json
-```json
-{ "rooms": [
-  { "type": "Lounge", "displayName": "The Lounge", "priority": "Must",
-    "description": "Bunks, a bar, a pool table with a lean.",
-    "buildCost": 8000, "upgradeCosts": [6000, 10000], "requiredHeists": 0,
-    "upkeepPerNight": 200,
-    "levels": [
-      { "effectText": "Roster cap 6. Idle crew +1 loyalty/night.", "flavour": "...",
-        "modifiers": [ { "kind": "RosterCap", "value": 6 }, { "kind": "IdleLoyalty", "value": 1 } ] },
-      { "effectText": "Roster cap 8.", "modifiers": [ { "kind": "RosterCap", "value": 8 }, { "kind": "IdleLoyalty", "value": 1 } ] },
-      { "effectText": "Roster cap 10.", "modifiers": [ { "kind": "RosterCap", "value": 10 }, { "kind": "IdleLoyalty", "value": 1 } ] }
-    ] }
-] }
-```
-- There must be 8 rooms. The Office has `buildCost: 0` and starts built at L1.
-- **Level modifiers are not cumulative.** Each level lists the complete set of modifiers active at that level.
+An effect is `{ "kind": "<kind>", "value": <number>, "param": "<optional string>", "threshold": <optional number> }`.
 
-## perks.json
-```json
-{ "perks": [
-  { "id": "method_acting", "displayName": "Method Acting",
-    "description": "Faces get +10 Charm.", "flavour": "Stay in character.",
-    "modifiers": [ { "kind": "StatBonus", "stat": "Charm", "value": 10, "type": "Face" } ] }
-] }
-```
-There must be at least 15 perks.
+**Scope rules:**
+- **Trait** effects apply to a mission when a crew member *on that mission* has the trait, innate or from gear.
+- **Perk** effects are global.
+- **Room** effects come from `rooms.json` per level (the values for the current built level).
 
-## Modifier kinds (shared by rooms and perks)
+When an effect appears more than once, it **stacks**: chance effects add; `*Mult` effects multiply.
 
-The Sim implements every kind listed here. Fields other than `kind` are optional unless marked otherwise.
-
-| kind | fields | effect |
+| kind | Applies in | Meaning |
 |---|---|---|
-| `RosterCap` | value | sets the roster cap (uses the max over all active modifiers) |
-| `CrewsPerNight` | value | sets the crews per night (max) |
-| `JobBoardSize` | value (additive when it comes from a perk, set/max when it comes from a room) | number of jobs on the board |
-| `IdleLoyalty` | value | loyalty per night for idle (available, uncommitted) criminals |
-| `GearSlots` | value | number of usable gear slots (Office = 2, Workshop = 3) |
-| `GearTier` | value | maximum gear tier that can be bought |
-| `GearDiscount` | value (0.2 = −20%), `type`? (gear `typeAffinity`) | price multiplier `(1 − value)` |
-| `StatBonus` | stat, value, `type`? | + to the effective stat (for criminals of `type`, or for everyone) |
-| `LuckBonus` | value, `type`? | + to luck |
-| `ChanceBonus` | value, `condition`? | additive success chance. `condition` is one of: `HasWheelman`, `AllDifferentTypes`, `PerExtraCrew` (value × crew beyond the minimum), `TierAtLeast3` |
-| `PayoutMult` | value (1.15), `condition`? (`TierAtLeast3`, `HackerJob`) | payout multiplier |
-| `UpkeepMult` | value | upkeep multiplier |
-| `ArrestMult` | value (0.85 = −15%) | arrest chance multiplier |
-| `InjuryMult` | value | injury chance multiplier |
-| `InjuryHealRate` | value (2 = twice as fast) | injured nights decrease by this much per night |
-| `FairCutBonus` | value (0.05) | added to everyone's FairCut |
-| `MinWillingness` | value (0.6) | floor for willingness (perk "Auteur") |
-| `RecruitLevelBonus` | value | recruits arrive with + levels |
-| `PreventFirstArrest` | — | the first arrest of the run is prevented (perk "Stunt Double") |
-| `Retakes` | value | retakes per night |
-| `UnlockHeavyJobs` | — | heavy jobs can appear |
-| `UnlockFinalCut` | — | the Final Cut can appear (together with the heists requirement) |
-| `Intel` | — | breakdown shows the exact arrest chance and bands (the UI shows "?" otherwise) |
-| `PatchUp` | value (cost per injured night) | Clinic: heal for cash |
-| `Bail` | value (cost multiplier × hire cost) | Lawyer: bail arrested crew |
-| `Dailies` | — | once per night, preview a job's exact outcome (Sim may implement this as "show roll") |
-| `Overtime` | value (loyalty cost) | criminals may do 2 jobs per night |
+| `chance` | trait, perk | +value success chance (may be negative) |
+| `chanceNight` | trait, perk | +value if the mission **starts** at night |
+| `chanceDay` | trait, perk | +value if it starts by day |
+| `chanceShort` | trait | +value if final duration ≤ `threshold` s |
+| `chanceLong` | trait | +value if final duration ≥ `threshold` s |
+| `chanceSolo` | trait | +value if CrewSize == 1 |
+| `chanceThreat` | trait, perk | +value if the mission has threat `param` |
+| `chanceWithType` | trait | +value if another crew member is of type `param` |
+| `chanceTierMin` | trait, perk, room | +value if mission tier ≥ `threshold` |
+| `chanceIfType` | room, perk | +value if any crew member is type `param` (e.g. Garage + Wheelman) |
+| `durationMult` | trait, perk, room | multiplies duration (the product is clamped to ≥ `balance.minDurationMult`) |
+| `payoutMult` | trait, perk, room | multiplies payout. Room/perk may use `param` = type: only if a crew member is that type |
+| `costMult` | trait, perk | multiplies mission cost |
+| `xpMult` | trait, perk | multiplies XP gained |
+| `injuryChanceMult` | trait, perk, room | multiplies injury chance (a trait affects only its holder) |
+| `injuryTimeMult` | perk, room | multiplies injury duration |
+| `arrestMult` | trait, perk, room | multiplies arrest chance (a trait affects only its holder) |
+| `fairCutAdd` | trait, perk | + to the holder's (trait) or everyone's (perk) fair cut |
+| `willMin` | perk | willingness never drops below value |
+| `loyaltyIdlePerDay` | room | + loyalty at dawn to crew who aren't injured |
+| `rosterCap` | room, perk | + roster cap |
+| `maxActive` | room, perk | + concurrent missions |
+| `boardSize` | room, perk | + missions kept on the board |
+| `postIntervalMult` | room, perk | multiplies the time between new postings |
+| `gearSlots` | room | + gear slots per criminal (base `balance.gear.baseSlots`) |
+| `gearTier` | room | max purchasable gear tier = value (highest wins) |
+| `gearPriceMult` | room, perk | multiplies shop prices |
+| `upkeepMult` | perk | multiplies the daily upkeep |
+| `recruitLevelAdd` | perk | recruits roll + value levels |
+| `recruitQualityAdd` | room, perk | shifts recruit quality odds up value steps (fractional = chance) |
+| `preventFirstArrest` | perk | the first arrest of the run is prevented |
+| `patchUp` | room | enables paid instant heal; cost = value × remaining injury seconds |
+| `bail` | room | enables bail within `threshold` s of the arrest; cost = value × criminal level |
+| `unlockTier` | room | allows missions of tier ≥ value to post (OpsRoom: 3) |
+| `unlockFinal` | room | allows The Big Score to post |
+| `lootChanceAdd` | perk, room | + loot chance |
+
+---
 
 ## balance.json
-Every constant from PLAN §2.7–2.10. Key names:
-```json
+
+```jsonc
 {
-  "startingCash": 25000, "startingRoster": 4, "startingBoard": 4, "recruitBoardSize": 3, "recruitRefreshNights": 3,
-  "cutMin": 0.10, "cutMax": 0.90, "cutStep": 0.05, "defaultCut": 0.30,
-  "supportWeight": 0.25,
-  "difficultyPerHeist": 0.10, "difficultyPerTier": 0.05,
-  "skillBase": 0.55, "skillSlope": 0.75, "skillMin": 0.05, "skillMax": 0.95,
-  "roleFitPer": 0.03, "roleFitCap": 0.09,
-  "fairCutBase": 0.30, "fairCutLoyaltyDiv": 500,
-  "willSlope": 2.0, "willMin": 0.2, "refusalThreshold": 0.35,
-  "willFactorBase": 0.60, "willFactorScale": 0.40,
-  "generosityBonus": 0.04,
-  "successMin": 0.02, "successMax": 0.97,
-  "luckyBreakPerLuck": 0.02,
-  "cleanBand": 0.6, "bustedBand": 0.10,
-  "messyInjuryChance": 0.25, "messyInjuryNights": [1, 2],
-  "failedInjuryChance": 0.5, "failedInjuryNights": [1, 3],
-  "bustedArrestMult": 2.0,
-  "xpOutcomeMult": { "Clean": 1.0, "Messy": 0.7, "Failed": 0.25, "Busted": 0.25 },
-  "levelCurveBase": 100, "levelCurveExp": 1.4, "maxLevel": 10,
-  "levelUp": { "primary": 4, "secondary": 2, "other": 1, "luckEveryNLevels": 2 },
-  "loyalty": { "successFair": 5, "greedy": -8, "injury": -3, "min": 0, "max": 100 },
-  "tierUnlockHeists": [0, 3, 7, 12], "tierPayoutMult": 1.6,
-  "upkeepPerCriminal": 300, "upkeepPerHeistBlock": 1000, "upkeepHeistBlock": 4,
-  "arrestRiskPer5Heists": 0.02,
-  "recruitCostTierMult": 1.4, "recruitStatBonusPerTier": 5,
-  "perkEveryNHeists": 3, "perkOfferSize": 3,
-  "baseRosterCap": 4, "baseCrewsPerNight": 1, "baseGearSlots": 2, "baseJobBoard": 3,
-  "finalCut": { "requiredHeists": 12 }
+  "startingCash": 6000,
+  "startingRoster": 4,              // distinct types; at least one Street of each starter type
+  "startingRosterLevels": [1, 2],
+  "clock": { "startHour": 7.0, "dawnHour": 6.0, "duskHour": 20.0, "gameMinutesPerSecond": 1.0 },
+  "autosaveSeconds": 30,
+
+  "board": {
+    "baseSize": 4,                  // missions kept on the board, not counting in-progress ones
+    "postIntervalSec": 40,          // a new mission posts every N s while the board isn't full
+    "expireSecRange": [300, 600],   // how long a posting stays up
+    "tierWeights": [[1,0,0,0],[0.5,0.5,0,0],[0.3,0.4,0.3,0],[0.2,0.3,0.3,0.2]], // indexed by unlocked tier - 1
+    "rareChance": 0.08,
+    "startingBoard": ["corner_store", "car_boost", "pickpocket_run"]  // first missions (template ids); the rest random
+  },
+  "tiers": {
+    "unlockSuccesses": [0, 3, 8, 15],   // successes needed for tiers 1..4 (tier 3+ also needs the OpsRoom room effect)
+    "levelRange": [[1,2],[3,4],[5,7],[8,10]]
+  },
+
+  "success": {
+    "threatPoints": 1.5,           // each threat is worth this many points; each crew slot is worth 1
+    "levelFactor": { "atOrAbove": 1.0, "perLevelAbove": 0.05, "maxFactor": 1.2,
+                     "below": [0.75, 0.5, 0.1] },  // 1, 2, 3+ levels under the mission level
+    "maxChance": 2.0                // 100..200% = bonus odds
+  },
+  "cut": { "min": 0.1, "max": 0.9, "step": 0.05, "default": 0.3,
+           "fairCutBase": 0.30, "fairCutLoyaltyDiv": 500,
+           "willSlope": 3.0, "willMin": 0.2, "refusalThreshold": 0.45,
+           "willFactorBase": 0.6, "willFactorScale": 0.4 },
+  "outcome": { "bustedBand": 0.25,   // the worst 25% of the failure range is Busted
+               "bonusPayoutMult": 1.5, "failXpMult": 0.25 },
+  "injury": { "failChance": 0.35, "bustedChance": 0.6, "secondsRange": [90, 240] },
+  "levels": { "max": 10, "xpBase": 100, "xpExp": 1.4 },
+  "loyalty": { "start": 60, "successFair": 5, "greedy": -8, "injury": -3, "min": 0, "max": 100, "quitBelow": 10 },
+  "upkeep": { "perCriminalPerDay": 300 },
+  "recruits": { "boardSize": 3, "refreshSec": 480, "refreshCost": 400,
+                "costBase": 1200, "costPerLevel": 500, "qualityCostMult": [1.0, 1.8, 3.0],
+                "qualityOdds": [[0.8,0.18,0.02],[0.6,0.32,0.08],[0.45,0.4,0.15],[0.3,0.45,0.25]] },  // by unlocked tier
+  "quality": { "abilities": [1, 1, 2], "traits": [1, 2, 3], "negativeTraitChance": [0.35, 0.2, 0.1] },
+  "gear": { "baseSlots": 2, "sellRefund": 0.5, "lootChance": 0.12, "rareLootChance": 0.6 },
+  "night": { "missionBonus": 0.10 },      // for missions with "night": true that start at night
+  "minDurationMult": 0.5,
+  "perks": { "everyNSuccesses": 3, "offerSize": 3 },
+  "final": { "templateId": "the_big_score", "requiredSuccesses": 15 },
+  "gameOver": { "cashFloor": 0 }        // at payday, if cash after upkeep < floor -> game over
 }
 ```
 
-## strings.json
-```json
-{
-  "stamps": { "Clean": "IT'S A WRAP", "Messy": "NEEDS FIXING IN POST", "Failed": "CUT!", "Busted": "SHUT DOWN" },
-  "outcomeLines": { "Clean": ["{name} got out clean, smelling of diamonds.", "..."], "Messy": ["..."], "Failed": ["..."], "Busted": ["..."] },
-  "luckyBreak": ["Lucky break! {name} found the back door unlocked."],
-  "gameOverReasons": { "Broke": "Couldn't make payroll.", "NoCrew": "Nobody left to cast." },
-  "winReason": "The Premiere was a smash.",
-  "titleTagline": "Your vision. Your edits. Your final cut.",
-  "tutorial": ["Click the Job Board to pick a production.", "Cast your crew and set your cut.", "Press ROLL CAMERA to run the night."],
-  "credits": { "starringHeader": "Starring", "memoriamHeader": "In Memoriam", "directedBy": "Directed by You" },
-  "nightEvents": { "tierUnlocked": "Tier {tier} productions unlocked!", "recruitsRefreshed": "New faces at the desk." }
-}
+**Success formula** (Agent A implements it exactly; the UI shows the parts as icons):
 ```
-`{name}`, `{job}`, `{tier}` and `{amount}` are substituted by the Sim/UI.
+LevelFactor(c)  = EffLevel(c) >= M.Level ? min(maxFactor, atOrAbove + perLevelAbove*(EffLevel-M.Level))
+                                         : below[min(3, ceil(M.Level-EffLevel)) - 1]
+EffLevel(c)     = Level + Σ gear Power + perk adds
+Points          = CrewSize + threatPoints * NumThreats
+CrewChance      = Σ_c LevelFactor(c) / Points
+Counters        = each threat instance is matched to at most one unused counter (ability or gear) from the crew;
+                  greedy in threat order, preferring the lowest-level crew member's counter
+ThreatChance    = threatPoints * Countered / Points
+ModifierChance  = Σ chance effects (traits on crew, perks, rooms, night bonus)
+Willingness(c)  = clamp(1 - willSlope * max(0, Cut - FairCut(c)), willMin, 1);  FairCut = fairCutBase + (Loyalty-50)/fairCutLoyaltyDiv + fairCutAdd
+WillFactor      = willFactorBase + willFactorScale * mean(Willingness)      // refusal if any Willingness < refusalThreshold
+Success         = clamp((CrewChance + ThreatChance + ModifierChance) * WillFactor, 0, maxChance)
+Roll r ∈ [0,1):  r < min(Success,1) → Success (bonus payout if a 2nd roll < Success-1)
+                 else Failed; Busted if r >= 1 - (1-min(Success,1)) * bustedBand
+Arrest (Busted)  = mission.arrestRisk × arrestMult (per member)
+```
 
----
+## criminal_types.json
+```jsonc
+{ "types": [ { "type": "Wheelman", "abilities": ["getaway", "hotwire"], "traitPool": ["lead_foot", "night_owl", ...] }, ... ] }
+```
+Abilities: 2 per type, and between them the types must cover every threat at least twice. Street rolls 1 ability from the pool,
+Elite gets both. `traitPool` takes positive and negative trait ids (negative ones are rolled with `quality.negativeTraitChance`).
 
-## Clarifications (lead, after Wave 1 B)
+## names.json
+`{ "first": [...], "last": [...], "nicknames": { "Wheelman": [...], ... } }`: modern, gritty, international, ≥ 30 per list.
 
-1. **Payout tier multiplier.** Payout = rolled `payoutRange` × `tierPayoutMult^(boardTier − 1)`. A job offered at its own tier has boardTier = job.tier. The `Tier` in the difficulty formula is also the board tier.
-2. **Board size.** Night 1 shows `startingBoard` jobs. After that the board size is `max(baseJobBoard, room JobBoardSize) + perk JobBoardSize`.
-3. **`{amount}` formatting.** `{amount}` is substituted already formatted (for example "$12,500", or a plain number for counts). Strings never contain "$".
-4. **How modifiers stack across sources** (rooms + perks):
-   - Additive: `IdleLoyalty`, `LuckBonus`, `StatBonus`, `ChanceBonus`, `FairCutBonus`, `RecruitLevelBonus`, `Retakes`, and `JobBoardSize` from perks.
-   - Additive, but the total is capped at 0.5: `GearDiscount`.
-   - Multiplicative: `PayoutMult`, `UpkeepMult`, `ArrestMult`, `InjuryMult`.
-   - Max: `RosterCap`, `CrewsPerNight`, `GearSlots`, `GearTier`, `InjuryHealRate`, `MinWillingness`, and `JobBoardSize` from rooms.
-   - Present or absent: `Intel`, `UnlockHeavyJobs`, `UnlockFinalCut`, `PreventFirstArrest`, `Dailies`.
-5. **Mechanics:**
-   - XP resets on level up, and the next level needs `levelCurveBase·L^levelCurveExp`.
-   - Busted is a failed roll in the top `bustedBand` of the roll range (roll > 1 − bustedBand).
-   - A lucky break is one re-roll per heist.
-   - Arrest chance per member = `arrestRisk·(1 − margin)` (floored at 0), plus `arrestRiskPer5Heists·floor(heists/5)`, then × ArrestMult and × the gear multipliers.
-   - Recruit cost = `hireCostBase·recruitCostTierMult^(tier − 1)`.
+## abilities.json
+`{ "abilities": [ { "id": "loop_feed", "displayName": "Loop the Feed", "icon": "cctv", "counters": "Cameras" } ] }`
+
+## traits.json
+`{ "traits": [ { "id": "night_owl", "displayName": "Night Owl", "description": "+15% at night", "icon": "moon", "negative": false, "effects": [ { "kind": "chanceNight", "value": 0.15 } ] } ] }`
+Aim for about 18 traits: environment/threat specialists, Night Owl, Early Bird, Lead Foot (durationMult 0.75),
+Marathoner (chanceLong), Quick Hands (chanceShort), Lone Wolf (chanceSolo), Partners (chanceWithType), Treasure Hunter (payoutMult),
+Fast Learner (xpMult), Tough (injuryChanceMult), Slippery (arrestMult), Haggler (costMult). Negatives: Greedy (fairCutAdd +0.1),
+Hothead (chance −0.05), Rat (arrestMult 1.5 for the holder), Slow (durationMult 1.15).
+
+## missions.json
+```jsonc
+{ "missions": [ {
+  "id": "corner_store", "displayName": "Corner Store", "icon": "store",
+  "flavour": ["Till's full on Fridays.", "...", "..."],     // 3 short variants
+  "tier": 1,
+  "crewSize": [1, 1],                 // inclusive range, rolled per posting
+  "durationSec": [60, 90],            // rolled, rounded to 5 s
+  "threats": { "fixed": ["Witnesses"], "pool": ["Cameras", "Alarms"], "extra": [0, 1] },  // fixed + n random from pool
+  "cost": [0, 0], "payout": [1500, 2200], "xpReward": 40, "arrestRisk": 0.05,
+  "nightChance": 0.3,                 // chance the posting is a night job
+  "weight": 1.0,                      // posting weight within its tier
+  "final": false
+} ] }
+```
+**Design targets:**
+- **Tier 1:** 1 crew, 60–120 s, 1–2 threats, small or no cost.
+- **Tier 2:** 2 crew, 3–5 min.
+- **Tier 3:** 3–4 crew, 8–12 min, real arrest risk.
+- **Tier 4:** 4–5 crew, 15–20 min, high cost, high risk, high reward.
+- **`the_big_score`:** tier 4, `final: true`, 5 crew, 20 min, 6–7 threats. Success wins the run.
+
+## gear.json
+```jsonc
+{ "gear": [ { "id": "bolt_cutters", "displayName": "Bolt Cutters", "description": "Counters Locks", "icon": "scissors",
+  "slot": "Tool", "price": 800, "power": 0, "counters": "Locks", "trait": null, "tier": 1, "loot": false } ] }
+```
+- **Tools** counter threats. **Outfits** grant a trait (a `traits.json` id). **Gadgets** give `power` (0.5–2.0), sometimes a counter.
+- Tier 1 is buyable from the start. Tier 2 needs `gearTier` 2 (Workshop L1), and tier 3 needs Workshop L3.
+- `loot: true` items are never in the shop; they drop from missions only. About 15 shop items and 5 loot items.
+
+## rooms.json
+```jsonc
+{ "rooms": [ { "type": "Garage", "displayName": "Garage", "description": "Run more jobs at once", "icon": "warehouse",
+  "cost": [6000, 12000, 22000], "buildSec": [60, 120, 180], "requiredSuccesses": [2, 5, 9],
+  "upkeepPerDay": [200, 300, 450],
+  "levelEffects": ["+1 active mission", "+1 active, -10% time", "+1 active, -20% time"],
+  "levels": [ { "effects": [ { "kind": "maxActive", "value": 1 } ] }, { "effects": [...] }, { "effects": [...] } ] } ] }
+```
+- Effects are **per level, not cumulative**: list the full effect set for each level.
+- The Office starts Built L1. Its levels raise `boardSize`; its L1 entry is free (`cost[0] = 0`).
+- Base values (before any room): roster cap 4, max active missions 1, board 4.
+- Build times are short at first (60 s) and longer later (up to about 5 min). Only one room builds at a time.
+
+## perks.json
+`{ "perks": [ { "id": "burner_phones", "displayName": "Burner Phones", "description": "-20% arrest chance", "icon": "smartphone", "effects": [ { "kind": "arrestMult", "value": 0.8 } ] } ] }`
+About 15 perks, modern-crime flavoured. No film or theatre puns.

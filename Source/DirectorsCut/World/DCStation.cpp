@@ -155,16 +155,15 @@ EDCPanel ADCStation::GetPanel() const
 {
 	switch (StationType)
 	{
-	case EDCStationType::DirectorDesk:   return EDCPanel::Desk;
-	case EDCStationType::JobBoard:       return EDCPanel::JobBoard;
-	case EDCStationType::Lounge:         return EDCPanel::Roster;
+	case EDCStationType::Desk:   return EDCPanel::Recruits;
+	case EDCStationType::MissionBoard:       return EDCPanel::Missions;
+	case EDCStationType::Lounge:         return EDCPanel::Crew;
 	case EDCStationType::Workbench:      return EDCPanel::Workbench;
-	case EDCStationType::GarageDoor:     return EDCPanel::JobBoard;
-	case EDCStationType::Projector:      return EDCPanel::Settings;
-	case EDCStationType::BlueprintTable: return EDCPanel::Blueprint;
-	case EDCStationType::ScreeningRoom:  return EDCPanel::ScreeningRoom;
+	case EDCStationType::GarageDoor:     return EDCPanel::Missions;
+	case EDCStationType::BuildTable: return EDCPanel::Build;
+	case EDCStationType::OpsRoom:  return EDCPanel::OpsRoom;
 	case EDCStationType::Clinic:         return EDCPanel::Clinic;
-	case EDCStationType::ServerCloset:   return EDCPanel::ServerCloset;
+	case EDCStationType::ServerRack:   return EDCPanel::ServerRoom;
 	case EDCStationType::Lawyer:         return EDCPanel::Lawyer;
 	}
 	return EDCPanel::None;
@@ -175,17 +174,6 @@ void ADCStation::OpenStationPanel()
 	UDCUISubsystem* UI = UDCUISubsystem::Get(this);
 	if (!UI) { return; }
 	UI->OpenPanel(GetPanel());
-	if (StationType == EDCStationType::GarageDoor)
-	{
-		if (const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this))
-		{
-			const int32 N = Run->GetCommittedPlans().Num();
-			if (N > 0)
-			{
-				UI->ShowToast(FString::Printf(TEXT("%d crew%s waiting by the car. Press SPACE to Roll Camera."), N, N == 1 ? TEXT("") : TEXT("s")));
-			}
-		}
-	}
 }
 
 void ADCStation::OnClicked()

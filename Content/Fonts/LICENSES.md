@@ -1,14 +1,13 @@
 # Fonts
 
-Loaded at runtime by `Source/DirectorsCut/UI/DCUIStyle.cpp` from `Content/Fonts/` (staged as non-UFS).
+Loaded at runtime by `Source/DirectorsCut/UI/DCUIStyle.cpp` from `Content/Fonts/`, which is staged as non-UFS.
 If a file is missing, the UI falls back to the engine's Roboto.
 
-| File | Font | Role in UI | Author | Licence | Source |
-|---|---|---|---|---|---|
-| `Limelight-Regular.ttf` | Limelight | Art-deco display titles | Sorkin Type Co | SIL Open Font License 1.1 | https://github.com/google/fonts/tree/main/ofl/limelight |
-| `SpecialElite-Regular.ttf` | Special Elite | Typewriter flavour text ("scripts") | Astigmatic (Brian J. Bonislawsky) | Apache License 2.0 | https://github.com/google/fonts/tree/main/apache/specialelite |
-| `Oswald-Variable.ttf` | Oswald (variable, `Oswald[wght].ttf`) | Condensed sans for labels and numbers | The Oswald Project Authors (Vernon Adams et al.) | SIL Open Font License 1.1 | https://github.com/google/fonts/tree/main/ofl/oswald |
-| `BebasNeue-Regular.ttf` | Bebas Neue | Big numbers, outcome stamps | Dharma Type | SIL Open Font License 1.1 | https://github.com/google/fonts/tree/main/ofl/bebasneue |
+| File | Font | Role | Licence | Source |
+|---|---|---|---|---|
+| `Inter-Regular/Medium/SemiBold/Bold.ttf` | Inter 4.0 (Rasmus Andersson) | Every UI text | SIL Open Font License 1.1 | https://github.com/rsms/inter |
+| `JetBrainsMono-Variable.ttf` | JetBrains Mono (`JetBrainsMono[wght].ttf`) | Timers, money, numbers | SIL Open Font License 1.1 | https://github.com/google/fonts/tree/main/ofl/jetbrainsmono |
+| `Lucide.ttf` + `lucide_codepoints.json` | Lucide icon font, lucide-static 0.460.0 | UI icons (glyphs by name → codepoint) | ISC License (Feather portions MIT) | https://lucide.dev · https://www.npmjs.com/package/lucide-static |
 
-All four are free for commercial use and redistribution when embedded in a game. The OFL fonts are unmodified
-(no Reserved Font Name issues). Full licence texts: https://openfontlicense.org and https://www.apache.org/licenses/LICENSE-2.0
+All of these are free for commercial use and can be redistributed embedded in a game. The fonts are unmodified.
+`lucide_codepoints.json` is derived from lucide-static's `font/info.json` and maps icon names to their codepoints.

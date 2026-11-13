@@ -37,8 +37,9 @@ void UDCDevTools::Initialize(FSubsystemCollectionBase& Collection)
 	FParse::Value(Cmd, TEXT("DCShotDir="), ShotDir);
 	FParse::Value(Cmd, TEXT("DCShotDelay="), Delay);
 	FParse::Value(Cmd, TEXT("DCQuitAfter="), QuitAfter);
-	FParse::Value(Cmd, TEXT("DCAutoPlay="), AutoPlayNights);
-	if (Shots.Num() || QuitAfter > 0.f || AutoPlayNights > 0)
+	FParse::Value(Cmd, TEXT("DCAutoPlay="), AutoPlaySeconds);
+	bClockFlags = FCString::Strifind(Cmd, TEXT("DCHour=")) || FCString::Strifind(Cmd, TEXT("DCTimeScale="));
+	if (Shots.Num() || QuitAfter > 0.f || AutoPlaySeconds > 0 || bClockFlags)
 	{
 		IFileManager::Get().MakeDirectory(*ShotDir, true);
 		TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UDCDevTools::Tick));
@@ -63,33 +64,40 @@ void UDCDevTools::RunAutoPlay()
 	UDCRunSubsystem* Run = UDCRunSubsystem::Get(GetGameWorld());
 	if (!Run) { return; }
 	if (!Run->HasActiveRun()) { Run->StartNewRun(GetCmdSeed()); }
-	for (int32 N = 0; N < AutoPlayNights && Run->GetPhase() == EDCGamePhase::Planning; ++N)
+	// Bot: every 5 run-seconds, start every mission it can fully staff (SuggestPlan), pick the first perk, hire if broke on crew.
+	for (double T = 0.0; T < AutoPlaySeconds && Run->GetPhase() == EDCGamePhase::Playing; T += 5.0)
 	{
-		// Greedy: for each job, crew = required roles filled by best available, cut 0.3.
-		for (const FDCJob& J : Run->GetJobs())
+		for (const FDCMission& M : Run->GetMissions())
 		{
-			if (Run->GetCommittedPlans().Num() >= Run->GetMaxCrewsPerNight()) { break; }
-			FDCCrewPlan P; P.JobId = J.Id; P.Cut = 0.3f;
-			for (EDCCriminalType Role : J.RequiredRoles)
-			{
-				for (const FDCCriminal& C : Run->GetRoster())
-				{
-					if (C.IsAvailable() && C.Type == Role && !P.CriminalIds.Contains(C.Id)) { P.CriminalIds.Add(C.Id); break; }
-				}
-			}
-			FString Err;
-			Run->CommitPlan(P, &Err);
-		}
-		const TArray<FDCHeistResult> Res = Run->EndNight();
-		for (const FDCHeistResult& R : Res)
-		{
-			UE_LOG(LogDC, Display, TEXT("[AutoPlay] Night %d: %s -> %s (%.0f%%, roll %.2f) take $%d"), Run->GetNight() - 1, *R.JobName, DC::OutcomeStamp(R.Outcome), R.SuccessChance * 100.f, R.Roll, R.DirectorTake);
+			if (M.bInProgress || Run->GetActiveMissionCount() >= Run->GetMaxActiveMissions()) { continue; }
+			const FDCCrewPlan P = Run->SuggestPlan(M.Id, 0.3f);
+			const FDCSuccessBreakdown B = Run->PreviewPlan(P);
+			if (B.bValid && B.SuccessChance >= 0.5f) { Run->StartMission(P); }
 		}
 		if (Run->HasPendingPerkOffer()) { const TArray<FDCPerk> O = Run->GetPerkOffer(); if (O.Num()) { Run->PickPerk(O[0].Id); } }
-		Run->FinishDailies();
-		UE_LOG(LogDC, Display, TEXT("[AutoPlay] Cash $%d, heists %d, roster %d, phase %d"), Run->GetCash(), Run->GetHeistsCompleted(), Run->GetRoster().Num(), (int32)Run->GetPhase());
+		Run->AdvanceTime(5.0);
 	}
+	for (const FDCMissionReport& R : Run->GetReports())
+	{
+		UE_LOG(LogDC, Display, TEXT("[AutoPlay] %s -> %s (%.0f%%, roll %.2f) take $%d"), *R.Mission.DisplayName, DC::OutcomeName(R.Outcome), R.Mission.LockedChance * 100.f, R.Roll, R.DirectorTake);
+	}
+	UE_LOG(LogDC, Display, TEXT("[AutoPlay] t=%.0fs day %d %.1fh cash $%d, successes %d, roster %d, phase %d"), Run->GetRunTime(), Run->GetDay(), Run->GetHourOfDay(), Run->GetCash(), Run->GetMissionsSucceeded(), Run->GetRoster().Num(), (int32)Run->GetPhase());
 	if (UDCUISubsystem* UI = UDCUISubsystem::Get(GetGameWorld())) { UI->ClosePanel(); }
+}
+
+void UDCDevTools::ApplyClockFlags()
+{
+	UDCRunSubsystem* Run = UDCRunSubsystem::Get(GetGameWorld());
+	if (!Run) { return; }
+	if (!Run->HasActiveRun()) { Run->StartNewRun(GetCmdSeed()); }
+	float Scale = 1.f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("DCTimeScale="), Scale)) { Run->SetTimeScale(Scale); }
+	float Hour = -1.f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("DCHour="), Hour) && Hour >= 0.f)
+	{
+		const float DeltaH = FMath::Fmod(Hour - Run->GetHourOfDay() + 24.f, 24.f);
+		Run->AdvanceTime(DeltaH * 60.0 / FMath::Max(0.01f, Run->GetGameMinutesPerSecond()));
+	}
 }
 
 void UDCDevTools::PrepareShot(const FShot& Shot)
@@ -127,7 +135,8 @@ bool UDCDevTools::Tick(float DeltaTime)
 	Elapsed += DeltaTime;
 	if (Elapsed < NextAt) { return true; }
 
-	if (Step == 0 && AutoPlayNights > 0) { RunAutoPlay(); AutoPlayNights = 0; NextAt = Elapsed + 1.0; return true; }
+	if (bClockFlags && Elapsed > 0.5) { ApplyClockFlags(); bClockFlags = false; }
+	if (Step == 0 && AutoPlaySeconds > 0) { RunAutoPlay(); AutoPlaySeconds = 0; NextAt = Elapsed + 1.0; return true; }
 
 	if (Shots.IsValidIndex(Step))
 	{

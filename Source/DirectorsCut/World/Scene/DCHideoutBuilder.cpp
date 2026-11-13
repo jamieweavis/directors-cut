@@ -711,7 +711,7 @@ void ADCHideoutBuilder::BuildShell(const FRoomDef& Def)
 			for (int32 i = 0; i < Shared.Num(); ++i)
 			{
 				const float A = Shared[i].Key - Base, B = Shared[i].Value - Base;
-				const bool bBooth = Def.Type == EDCRoomType::Office && SharedWith[i] == EDCRoomType::ScreeningRoom;
+				const bool bBooth = Def.Type == EDCRoomType::Office && SharedWith[i] == EDCRoomType::OpsRoom;
 				const float H = bBooth ? TallH : PartH;
 				TArray<FOpening> Ops = LocalOps(Shared[i].Key, Shared[i].Value);
 				if (Ops.Num() == 0 && (B - A) > 300.f) { Ops.Add({ (A + B) * 0.5f, 130.f, 0.f, 230.f }); }
@@ -842,9 +842,9 @@ void ADCHideoutBuilder::BuildHideout()
 		{ EDCRoomType::Office,        R(-500,  500, -400,  400), "OakY",       "PaperOffice", true },
 		{ EDCRoomType::Workshop,      R(-500,  500, -1400, -400), "ConcreteFl", "Brick",      false },
 		{ EDCRoomType::Garage,        R( 500, 1300, -1400, -400), "ConcreteFl", "Concrete",   false },
-		{ EDCRoomType::ScreeningRoom, R(-500, 1300,  400, 1600), "CarpetRed",  "PaperLounge", true },
+		{ EDCRoomType::OpsRoom, R(-500, 1300,  400, 1600), "CarpetRed",  "PaperLounge", true },
 		{ EDCRoomType::Lounge,        R(-1300, -500, -1400, -400), "Oak",       "PaperLounge", true },
-		{ EDCRoomType::ServerCloset,  R(-1300, -500, -400,  400), "ConcreteFl", "Concrete",   false },
+		{ EDCRoomType::ServerRoom,  R(-1300, -500, -400,  400), "ConcreteFl", "Concrete",   false },
 		{ EDCRoomType::LawyerOffice,  R(-1300, -500,  400, 1000), "CarpetGrn",  "PaperTeal",  true },
 		{ EDCRoomType::Clinic,        R(-1300, -500, 1000, 1600), "Tiles",      "TileWall",   false },
 	};

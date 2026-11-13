@@ -21,7 +21,7 @@ class DIRECTORSCUT_API ADCStation : public AActor
 public:
 	ADCStation();
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DC") EDCStationType StationType = EDCStationType::DirectorDesk;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DC") EDCStationType StationType = EDCStationType::Desk;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DC") FString DisplayName;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DC") EDCRoomType OwningRoom = EDCRoomType::Office;
 	/** Optional camera focus offset from actor location (world-space units). */

@@ -83,7 +83,7 @@ void ADCCriminalPawn::UpdateFromCriminal(const FDCCriminal& C)
 {
 	ShortName = C.Nickname.IsEmpty() ? C.FirstName : C.Nickname;
 	Level = C.Level;
-	const bool bNowInjured = C.Status == EDCCriminalStatus::Injured || C.InjuredNights > 0;
+	const bool bNowInjured = C.Status == EDCCriminalStatus::Injured;
 	if (bNowInjured != bInjured || !BodyMIDs.Num())
 	{
 		bInjured = bNowInjured;

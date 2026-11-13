@@ -47,18 +47,19 @@ protected:
 
 	EDCGamePhase LastPhase = EDCGamePhase::Title;
 	bool bHadRun = false;
-	int32 LastNight = 0;
+	double LastRunTime = 0.0;
 	int32 LastSeed = 0;
 	bool bBoundsInitialized = false;
 	bool bInitialized = false;
 
 	// Subsystem bindings
-	FDelegateHandle HState, HPhase, HNight, HRoom, HLevel, HHired;
+	FDelegateHandle HState, HPhase, HNight, HDone, HRoom, HLevel, HHired;
 
 	void GatherWorld();
 	void OnRunStateChanged();
 	void OnPhaseChanged(EDCGamePhase Phase);
-	void OnNightResolved(const FDCNightReport& Report);
+	void OnMissionStarted(const FDCMission& Mission);
+	void OnMissionCompleted(const FDCMissionReport& Report);
 	void OnRoomChanged(const FDCRoom& Room);
 	void OnCriminalLevelUp(int32 CriminalId, int32 NewLevel);
 	void OnCriminalHired(const FDCCriminal& C);

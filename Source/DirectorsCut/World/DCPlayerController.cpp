@@ -150,7 +150,8 @@ void ADCPlayerController::OnBackAction(const FInputActionValue& Value)
 
 void ADCPlayerController::OnRollAction(const FInputActionValue& Value)
 {
-	if (UDCUISubsystem* UI = UDCUISubsystem::Get(this)) { UI->HandleRollCamera(); }
+	// v2: Space toggles the mission board.
+	if (UDCUISubsystem* UI = UDCUISubsystem::Get(this)) { if (UI->GetOpenPanel() == EDCPanel::Missions) { UI->ClosePanel(); } else { UI->OpenPanel(EDCPanel::Missions); } }
 }
 
 void ADCPlayerController::PlayerTick(float DeltaTime)
