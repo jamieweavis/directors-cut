@@ -39,7 +39,8 @@ void UDCDevTools::Initialize(FSubsystemCollectionBase& Collection)
 	FParse::Value(Cmd, TEXT("DCQuitAfter="), QuitAfter);
 	FParse::Value(Cmd, TEXT("DCAutoPlay="), AutoPlaySeconds);
 	bClockFlags = FCString::Strifind(Cmd, TEXT("DCHour=")) || FCString::Strifind(Cmd, TEXT("DCTimeScale="));
-	if (Shots.Num() || QuitAfter > 0.f || AutoPlaySeconds > 0 || bClockFlags)
+	bContinue = FParse::Param(Cmd, TEXT("DCContinue"));
+	if (Shots.Num() || QuitAfter > 0.f || AutoPlaySeconds > 0 || bClockFlags || bContinue)
 	{
 		IFileManager::Get().MakeDirectory(*ShotDir, true);
 		TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UDCDevTools::Tick));
@@ -85,6 +86,16 @@ void UDCDevTools::RunAutoPlay()
 	if (UDCUISubsystem* UI = UDCUISubsystem::Get(GetGameWorld())) { UI->ClosePanel(); }
 }
 
+void UDCDevTools::ApplyContinue()
+{
+	UDCRunSubsystem* Run = UDCRunSubsystem::Get(GetGameWorld());
+	if (!Run) { return; }
+	const bool bHad = Run->HasSave();
+	const bool bOk = bHad && Run->ContinueRun();
+	UE_LOG(LogDC, Display, TEXT("[DevTools] -DCContinue: save %d, loaded %d (t=%.0fs day %d %.1fh)"), bHad ? 1 : 0, bOk ? 1 : 0, Run->GetRunTime(), Run->GetDay(), Run->GetHourOfDay());
+	if (UDCUISubsystem* UI = UDCUISubsystem::Get(GetGameWorld())) { if (bOk) { UI->ClosePanel(); } }
+}
+
 void UDCDevTools::ApplyClockFlags()
 {
 	UDCRunSubsystem* Run = UDCRunSubsystem::Get(GetGameWorld());
@@ -112,7 +123,12 @@ void UDCDevTools::PrepareShot(const FShot& Shot)
 		else
 		{
 			const UEnum* E = StaticEnum<EDCRoomType>();
-			const int64 V = E->GetValueByNameString(Shot.Focus);
+			FString Name = Shot.Focus;
+			if (Name.Equals(TEXT("Bunkroom"), ESearchCase::IgnoreCase)) { Name = TEXT("Lounge"); }
+			if (Name.Equals(TEXT("Lawyer"), ESearchCase::IgnoreCase)) { Name = TEXT("LawyerOffice"); }
+			if (Name.Equals(TEXT("Ops"), ESearchCase::IgnoreCase)) { Name = TEXT("OpsRoom"); }
+			const int64 V = E->GetValueByNameString(Name);
+			if (V == INDEX_NONE) { UE_LOG(LogDC, Warning, TEXT("[DCShots] unknown focus '%s'"), *Shot.Focus); }
 			for (TActorIterator<ADCRoomModule> It(W); It; ++It)
 			{
 				if ((int64)It->RoomType == V) { Rig->FocusOn(It->GetFocusPoint(), 0.7f); }
@@ -135,6 +151,7 @@ bool UDCDevTools::Tick(float DeltaTime)
 	Elapsed += DeltaTime;
 	if (Elapsed < NextAt) { return true; }
 
+	if (bContinue && GetGameWorld() && GetGameWorld()->HasBegunPlay()) { ApplyContinue(); bContinue = false; }
 	if (bClockFlags && Elapsed > 0.5) { ApplyClockFlags(); bClockFlags = false; }
 	if (Step == 0 && AutoPlaySeconds > 0) { RunAutoPlay(); AutoPlaySeconds = 0; NextAt = Elapsed + 1.0; return true; }
 

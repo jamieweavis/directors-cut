@@ -11,6 +11,8 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Components/WidgetComponent.h"
+#include "World/DCWorldLabel.h"
 
 namespace
 {
@@ -104,16 +106,26 @@ void ADCRoomModule::ApplyState(EDCRoomState State, int32 Level)
 
 	CurrentState = State;
 	CurrentLevel = Level;
-	const bool bBuilt = State == EDCRoomState::Built;
+	// Upgrading keeps the current level visible (and usable) under the scaffolding.
+	const bool bHasLevel = State == EDCRoomState::Built || (State == EDCRoomState::Building && Level >= 1);
 	SetGroupVisible(DCGroups::Shell, true);
 	SetGroupVisible(DCGroups::Locked, State == EDCRoomState::Locked);
 	SetGroupVisible(DCGroups::Building, State == EDCRoomState::Building);
-	SetGroupVisible(DCGroups::Level1, bBuilt && Level >= 1);
-	SetGroupVisible(DCGroups::Level2, bBuilt && Level >= 2);
-	SetGroupVisible(DCGroups::Level3, bBuilt && Level >= 3);
+	SetGroupVisible(DCGroups::Level1, bHasLevel && Level >= 1);
+	SetGroupVisible(DCGroups::Level2, bHasLevel && Level >= 2);
+	SetGroupVisible(DCGroups::Level3, bHasLevel && Level >= 3);
+	if (State == EDCRoomState::Building)
+	{
+		if (!GroupHasContent(DCGroups::Building) && TempScaffold.Num() == 0) { SpawnFallbackScaffold(); }
+	}
+	else
+	{
+		ClearTempScaffold();
+		ClearBuildProgress();
+	}
 	for (ADCStation* S : Stations)
 	{
-		if (S) { S->SetStationEnabled(bBuilt); }
+		if (S) { S->SetStationEnabled(bHasLevel); }
 	}
 }
 
@@ -131,17 +143,21 @@ void ADCRoomModule::PlayReveal(int32 NewLevel)
 		ApplyState(EDCRoomState::Built, NewLevel);
 		return;
 	}
-	RevealFromState = CurrentState;
+	RevealFromState = CurrentState == EDCRoomState::Building && CurrentLevel < 1 ? EDCRoomState::Locked : CurrentState;
+	if (CurrentState == EDCRoomState::Building && CurrentLevel >= 1) { RevealFromState = EDCRoomState::Built; }
 	RevealLevel = FMath::Clamp(NewLevel, 1, 3);
 	RevealTime = 0.f;
 	bRevealing = true;
+	bQuickReveal = false;
+	ActiveRevealDuration = RevealDuration;
+	ClearBuildProgress();
 	bRevealSwapped = false;
 	bRevealCameraReturned = false;
 
 	// Phase 1: scaffolding & work lights.
 	SetGroupVisible(DCGroups::Locked, false);
 	if (GroupHasContent(DCGroups::Building)) { SetGroupVisible(DCGroups::Building, true); }
-	else { SpawnFallbackScaffold(); }
+	else if (TempScaffold.Num() == 0) { SpawnFallbackScaffold(); }
 	CurrentState = EDCRoomState::Building;
 
 	if (bRevealMovesCamera)
@@ -255,6 +271,7 @@ void ADCRoomModule::RevealSwapToBuilt()
 	bRevealing = false; // so ApplyState doesn't cancel us
 	ApplyState(EDCRoomState::Built, RevealLevel);
 	bRevealing = bWasRevealing;
+	StartGlow(RevealLevel >= 3 ? DCGroups::Level3 : RevealLevel == 2 ? DCGroups::Level2 : DCGroups::Level1);
 
 	TArray<ULightComponent*> Lights; GetComponents<ULightComponent>(Lights);
 	int32 Index = 0;
@@ -274,26 +291,28 @@ void ADCRoomModule::RevealSwapToBuilt()
 
 void ADCRoomModule::FinishReveal()
 {
-	if (!bRevealCameraReturned && bRevealMovesCamera)
+	if (!bRevealCameraReturned && bRevealMovesCamera && !bQuickReveal)
 	{
 		if (ADCCameraRig* Rig = FindRig(GetWorld())) { Rig->EndCinematic(); }
 		bRevealCameraReturned = true;
 	}
 	if (DustPuff) { DustPuff->DestroyComponent(); DustPuff = nullptr; }
 	bRevealing = false;
-	SetActorTickEnabled(false);
 	ApplyState(EDCRoomState::Built, RevealLevel); // restores light intensities
+	SetActorTickEnabled(GlowTime >= 0.f);
 }
 
 void ADCRoomModule::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (!bRevealing) { SetActorTickEnabled(false); return; }
+	TickGlow(FMath::Min(DeltaSeconds, 0.1f));
+	if (!bRevealing) { if (GlowTime < 0.f) { SetActorTickEnabled(false); } return; }
 	const float Prev = RevealTime;
 	RevealTime += FMath::Min(DeltaSeconds, 0.1f);
 
-	if (Prev < DustAt && RevealTime >= DustAt) { SpawnDustPuff(); }
-	if (!bRevealSwapped && RevealTime >= SwapAt) { RevealSwapToBuilt(); }
+	const float Swap = bQuickReveal ? 0.15f : SwapAt;
+	if (!bQuickReveal && Prev < DustAt && RevealTime >= DustAt) { SpawnDustPuff(); }
+	if (!bRevealSwapped && RevealTime >= Swap) { RevealSwapToBuilt(); }
 
 	// Dust puff: expands and fades.
 	if (DustPuff)
@@ -324,12 +343,97 @@ void ADCRoomModule::Tick(float DeltaSeconds)
 		L->SetIntensity(I);
 	}
 
-	if (!bRevealCameraReturned && RevealTime >= RevealDuration - 0.7f)
+	if (!bRevealCameraReturned && RevealTime >= ActiveRevealDuration - 0.7f)
 	{
 		bRevealCameraReturned = true;
-		if (bRevealMovesCamera) { if (ADCCameraRig* Rig = FindRig(GetWorld())) { Rig->EndCinematic(); } }
+		if (bRevealMovesCamera && !bQuickReveal) { if (ADCCameraRig* Rig = FindRig(GetWorld())) { Rig->EndCinematic(); } }
 	}
-	if (RevealTime >= RevealDuration) { FinishReveal(); }
+	if (RevealTime >= ActiveRevealDuration) { FinishReveal(); }
+}
+
+void ADCRoomModule::PlayUpgradeReveal(int32 NewLevel)
+{
+	if (!GetWorld() || !GetWorld()->HasBegunPlay() || CurrentLevel < 1) { PlayReveal(NewLevel); return; }
+	if (bRevealing) { FinishReveal(); }
+	RevealFromState = EDCRoomState::Built;
+	RevealLevel = FMath::Clamp(NewLevel, 1, 3);
+	RevealTime = 0.f;
+	bRevealing = true;
+	bQuickReveal = true;
+	ActiveRevealDuration = 1.6f;
+	bRevealSwapped = false;
+	bRevealCameraReturned = true; // no camera move
+	ClearBuildProgress();
+	SetActorTickEnabled(true);
+}
+
+void ADCRoomModule::StartGlow(FName Group)
+{
+	EndGlow();
+	if (!GlowMID)
+	{
+		if (UMaterialInterface* H = LoadObject<UMaterialInterface>(nullptr, DCPaths::MatHighlight, nullptr, LOAD_NoWarn | LOAD_Quiet))
+		{
+			GlowMID = UMaterialInstanceDynamic::Create(H, this);
+			GlowMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.f, 0.78f, 0.42f));
+		}
+	}
+	if (!GlowMID) { return; }
+	if (const TArray<TWeakObjectPtr<USceneComponent>>* Comps = Groups.Find(Group))
+	{
+		for (const TWeakObjectPtr<USceneComponent>& C : *Comps)
+		{
+			UMeshComponent* MC = Cast<UMeshComponent>(C.Get());
+			if (!MC || MC->GetOverlayMaterial()) { continue; }
+			MC->SetOverlayMaterial(GlowMID);
+			Glows.Add({ MC });
+		}
+	}
+	GlowTime = Glows.Num() ? 0.f : -1.f;
+	GlowMID->SetScalarParameterValue(TEXT("Strength"), 0.f);
+	if (GlowTime >= 0.f) { SetActorTickEnabled(true); }
+}
+
+void ADCRoomModule::TickGlow(float Dt)
+{
+	if (GlowTime < 0.f) { return; }
+	GlowTime += Dt;
+	constexpr float Len = 1.6f;
+	const float A = FMath::Clamp(GlowTime / Len, 0.f, 1.f);
+	const float Env = A < 0.2f ? A / 0.2f : FMath::Square(1.f - (A - 0.2f) / 0.8f);
+	if (GlowMID) { GlowMID->SetScalarParameterValue(TEXT("Strength"), 1.6f * Env); }
+	if (A >= 1.f) { EndGlow(); }
+}
+
+void ADCRoomModule::EndGlow()
+{
+	for (const FGlow& G : Glows) { if (UMeshComponent* MC = G.Mesh.Get()) { if (MC->GetOverlayMaterial() == GlowMID) { MC->SetOverlayMaterial(nullptr); } } }
+	Glows.Reset();
+	GlowTime = -1.f;
+}
+
+void ADCRoomModule::SetBuildProgress(float Alpha, double SecondsLeft, int32 TargetLevel)
+{
+	if (!BuildLabel)
+	{
+		const FBox B = LocalBounds;
+		BuildLabel = UDCWorldLabel::CreateLabelComponent(this, Root, FVector(B.GetCenter().X, B.GetCenter().Y, B.Min.Z + 260.f));
+	}
+	if (!BuildLabel) { return; }
+	FDCLabelSpec S;
+	S.Icon = TEXT("construction");
+	S.Text = TargetLevel > 1 ? FString::Printf(TEXT("%s  Lv %d"), DC::RoomName(RoomType), TargetLevel) : FString(DC::RoomName(RoomType));
+	S.Sub = DC::Clock(SecondsLeft);
+	S.Accent = FLinearColor(1.f, 0.66f, 0.18f);
+	S.Progress = FMath::Clamp(Alpha, 0.f, 1.f);
+	S.Size = 12.f;
+	UDCWorldLabel::SetComponentSpec(BuildLabel, S);
+	BuildLabel->SetVisibility(true);
+}
+
+void ADCRoomModule::ClearBuildProgress()
+{
+	if (BuildLabel) { BuildLabel->SetVisibility(false); }
 }
 
 void ADCRoomModule::EndPlay(const EEndPlayReason::Type Reason)

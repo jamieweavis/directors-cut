@@ -57,6 +57,12 @@ public:
 	EDCPanel GetPanel() const;
 	/** Opens this station's panel immediately (no camera move). */
 	void OpenStationPanel();
+	/** Room that must be built for this station to work (its own room, or the room it belongs to by type). */
+	EDCRoomType GetRequiredRoom() const;
+	/** Small always-on indicator (e.g. "3 new" on the board, crews out at the garage). Empty text clears it. */
+	void SetBadge(FName Icon, const FString& Text, const FLinearColor& Accent);
+	static FName TypeIcon(EDCStationType Type);
+	static FString TypeName(EDCStationType Type);
 
 protected:
 	virtual void BeginPlay() override;
@@ -67,6 +73,9 @@ protected:
 	UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> HighlightMID;
 	FName HighlightParam = NAME_None;
 	float HoverTime = 0.f;
+	FName BadgeIcon;
+	FString BadgeText;
+	FLinearColor BadgeAccent = FLinearColor::White;
 	FTimerHandle OpenTimer;
 
 	UPROPERTY() TArray<TObjectPtr<UPrimitiveComponent>> HighlightComponents;

@@ -10,7 +10,33 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "InputTriggers.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Engine/GameViewportClient.h"
+#include "Widgets/SWindow.h"
+#include "Misc/App.h"
 #include "DirectorsCut.h"
+
+namespace
+{
+	/** A text box (search, name entry...) has keyboard focus: world hotkeys must not fire. */
+	bool IsTextInputFocused()
+	{
+		if (!FSlateApplication::IsInitialized()) { return false; }
+		const TSharedPtr<SWidget> W = FSlateApplication::Get().GetKeyboardFocusedWidget();
+		if (!W.IsValid()) { return false; }
+		const FString T = W->GetTypeAsString();
+		return T.Contains(TEXT("EditableText")) || T.Contains(TEXT("MultiLineEditable")) || T.Contains(TEXT("SpinBox"));
+	}
+
+	/** The game window is the active OS window (edge-pan only then). */
+	bool IsGameWindowFocused(const UWorld* World)
+	{
+		if (!FApp::HasFocus()) { return false; }
+		const UGameViewportClient* VP = World ? World->GetGameViewport() : nullptr;
+		const TSharedPtr<SWindow> Win = VP ? VP->GetWindow() : nullptr;
+		return Win.IsValid() && Win->IsActive();
+	}
+}
 
 ADCPlayerController::ADCPlayerController()
 {
@@ -145,13 +171,19 @@ void ADCPlayerController::OnZoomAction(const FInputActionValue& Value)
 
 void ADCPlayerController::OnBackAction(const FInputActionValue& Value)
 {
+	if (IsTextInputFocused()) { return; } // the text box gets Esc
+	// The UI decides: close the open panel, or open Pause when nothing is open.
 	if (UDCUISubsystem* UI = UDCUISubsystem::Get(this)) { UI->HandleBack(); }
 }
 
 void ADCPlayerController::OnRollAction(const FInputActionValue& Value)
 {
-	// v2: Space toggles the mission board.
-	if (UDCUISubsystem* UI = UDCUISubsystem::Get(this)) { if (UI->GetOpenPanel() == EDCPanel::Missions) { UI->ClosePanel(); } else { UI->OpenPanel(EDCPanel::Missions); } }
+	// Space toggles the mission board (not while typing, not over modal flows like title / pause / perk draft).
+	if (IsTextInputFocused()) { return; }
+	UDCUISubsystem* UI = UDCUISubsystem::Get(this);
+	if (!UI || UI->IsWorldInputBlocked()) { return; }
+	if (UI->GetOpenPanel() == EDCPanel::Missions) { UI->ClosePanel(); }
+	else if (!CameraRig || !CameraRig->IsInCinematic()) { UI->OpenPanel(EDCPanel::Missions); }
 }
 
 void ADCPlayerController::PlayerTick(float DeltaTime)
@@ -209,14 +241,29 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 		bRmbDragging = false;
 	}
 
-	// WASD / arrows pan
+	// WASD / arrows pan (not while typing), plus edge-pan when the window is focused and no panel is open.
 	if (!bBlocked)
 	{
 		FVector2D Axis = FVector2D::ZeroVector;
-		if (IsInputKeyDown(EKeys::W) || IsInputKeyDown(EKeys::Up)) { Axis.Y += 1.f; }
-		if (IsInputKeyDown(EKeys::S) || IsInputKeyDown(EKeys::Down)) { Axis.Y -= 1.f; }
-		if (IsInputKeyDown(EKeys::D) || IsInputKeyDown(EKeys::Right)) { Axis.X += 1.f; }
-		if (IsInputKeyDown(EKeys::A) || IsInputKeyDown(EKeys::Left)) { Axis.X -= 1.f; }
+		if (!IsTextInputFocused())
+		{
+			if (IsInputKeyDown(EKeys::W) || IsInputKeyDown(EKeys::Up)) { Axis.Y += 1.f; }
+			if (IsInputKeyDown(EKeys::S) || IsInputKeyDown(EKeys::Down)) { Axis.Y -= 1.f; }
+			if (IsInputKeyDown(EKeys::D) || IsInputKeyDown(EKeys::Right)) { Axis.X += 1.f; }
+			if (IsInputKeyDown(EKeys::A) || IsInputKeyDown(EKeys::Left)) { Axis.X -= 1.f; }
+		}
+		const UDCUISubsystem* UI = UDCUISubsystem::Get(this);
+		if (bHaveMouse && !bRmbDragging && (!UI || !UI->IsAnyPanelOpen()) && IsGameWindowFocused(GetWorld()))
+		{
+			int32 VX = 0, VY = 0;
+			GetViewportSize(VX, VY);
+			constexpr float Edge = 8.f;
+			if (VX > 0 && VY > 0 && Mouse.X >= 0.f && Mouse.Y >= 0.f && Mouse.X < VX && Mouse.Y < VY)
+			{
+				if (Mouse.X < Edge) { Axis.X -= 1.f; } else if (Mouse.X > VX - Edge) { Axis.X += 1.f; }
+				if (Mouse.Y < Edge) { Axis.Y += 1.f; } else if (Mouse.Y > VY - Edge) { Axis.Y -= 1.f; }
+			}
+		}
 		if (!Axis.IsZero()) { CameraRig->PanAxis(Axis, DeltaTime); }
 	}
 }

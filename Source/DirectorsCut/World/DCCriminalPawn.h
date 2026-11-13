@@ -16,11 +16,22 @@ class UPointLightComponent;
 UENUM()
 enum class EDCPawnMode : uint8
 {
-	Wander,   // idle-wandering in the home zone
+	Wander,   // idle life inside built rooms (the director hands out goals)
 	WalkOut,  // heading to a door, then vanishes
 	Away,     // hidden (on a job / gone)
 	WalkIn    // coming back through a door
 };
+
+/** What an idle pawn does once it reaches its goal. */
+UENUM()
+enum class EDCPawnActivity : uint8
+{
+	Stand,    // hang around
+	Work,     // face a station and fiddle with it
+	Sleep     // lie down in the bunkroom (night)
+};
+
+class ADCWorldDirector;
 
 UCLASS()
 class DIRECTORSCUT_API ADCCriminalPawn : public ACharacter
@@ -30,38 +41,53 @@ public:
 	ADCCriminalPawn(const FObjectInitializer& ObjectInitializer);
 
 	/** Call once right after spawning. */
-	void InitFromCriminal(const FDCCriminal& C);
+	void InitFromCriminal(const FDCCriminal& C, ADCWorldDirector* InDirector);
 	/** Refresh level / injury / name. Safe to call every sync. */
 	void UpdateFromCriminal(const FDCCriminal& C);
 	int32 GetCriminalId() const { return CriminalId; }
 
-	void SetHomeZone(ADCCriminalSpawnZone* Zone);
-	/** Teleport to a random point in the home zone and start wandering. */
-	void PlaceInZone();
+	/** Teleport to Point (floor) and start idling. */
+	void PlaceAt(const FVector& FloorPoint);
 
-	/** Walk to Door and vanish. bForever = destroy on arrival (arrested / fired). */
+	/** Walk to Door (via the room graph) and vanish. bForever = destroy on arrival (arrested / fired). */
 	void Depart(ADCGarageDoor* Door, float Delay, bool bForever);
-	/** Reappear at Door (after Delay) and walk back into the home zone. If still walking out, queues the return. */
+	/** Reappear at Door (after Delay) and walk back in. If still walking out, queues the return. */
 	void ReturnHome(ADCGarageDoor* Door, float Delay);
 	void PlayLevelUp(int32 NewLevel);
-	/** Hide immediately (e.g. a recruit that will walk in through the door). */
+	/** Hide immediately (on a job, or a recruit that will walk in through the door). */
 	void SetAway();
 
+	/** Director: walk this path (floor points), then do Activity facing FaceYaw (NaN = keep) for Hold seconds. */
+	void SetIdleGoal(const TArray<FVector>& FloorPath, EDCPawnActivity Activity, float FaceYaw, float Hold);
+	/** Wake from sleep / cut the current idle activity short. */
+	void InterruptIdle(float Delay = 0.f);
+
 	EDCPawnMode GetMode() const { return Mode; }
+	EDCPawnActivity GetActivity() const { return Activity; }
+	bool IsSleeping() const { return bLying; }
+	bool IsIdleReady() const { return Mode == EDCPawnMode::Wander && Path.Num() == 0 && WaitTime <= 0.f && StartDelay <= 0.f; }
+	bool IsHeadingToSleep() const { return Mode == EDCPawnMode::Wander && Activity == EDCPawnActivity::Sleep; }
+	FVector GetGoalLocation() const { return Path.Num() ? Path.Last() : GetActorLocation(); }
 	bool IsAway() const { return Mode == EDCPawnMode::Away; }
 	bool IsLeavingForever() const { return bLeaveForever; }
-	void MarkLeaveForever() { bLeaveForever = true; }
+	void MarkLeaveForever() { bLeaveForever = true; bReturnQueued = false; }
 	bool IsReturnQueued() const { return bReturnQueued; }
+	bool IsInjured() const { return bInjured; }
 	ADCGarageDoor* GetActiveDoor() const { return ActiveDoor.Get(); }
 	/** True while walking through ActiveDoor (door should be open). */
 	bool IsNearDoor(float Radius) const;
 	bool WantsDestroy() const { return bWantsDestroy; }
+	/** Floor point (feet). */
+	FVector GetFeet() const;
+	int32 GetSleepSlot() const { return SleepSlot; }
+	void SetSleepSlot(int32 Slot) { SleepSlot = Slot; }
 
 	virtual void Tick(float DeltaSeconds) override;
 
 protected:
 	virtual void BeginPlay() override;
 
+	TWeakObjectPtr<ADCWorldDirector> Director;
 	int32 CriminalId = INDEX_NONE;
 	EDCCriminalType Type = EDCCriminalType::Muscle;
 	FString ShortName;
@@ -70,18 +96,24 @@ protected:
 	bool bInitialized = false;
 
 	EDCPawnMode Mode = EDCPawnMode::Wander;
+	EDCPawnActivity Activity = EDCPawnActivity::Stand;
 	TArray<FVector> Path;
 	float WaitTime = 0.f;
 	float StartDelay = 0.f;
+	float GoalYaw = 0.f;
+	bool bHasGoalYaw = false;
+	float GoalHold = 0.f;
+	bool bLying = false;
+	int32 SleepSlot = INDEX_NONE;
 	bool bLeaveForever = false;
 	bool bWantsDestroy = false;
 	bool bReturnQueued = false;
 	float QueuedReturnDelay = 0.f;
 	float StuckTime = 0.f;
 	float LimpPhase = 0.f;
-	TWeakObjectPtr<ADCCriminalSpawnZone> HomeZone;
 	TWeakObjectPtr<ADCGarageDoor> ActiveDoor;
 	FRandomStream Rng;
+	UPROPERTY() TObjectPtr<UClass> AnimClass;
 
 	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> BodyMIDs;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> PropComps;
@@ -102,8 +134,10 @@ protected:
 	void RefreshPlate();
 	void UpdateSpeed();
 	void SetHidden(bool bHide);
-	void PickWanderTarget();
 	FVector Ground(const FVector& P) const;
 	void BeginWalkIn(ADCGarageDoor* Door);
 	void TickLevelUp(float Dt);
+	void LieDown();
+	void GetUp();
+	void ArriveIdle();
 };

@@ -49,13 +49,89 @@ void ADCStation::SetClickExtent(const FVector& HalfExtent)
 	UpdateLabel();
 }
 
+FName ADCStation::TypeIcon(EDCStationType Type)
+{
+	switch (Type)
+	{
+	case EDCStationType::Desk:         return TEXT("user-plus");
+	case EDCStationType::MissionBoard: return TEXT("map-pinned");
+	case EDCStationType::Lounge:       return TEXT("users");
+	case EDCStationType::Workbench:    return TEXT("wrench");
+	case EDCStationType::GarageDoor:   return TEXT("car-front");
+	case EDCStationType::BuildTable:   return TEXT("hammer");
+	case EDCStationType::OpsRoom:      return TEXT("monitor");
+	case EDCStationType::Clinic:       return TEXT("cross");
+	case EDCStationType::ServerRack:   return TEXT("server");
+	case EDCStationType::Lawyer:       return TEXT("scale");
+	}
+	return TEXT("circle");
+}
+
+FString ADCStation::TypeName(EDCStationType Type)
+{
+	switch (Type)
+	{
+	case EDCStationType::Desk:         return TEXT("Recruits");
+	case EDCStationType::MissionBoard: return TEXT("Missions");
+	case EDCStationType::Lounge:       return TEXT("Crew");
+	case EDCStationType::Workbench:    return TEXT("Gear");
+	case EDCStationType::GarageDoor:   return TEXT("Garage");
+	case EDCStationType::BuildTable:   return TEXT("Build");
+	case EDCStationType::OpsRoom:      return TEXT("Ops");
+	case EDCStationType::Clinic:       return TEXT("Clinic");
+	case EDCStationType::ServerRack:   return TEXT("Servers");
+	case EDCStationType::Lawyer:       return TEXT("Lawyer");
+	}
+	return TEXT("");
+}
+
+EDCRoomType ADCStation::GetRequiredRoom() const
+{
+	switch (StationType)
+	{
+	case EDCStationType::Lounge:     return EDCRoomType::Lounge;
+	case EDCStationType::Workbench:  return EDCRoomType::Workshop;
+	case EDCStationType::GarageDoor: return EDCRoomType::Garage;
+	case EDCStationType::OpsRoom:    return EDCRoomType::OpsRoom;
+	case EDCStationType::Clinic:     return EDCRoomType::Clinic;
+	case EDCStationType::ServerRack: return EDCRoomType::ServerRoom;
+	case EDCStationType::Lawyer:     return EDCRoomType::LawyerOffice;
+	default:                         return OwningRoom;
+	}
+}
+
+void ADCStation::SetBadge(FName Icon, const FString& Text, const FLinearColor& Accent)
+{
+	if (BadgeIcon == Icon && BadgeText == Text && BadgeAccent == Accent) { return; }
+	BadgeIcon = Icon; BadgeText = Text; BadgeAccent = Accent;
+	UpdateLabel();
+}
+
 void ADCStation::UpdateLabel()
 {
 	if (!Label) { return; }
 	const FVector E = ClickBox->GetUnscaledBoxExtent();
-	Label->SetRelativeLocation(FVector(0.f, 0.f, E.Z + 40.f));
-	FString Name = DisplayName.IsEmpty() ? StaticEnum<EDCStationType>()->GetDisplayNameTextByValue((int64)StationType).ToString() : DisplayName;
-	UDCWorldLabel::SetComponentLabel(Label, Name.ToUpper(), FLinearColor(1.f, 0.86f, 0.6f), 13);
+	Label->SetRelativeLocation(FVector(0.f, 0.f, E.Z + 30.f));
+	const bool bBadge = !BadgeText.IsEmpty() && bStationEnabled;
+	FDCLabelSpec S;
+	S.Size = 12.f;
+	if (bHovered)
+	{
+		S.Icon = TypeIcon(StationType);
+		S.Text = TypeName(StationType);
+		S.Sub = bBadge ? BadgeText : FString();
+		S.Accent = bBadge ? BadgeAccent : FLinearColor(0.98f, 0.72f, 0.30f);
+		S.bAccentOutline = true;
+	}
+	else if (bBadge)
+	{
+		S.Icon = BadgeIcon.IsNone() ? TypeIcon(StationType) : BadgeIcon;
+		S.Sub = BadgeText;
+		S.Accent = BadgeAccent;
+		S.Size = 11.f;
+	}
+	UDCWorldLabel::SetComponentSpec(Label, S);
+	Label->SetVisibility(bHovered || bBadge);
 }
 
 UStaticMeshComponent* ADCStation::AddPropMesh(UStaticMesh* Mesh, UMaterialInterface* Material, const FTransform& RelativeTransform)
@@ -79,9 +155,11 @@ void ADCStation::RegisterHighlightComponent(UPrimitiveComponent* Comp)
 
 void ADCStation::SetStationEnabled(bool bEnabled)
 {
+	if (bStationEnabled == bEnabled && HasActorBegunPlay()) { return; }
 	bStationEnabled = bEnabled;
 	ClickBox->SetCollisionEnabled(bEnabled ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
 	if (!bEnabled && bHovered) { OnHoverEnd(); }
+	UpdateLabel();
 }
 
 UMaterialInterface* ADCStation::GetHighlightMaterial()
@@ -120,7 +198,6 @@ void ADCStation::OnHoverBegin()
 		}
 	}
 	UpdateLabel();
-	if (Label) { Label->SetVisibility(true); }
 	SetActorTickEnabled(true);
 }
 
@@ -134,7 +211,7 @@ void ADCStation::OnHoverEnd()
 		C->SetRenderCustomDepth(false);
 		if (UMeshComponent* MC = Cast<UMeshComponent>(C)) { MC->SetOverlayMaterial(nullptr); }
 	}
-	if (Label) { Label->SetVisibility(false); }
+	UpdateLabel();
 	SetActorTickEnabled(false);
 }
 
@@ -159,7 +236,12 @@ EDCPanel ADCStation::GetPanel() const
 	case EDCStationType::MissionBoard:       return EDCPanel::Missions;
 	case EDCStationType::Lounge:         return EDCPanel::Crew;
 	case EDCStationType::Workbench:      return EDCPanel::Workbench;
-	case EDCStationType::GarageDoor:     return EDCPanel::Missions;
+	case EDCStationType::GarageDoor:
+	{
+		// Crews come back here: unread results first, otherwise the board (with the missions in progress).
+		const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
+		return (Run && Run->GetUnseenReportCount() > 0) ? EDCPanel::Reports : EDCPanel::Missions;
+	}
 	case EDCStationType::BuildTable: return EDCPanel::Build;
 	case EDCStationType::OpsRoom:  return EDCPanel::OpsRoom;
 	case EDCStationType::Clinic:         return EDCPanel::Clinic;
@@ -179,7 +261,7 @@ void ADCStation::OpenStationPanel()
 void ADCStation::OnClicked()
 {
 	if (!bStationEnabled) { return; }
-	UE_LOG(LogDC, Log, TEXT("Station clicked: %s"), *DisplayName);
+	UE_LOG(LogDC, Log, TEXT("Station clicked: %s (%s)"), *TypeName(StationType), *DisplayName);
 
 	// Camera dollies in first, then the panel opens.
 	ADCPlayerController* PC = GetWorld() ? Cast<ADCPlayerController>(GetWorld()->GetFirstPlayerController()) : nullptr;

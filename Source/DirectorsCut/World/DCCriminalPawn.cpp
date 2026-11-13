@@ -2,6 +2,8 @@
 #include "World/DCCriminalSpawnZone.h"
 #include "World/DCGarageDoor.h"
 #include "World/DCWorldLabel.h"
+#include "World/DCWorldDirector.h"
+#include "Animation/AnimSequence.h"
 #include "Core/DCAssetPaths.h"
 #include "AnimationRuntime.h"
 #include "Animation/AnimInstance.h"
@@ -69,8 +71,9 @@ void ADCCriminalPawn::BeginPlay()
 	GetCharacterMovement()->SetMovementMode(MOVE_Flying);
 }
 
-void ADCCriminalPawn::InitFromCriminal(const FDCCriminal& C)
+void ADCCriminalPawn::InitFromCriminal(const FDCCriminal& C, ADCWorldDirector* InDirector)
 {
+	Director = InDirector;
 	CriminalId = C.Id;
 	Type = C.Type;
 	Rng.Initialize(0x5EED + C.Id * 977);
@@ -125,10 +128,11 @@ void ADCCriminalPawn::SetupVisuals()
 	if (Mesh)
 	{
 		M->SetSkeletalMesh(Mesh);
-		if (UClass* Anim = LoadClass<UAnimInstance>(nullptr, DCPaths::UnarmedAnimBP, nullptr, LOAD_NoWarn | LOAD_Quiet))
+		AnimClass = LoadClass<UAnimInstance>(nullptr, DCPaths::UnarmedAnimBP, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (AnimClass)
 		{
 			M->SetAnimationMode(EAnimationMode::AnimationBlueprint);
-			M->SetAnimInstanceClass(Anim);
+			M->SetAnimInstanceClass(AnimClass);
 		}
 		UMaterialInterface* Crim = LoadQuiet<UMaterialInterface>(DCPaths::MatCriminal);
 		for (int32 i = 0; i < M->GetNumMaterials(); ++i)
@@ -163,7 +167,7 @@ void ADCCriminalPawn::SetupVisuals()
 	ApplyBodyTint();
 	BuildProps();
 
-	Plate = UDCWorldLabel::CreateLabelComponent(this, GetCapsuleComponent(), FVector(0.f, 0.f, HalfHeight + 18.f));
+	Plate = UDCWorldLabel::CreateLabelComponent(this, GetCapsuleComponent(), FVector(0.f, 0.f, HalfHeight + 22.f));
 
 	// Level-up ring + light (hidden until needed).
 	if (UStaticMesh* Cyl = LoadQuiet<UStaticMesh>(DCPaths::Cylinder))
@@ -293,9 +297,14 @@ void ADCCriminalPawn::BuildProps()
 
 void ADCCriminalPawn::RefreshPlate()
 {
-	FString Text = FString::Printf(TEXT("%s  LV %d"), *ShortName.ToUpper(), Level);
-	if (bInjured) { Text += TEXT("  +"); }
-	UDCWorldLabel::SetComponentLabel(Plate, Text, DC::TypeColor(Type), 9);
+	FDCLabelSpec S;
+	S.Text = ShortName;
+	S.Sub = FString::Printf(TEXT("%d"), Level);
+	S.Size = 10.f;
+	S.Icon = bInjured ? FName(TEXT("bandage")) : bLying ? FName(TEXT("moon")) : DC::TypeIcon(Type);
+	S.Accent = bInjured ? FLinearColor(1.f, 0.32f, 0.28f) : bLying ? FLinearColor(0.55f, 0.65f, 1.f) : DC::TypeColor(Type);
+	S.Opacity = bLying ? 0.55f : 0.9f;
+	UDCWorldLabel::SetComponentSpec(Plate, S);
 }
 
 void ADCCriminalPawn::UpdateSpeed()
@@ -322,63 +331,116 @@ FVector ADCCriminalPawn::Ground(const FVector& P) const
 	return FVector(P.X, P.Y, P.Z + HalfHeight);
 }
 
-void ADCCriminalPawn::SetHomeZone(ADCCriminalSpawnZone* Zone)
+FVector ADCCriminalPawn::GetFeet() const
 {
-	if (HomeZone.Get() == Zone) { return; }
-	HomeZone = Zone;
-	// Head over to the new home when idle.
-	if (Mode == EDCPawnMode::Wander && Zone) { WaitTime = Rng.FRandRange(0.2f, 1.5f); Path.Reset(); }
+	return GetActorLocation() - FVector(0.f, 0.f, HalfHeight);
 }
 
-void ADCCriminalPawn::PlaceInZone()
+void ADCCriminalPawn::PlaceAt(const FVector& FloorPoint)
 {
-	FVector P = GetActorLocation();
-	if (ADCCriminalSpawnZone* Z = HomeZone.Get()) { P = Ground(Z->GetRandomPoint(Rng)); }
-	SetActorLocation(P);
+	GetUp();
+	SetActorLocation(Ground(FloorPoint));
 	SetActorRotation(FRotator(0.f, Rng.FRandRange(-180.f, 180.f), 0.f));
 	Mode = EDCPawnMode::Wander;
+	Activity = EDCPawnActivity::Stand;
 	Path.Reset();
-	WaitTime = Rng.FRandRange(0.5f, 4.f);
+	StartDelay = 0.f;
+	WaitTime = Rng.FRandRange(0.5f, 3.f);
 	SetHidden(false);
 }
 
 void ADCCriminalPawn::SetAway()
 {
+	GetUp();
 	Mode = EDCPawnMode::Away;
 	Path.Reset();
 	StartDelay = 0.f;
 	SetHidden(true);
 }
 
-void ADCCriminalPawn::PickWanderTarget()
+void ADCCriminalPawn::SetIdleGoal(const TArray<FVector>& FloorPath, EDCPawnActivity InActivity, float FaceYaw, float Hold)
 {
+	if (Mode != EDCPawnMode::Wander) { return; }
+	GetUp();
+	Activity = InActivity;
 	Path.Reset();
-	if (ADCCriminalSpawnZone* Z = HomeZone.Get())
+	for (const FVector& P : FloorPath) { Path.Add(Ground(P)); }
+	bHasGoalYaw = !FMath::IsNaN(FaceYaw);
+	GoalYaw = bHasGoalYaw ? FaceYaw : 0.f;
+	GoalHold = Hold;
+	WaitTime = 0.f;
+	StuckTime = 0.f;
+	if (Path.Num() == 0) { ArriveIdle(); }
+}
+
+void ADCCriminalPawn::InterruptIdle(float Delay)
+{
+	if (Mode != EDCPawnMode::Wander) { return; }
+	GetUp();
+	Activity = EDCPawnActivity::Stand;
+	Path.Reset();
+	WaitTime = Delay;
+}
+
+void ADCCriminalPawn::LieDown()
+{
+	if (bLying) { return; }
+	bLying = true;
+	USkeletalMeshComponent* M = GetMesh();
+	UAnimSequence* Lie = bUsingFallbackBody ? nullptr : LoadQuiet<UAnimSequence>(TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Back_01.MM_Death_Back_01"));
+	if (M && Lie)
 	{
-		Path.Add(Ground(Z->GetRandomPoint(Rng)));
+		M->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+		M->SetAnimation(Lie);
+		M->SetPosition(Lie->GetPlayLength() - 0.02f, false);
+		M->SetPlayRate(0.f);
+		M->Play(false);
 	}
+	RefreshPlate();
+}
+
+void ADCCriminalPawn::GetUp()
+{
+	if (!bLying) { return; }
+	bLying = false;
+	USkeletalMeshComponent* M = GetMesh();
+	if (M && AnimClass && !bUsingFallbackBody)
+	{
+		M->SetPlayRate(1.f);
+		M->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		M->SetAnimInstanceClass(AnimClass);
+	}
+	RefreshPlate();
 }
 
 void ADCCriminalPawn::Depart(ADCGarageDoor* Door, float Delay, bool bForever)
 {
 	bLeaveForever |= bForever;
 	bReturnQueued = false;
-	if (Mode == EDCPawnMode::Away)
+	if (Mode == EDCPawnMode::Away || (Mode == EDCPawnMode::WalkIn && IsHidden()))
 	{
+		// Not visible yet (still outside): just stay away.
+		SetAway();
 		if (bLeaveForever) { bWantsDestroy = true; }
 		return;
 	}
+	GetUp();
 	Mode = EDCPawnMode::WalkOut;
+	Activity = EDCPawnActivity::Stand;
 	ActiveDoor = Door;
 	StartDelay = Delay;
 	StuckTime = 0.f;
 	Path.Reset();
 	if (Door)
 	{
-		Path.Add(Ground(Door->GetEntryLocation()));
-		Path.Add(Ground(Door->GetActorLocation()));
-		Path.Add(Ground(Door->GetExitLocation()));
+		TArray<FVector> Route;
+		if (ADCWorldDirector* D = Director.Get()) { D->PlanPath(GetFeet(), Door->GetEntryLocation(), Route); }
+		else { Route.Add(Door->GetEntryLocation()); }
+		Route.Add(Door->GetActorLocation());
+		Route.Add(Door->GetExitLocation());
+		for (const FVector& P : Route) { Path.Add(Ground(P)); }
 	}
+	UpdateSpeed();
 }
 
 void ADCCriminalPawn::ReturnHome(ADCGarageDoor* Door, float Delay)
@@ -392,27 +454,40 @@ void ADCCriminalPawn::ReturnHome(ADCGarageDoor* Door, float Delay)
 		return;
 	}
 	if (Mode != EDCPawnMode::Away) { return; }
-	ActiveDoor = Door;
 	StartDelay = Delay;
 	BeginWalkIn(Door);
 }
 
 void ADCCriminalPawn::BeginWalkIn(ADCGarageDoor* Door)
 {
+	ADCWorldDirector* D = Director.Get();
+	ActiveDoor = Door;
 	Mode = EDCPawnMode::WalkIn;
+	Activity = EDCPawnActivity::Stand;
+	bHasGoalYaw = false;
 	bReturnQueued = false;
 	StuckTime = 0.f;
 	Path.Reset();
-	if (Door)
+	if (!Door)
 	{
-		const FVector Exit = Ground(Door->GetExitLocation());
-		SetActorLocation(Exit);
-		SetActorRotation((Ground(Door->GetActorLocation()) - Exit).Rotation());
-		Path.Add(Ground(Door->GetActorLocation()));
-		Path.Add(Ground(Door->GetEntryLocation()));
+		const FVector P = D ? D->PickSpawnPoint(this) : GetFeet();
+		const float Delay = StartDelay;
+		PlaceAt(P);
+		StartDelay = Delay;
+		return;
 	}
-	if (ADCCriminalSpawnZone* Z = HomeZone.Get()) { Path.Add(Ground(Z->GetRandomPoint(Rng))); }
-	if (!Door) { PlaceInZone(); return; }
+	const FVector Exit = Door->GetExitLocation();
+	SetActorLocation(Ground(Exit));
+	SetActorRotation((Door->GetActorLocation() - Exit).GetSafeNormal2D().Rotation());
+	Path.Add(Ground(Door->GetActorLocation()));
+	Path.Add(Ground(Door->GetEntryLocation()));
+	if (D)
+	{
+		TArray<FVector> Route;
+		D->PlanPath(Door->GetEntryLocation(), D->PickSpawnPoint(this), Route);
+		for (const FVector& P : Route) { Path.Add(Ground(P)); }
+	}
+	UpdateSpeed();
 	// Stay hidden until StartDelay elapses (Tick reveals us).
 }
 
@@ -436,7 +511,14 @@ void ADCCriminalPawn::PlayLevelUp(int32 NewLevel)
 	LevelUpTime = 0.f;
 	if (LevelRing) { LevelRing->SetVisibility(true); }
 	if (LevelLight) { LevelLight->SetVisibility(true); }
-	UDCWorldLabel::SetComponentLabel(Plate, FString::Printf(TEXT("LEVEL UP!  LV %d"), Level), FLinearColor(1.f, 0.82f, 0.3f), 11);
+	FDCLabelSpec S;
+	S.Icon = TEXT("chevrons-up");
+	S.Text = ShortName;
+	S.Sub = FString::Printf(TEXT("Lv %d"), Level);
+	S.Accent = FLinearColor(1.f, 0.78f, 0.25f);
+	S.bAccentOutline = true;
+	S.Size = 12.f;
+	UDCWorldLabel::SetComponentSpec(Plate, S);
 }
 
 void ADCCriminalPawn::TickLevelUp(float Dt)
@@ -465,6 +547,18 @@ void ADCCriminalPawn::TickLevelUp(float Dt)
 	}
 }
 
+void ADCCriminalPawn::ArriveIdle()
+{
+	if (bHasGoalYaw) { SetActorRotation(FRotator(0.f, GoalYaw, 0.f)); }
+	if (Activity == EDCPawnActivity::Sleep)
+	{
+		LieDown();
+		WaitTime = 1e9f; // until the director wakes us
+		return;
+	}
+	WaitTime = FMath::Max(0.5f, GoalHold);
+}
+
 void ADCCriminalPawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -485,8 +579,17 @@ void ADCCriminalPawn::Tick(float DeltaSeconds)
 		switch (Mode)
 		{
 		case EDCPawnMode::Wander:
-			WaitTime -= Dt;
-			if (WaitTime <= 0.f) { PickWanderTarget(); WaitTime = Rng.FRandRange(2.f, 6.5f); }
+			if (WaitTime > 0.f) { WaitTime -= Dt; }
+			if (bHasGoalYaw && !bLying)
+			{
+				const FRotator R = GetActorRotation();
+				SetActorRotation(FMath::RInterpTo(R, FRotator(0.f, GoalYaw, 0.f), Dt, 5.f));
+			}
+			if (WaitTime <= 0.f && !bLying)
+			{
+				if (ADCWorldDirector* D = Director.Get()) { D->AssignIdleGoal(this); }
+				if (Path.Num() == 0 && WaitTime <= 0.f) { WaitTime = Rng.FRandRange(2.f, 5.f); }
+			}
 			break;
 		case EDCPawnMode::WalkOut:
 			SetHidden(true);
@@ -496,8 +599,11 @@ void ADCCriminalPawn::Tick(float DeltaSeconds)
 			break;
 		case EDCPawnMode::WalkIn:
 			Mode = EDCPawnMode::Wander;
+			Activity = EDCPawnActivity::Stand;
+			bHasGoalYaw = false;
 			WaitTime = Rng.FRandRange(1.f, 3.f);
 			ActiveDoor = nullptr;
+			UpdateSpeed();
 			if (bLevelUpPending) { PlayLevelUp(Level); }
 			break;
 		default: break;
@@ -508,13 +614,19 @@ void ADCCriminalPawn::Tick(float DeltaSeconds)
 	UpdateSpeed();
 	const FVector Loc = GetActorLocation();
 	FVector To = Path[0] - Loc;
+	To.Z = 0.f;
 	const float Dist = To.Size();
 	StuckTime += Dt;
-	if (Dist < 22.f || StuckTime > 14.f)
+	if (Dist < 22.f || StuckTime > 12.f)
 	{
-		if (StuckTime > 14.f) { SetActorLocation(Path[0]); }
+		if (StuckTime > 12.f || Path.Num() == 1) { SetActorLocation(Path[0]); }
 		Path.RemoveAt(0);
 		StuckTime = 0.f;
+		if (Path.Num() == 0 && Mode == EDCPawnMode::Wander)
+		{
+			GetCharacterMovement()->StopMovementImmediately();
+			ArriveIdle();
+		}
 		return;
 	}
 	float Scale = 1.f;

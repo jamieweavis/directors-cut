@@ -11,6 +11,7 @@
 //   -DCTimeScale=N          run the clock N x faster (testing)
 //   -DCHour=H               jump the clock forward to hour H (0..24) shortly after start (day/night screenshots)
 //   -DCQuitAfter=S          quit after S seconds (when not taking shots)
+//   -DCContinue             load the saved run (UDCRunSubsystem::ContinueRun) right after start instead of a new run
 #pragma once
 
 #include "CoreMinimal.h"
@@ -37,6 +38,7 @@ private:
 	float QuitAfter = -1.f;
 	float AutoPlaySeconds = 0.f;
 	bool bClockFlags = false;
+	bool bContinue = false;
 	double Elapsed = 0.0;
 	int32 Step = 0;
 	double NextAt = 0.0;
@@ -47,5 +49,6 @@ private:
 	void PrepareShot(const FShot& Shot);
 	void RunAutoPlay();
 	void ApplyClockFlags();
+	void ApplyContinue();
 	UWorld* GetGameWorld() const;
 };

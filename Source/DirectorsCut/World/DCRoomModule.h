@@ -46,6 +46,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DC") float RevealDuration = 3.2f;
 	/** Whether the reveal drives the camera (pan over and back). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DC") bool bRevealMovesCamera = true;
+	/** Quick reveal for an upgrade: new Level group glows in, new lights flicker on, no camera move. */
+	void PlayUpgradeReveal(int32 NewLevel);
+	/** Floating build timer over the room (Alpha 0..1). */
+	void SetBuildProgress(float Alpha, double SecondsLeft, int32 TargetLevel);
+	void ClearBuildProgress();
+	/** True if pawns can be in here (built, or upgrading). */
+	bool IsUsable() const { return CurrentLevel >= 1 && CurrentState != EDCRoomState::Locked; }
 
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Root;
@@ -54,6 +61,16 @@ protected:
 
 	// Reveal state
 	bool bRevealing = false;
+	bool bQuickReveal = false;
+	float ActiveRevealDuration = 3.2f;
+	struct FGlow { TWeakObjectPtr<UMeshComponent> Mesh; };
+	TArray<FGlow> Glows;
+	float GlowTime = -1.f;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> GlowMID;
+	UPROPERTY() TObjectPtr<class UWidgetComponent> BuildLabel;
+	void StartGlow(FName Group);
+	void TickGlow(float Dt);
+	void EndGlow();
 	float RevealTime = 0.f;
 	int32 RevealLevel = 1;
 	EDCRoomState RevealFromState = EDCRoomState::Locked;
