@@ -1,0 +1,26 @@
+{
+  "traits": [
+    { "id": "night_owl",       "displayName": "Night Owl",       "description": "+15% on night starts",     "icon": "moon",           "negative": false, "effects": [ { "kind": "chanceNight", "value": 0.15 } ] },
+    { "id": "early_bird",      "displayName": "Early Bird",      "description": "+10% on day starts",       "icon": "sunrise",        "negative": false, "effects": [ { "kind": "chanceDay", "value": 0.10 } ] },
+    { "id": "lead_foot",       "displayName": "Lead Foot",       "description": "-25% job time",            "icon": "gauge",          "negative": false, "effects": [ { "kind": "durationMult", "value": 0.75 } ] },
+    { "id": "marathoner",      "displayName": "Marathoner",      "description": "+15% on jobs of 8 min+",   "icon": "hourglass",      "negative": false, "effects": [ { "kind": "chanceLong", "value": 0.15, "threshold": 480 } ] },
+    { "id": "quick_hands",     "displayName": "Quick Hands",     "description": "+15% on jobs under 3 min", "icon": "timer",          "negative": false, "effects": [ { "kind": "chanceShort", "value": 0.15, "threshold": 180 } ] },
+    { "id": "lone_wolf",       "displayName": "Lone Wolf",       "description": "+20% working solo",        "icon": "user-x",         "negative": false, "effects": [ { "kind": "chanceSolo", "value": 0.20 } ] },
+    { "id": "old_partner",     "displayName": "Old Partner",     "description": "+10% with a Wheelman",     "icon": "users",          "negative": false, "effects": [ { "kind": "chanceWithType", "value": 0.10, "param": "Wheelman" } ] },
+    { "id": "inside_contact",  "displayName": "Inside Contact",  "description": "+10% with a Face",         "icon": "contact",        "negative": false, "effects": [ { "kind": "chanceWithType", "value": 0.10, "param": "Face" } ] },
+    { "id": "treasure_hunter", "displayName": "Treasure Hunter", "description": "+20% payout",              "icon": "gem",            "negative": false, "effects": [ { "kind": "payoutMult", "value": 1.2 } ] },
+    { "id": "fast_learner",    "displayName": "Fast Learner",    "description": "+50% XP",                  "icon": "graduation-cap", "negative": false, "effects": [ { "kind": "xpMult", "value": 1.5 } ] },
+    { "id": "tough",           "displayName": "Tough",           "description": "-50% injury chance",       "icon": "shield",         "negative": false, "effects": [ { "kind": "injuryChanceMult", "value": 0.5 } ] },
+    { "id": "slippery",        "displayName": "Slippery",        "description": "-50% arrest chance",       "icon": "footprints",     "negative": false, "effects": [ { "kind": "arrestMult", "value": 0.5 } ] },
+    { "id": "haggler",         "displayName": "Haggler",         "description": "-25% job cost",            "icon": "tags",           "negative": false, "effects": [ { "kind": "costMult", "value": 0.75 } ] },
+    { "id": "cctv_savvy",      "displayName": "CCTV Savvy",      "description": "+10% vs Cameras",          "icon": "scan-eye",       "negative": false, "effects": [ { "kind": "chanceThreat", "value": 0.10, "param": "Cameras" } ] },
+    { "id": "street_racer",    "displayName": "Street Racer",    "description": "+10% vs Pursuit",          "icon": "route",          "negative": false, "effects": [ { "kind": "chanceThreat", "value": 0.10, "param": "Pursuit" } ] },
+    { "id": "ex_security",     "displayName": "Ex-Security",     "description": "+10% vs Guards",           "icon": "shield-check",   "negative": false, "effects": [ { "kind": "chanceThreat", "value": 0.10, "param": "Guards" } ] },
+    { "id": "vault_nerd",      "displayName": "Vault Nerd",      "description": "+10% vs Vault",            "icon": "key-round",      "negative": false, "effects": [ { "kind": "chanceThreat", "value": 0.10, "param": "Vault" } ] },
+    { "id": "big_game",        "displayName": "Big Game",        "description": "+10% on tier 3+ jobs",     "icon": "target",         "negative": false, "effects": [ { "kind": "chanceTierMin", "value": 0.10, "threshold": 3 } ] },
+    { "id": "greedy",          "displayName": "Greedy",          "description": "Wants +10% fair cut",      "icon": "hand-coins",     "negative": true,  "effects": [ { "kind": "fairCutAdd", "value": 0.10 } ] },
+    { "id": "hothead",         "displayName": "Hothead",         "description": "-5% success",              "icon": "flame",          "negative": true,  "effects": [ { "kind": "chance", "value": -0.05 } ] },
+    { "id": "rat",             "displayName": "Rat",             "description": "+50% own arrest chance",   "icon": "rat",            "negative": true,  "effects": [ { "kind": "arrestMult", "value": 1.5 } ] },
+    { "id": "slow",            "displayName": "Slow",            "description": "+15% job time",            "icon": "snail",          "negative": true,  "effects": [ { "kind": "durationMult", "value": 1.15 } ] }
+  ]
+}

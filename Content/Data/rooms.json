@@ -1,125 +1,182 @@
 {
-  "_comment": "8 rooms. Level modifiers are NOT cumulative: each level lists the full active set. upgradeCosts = [L1->L2, L2->L3]. Office starts built at L1 (buildCost 0).",
   "rooms": [
-    { "type": "Office", "displayName": "The Director's Office", "priority": "Must",
-      "description": "A cramped projection booth turned HQ: the job board, the desk, and a fence crate under a dust sheet.",
-      "buildCost": 0, "upgradeCosts": [8000, 14000], "requiredHeists": 0,
-      "upkeepPerNight": 0,
+    {
+      "type": "Office",
+      "displayName": "Office",
+      "description": "Job board and the desk",
+      "icon": "monitor",
+      "cost": [0, 7000, 14000],
+      "buildSec": [0, 120, 240],
+      "requiredSuccesses": [0, 8, 16],
+      "upkeepPerDay": [0, 150, 300],
+      "levelEffects": ["4 leads on the board", "+1 lead, +1 active", "+2 leads, +1 active"],
       "levels": [
-        { "effectText": "Job board shows 3 productions. Fence crate sells basic gear. 2 gear slots per crew member.",
-          "flavour": "One desk lamp, one ashtray, one dream.",
-          "modifiers": [ { "kind": "JobBoardSize", "value": 3 }, { "kind": "GearSlots", "value": 2 }, { "kind": "GearTier", "value": 1 } ] },
-        { "effectText": "Job board shows 4 productions.",
-          "flavour": "A second filing cabinet. You're practically a studio.",
-          "modifiers": [ { "kind": "JobBoardSize", "value": 4 }, { "kind": "GearSlots", "value": 2 }, { "kind": "GearTier", "value": 1 } ] },
-        { "effectText": "Job board shows 5 productions.",
-          "flavour": "Leather chair, brass nameplate, a phone with three lines and a hold button.",
-          "modifiers": [ { "kind": "JobBoardSize", "value": 5 }, { "kind": "GearSlots", "value": 2 }, { "kind": "GearTier", "value": 1 } ] }
-      ] },
-    { "type": "Lounge", "displayName": "The Lounge", "priority": "Must",
-      "description": "Bunks, a bar, a pool table with a lean.",
-      "buildCost": 8000, "upgradeCosts": [6000, 10000], "requiredHeists": 0,
-      "upkeepPerNight": 200,
+        {"effects": []},
+        {"effects": [{"kind": "boardSize", "value": 1}, {"kind": "maxActive", "value": 1}]},
+        {"effects": [{"kind": "boardSize", "value": 2}, {"kind": "maxActive", "value": 1}]}
+      ]
+    },
+    {
+      "type": "Lounge",
+      "displayName": "Lounge",
+      "description": "Bunks, bar, room for more crew",
+      "icon": "sofa",
+      "cost": [3500, 7500, 12000],
+      "buildSec": [60, 150, 240],
+      "requiredSuccesses": [3, 9, 18],
+      "upkeepPerDay": [100, 200, 350],
+      "levelEffects": ["+2 roster, +2 loyalty/day", "+3 roster, +3 loyalty/day", "+5 roster, better recruits"],
       "levels": [
-        { "effectText": "Roster cap 6. Idle crew +1 loyalty/night.",
-          "flavour": "Somebody already carved their initials in the bar.",
-          "modifiers": [ { "kind": "RosterCap", "value": 6 }, { "kind": "IdleLoyalty", "value": 1 } ] },
-        { "effectText": "Roster cap 8. Idle crew +1 loyalty/night.",
-          "flavour": "A jukebox that only plays one song. Everyone loves that song.",
-          "modifiers": [ { "kind": "RosterCap", "value": 8 }, { "kind": "IdleLoyalty", "value": 1 } ] },
-        { "effectText": "Roster cap 10. Idle crew +2 loyalty/night.",
-          "flavour": "Velvet booths and a neon sign that says OPEN even when you're very much closed.",
-          "modifiers": [ { "kind": "RosterCap", "value": 10 }, { "kind": "IdleLoyalty", "value": 2 } ] }
-      ] },
-    { "type": "Workshop", "displayName": "The Workshop", "priority": "Must",
-      "description": "The old prop department: lathes, paint cans and a pegboard of things that are definitely not weapons.",
-      "buildCost": 12000, "upgradeCosts": [8000, 12000], "requiredHeists": 0,
-      "upkeepPerNight": 200,
+        {"effects": [{"kind": "rosterCap", "value": 2}, {"kind": "loyaltyIdlePerDay", "value": 2}]},
+        {"effects": [{"kind": "rosterCap", "value": 3}, {"kind": "loyaltyIdlePerDay", "value": 3}]},
+        {
+          "effects": [
+            {"kind": "rosterCap", "value": 5},
+            {"kind": "loyaltyIdlePerDay", "value": 4},
+            {"kind": "recruitQualityAdd", "value": 0.5}
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Garage",
+      "displayName": "Garage",
+      "description": "Run more jobs at once",
+      "icon": "warehouse",
+      "cost": [2000, 10000, 20000],
+      "buildSec": [60, 150, 270],
+      "requiredSuccesses": [2, 12, 22],
+      "upkeepPerDay": [150, 250, 400],
+      "levelEffects": ["+1 active, Wheelman +5%", "+1 active, -10% time", "+2 active, -15% time"],
       "levels": [
-        { "effectText": "3rd gear slot. Tier-2 gear in the catalogue.",
-          "flavour": "Props, costumes, gadgets. Strictly for the production.",
-          "modifiers": [ { "kind": "GearSlots", "value": 3 }, { "kind": "GearTier", "value": 2 } ] },
-        { "effectText": "3rd gear slot. Tier-3 gear in the catalogue.",
-          "flavour": "A welding rig and a man named Sparks who doesn't talk about the eyebrows.",
-          "modifiers": [ { "kind": "GearSlots", "value": 3 }, { "kind": "GearTier", "value": 3 } ] },
-        { "effectText": "3rd gear slot. Tier-3 gear. All gear 20% cheaper.",
-          "flavour": "You've cut out the middleman. The middleman is now in the Lounge.",
-          "modifiers": [ { "kind": "GearSlots", "value": 3 }, { "kind": "GearTier", "value": 3 }, { "kind": "GearDiscount", "value": 0.2 } ] }
-      ] },
-    { "type": "Garage", "displayName": "The Garage", "priority": "Must",
-      "description": "The loading dock, with a roller door and an oil stain shaped like a getaway.",
-      "buildCost": 15000, "upgradeCosts": [12000, 18000], "requiredHeists": 2,
-      "upkeepPerNight": 200,
+        {"effects": [{"kind": "maxActive", "value": 1}, {"kind": "chanceIfType", "value": 0.05, "param": "Wheelman"}]},
+        {
+          "effects": [
+            {"kind": "maxActive", "value": 1},
+            {"kind": "durationMult", "value": 0.9},
+            {"kind": "chanceIfType", "value": 0.05, "param": "Wheelman"}
+          ]
+        },
+        {
+          "effects": [
+            {"kind": "maxActive", "value": 2},
+            {"kind": "durationMult", "value": 0.85},
+            {"kind": "chanceIfType", "value": 0.1, "param": "Wheelman"}
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Workshop",
+      "displayName": "Workshop",
+      "description": "Better gear in the shop",
+      "icon": "wrench",
+      "cost": [4000, 8000, 15000],
+      "buildSec": [90, 150, 240],
+      "requiredSuccesses": [5, 12, 20],
+      "upkeepPerDay": [100, 200, 300],
+      "levelEffects": ["Tier 2 gear", "Tier 2 gear, -10% prices", "Tier 3 gear, +1 gear slot"],
       "levels": [
-        { "effectText": "Run 2 crews per night. Unlocks heavy jobs. +4% success with a Wheelman on the crew.",
-          "flavour": "Two cars, one roller door, zero parking tickets.",
-          "modifiers": [ { "kind": "CrewsPerNight", "value": 2 }, { "kind": "UnlockHeavyJobs" }, { "kind": "ChanceBonus", "value": 0.04, "condition": "HasWheelman" } ] },
-        { "effectText": "Run 3 crews per night. Heavy jobs. +4% success with a Wheelman.",
-          "flavour": "A hydraulic lift and a calendar nobody admits to hanging.",
-          "modifiers": [ { "kind": "CrewsPerNight", "value": 3 }, { "kind": "UnlockHeavyJobs" }, { "kind": "ChanceBonus", "value": 0.04, "condition": "HasWheelman" } ] },
-        { "effectText": "Run 4 crews per night. Heavy jobs. +4% success with a Wheelman.",
-          "flavour": "A whole fleet. Every car has a name, a favourite song and a fake licence plate.",
-          "modifiers": [ { "kind": "CrewsPerNight", "value": 4 }, { "kind": "UnlockHeavyJobs" }, { "kind": "ChanceBonus", "value": 0.04, "condition": "HasWheelman" } ] }
-      ] },
-    { "type": "ScreeningRoom", "displayName": "The Screening Room", "priority": "Should",
-      "description": "The old auditorium: torn velvet seats, a silver screen and a projector that still purrs.",
-      "buildCost": 25000, "upgradeCosts": [15000, 20000], "requiredHeists": 5,
-      "upkeepPerNight": 200,
+        {"effects": [{"kind": "gearTier", "value": 2}]},
+        {"effects": [{"kind": "gearTier", "value": 2}, {"kind": "gearPriceMult", "value": 0.9}]},
+        {
+          "effects": [
+            {"kind": "gearTier", "value": 3},
+            {"kind": "gearPriceMult", "value": 0.85},
+            {"kind": "gearSlots", "value": 1}
+          ]
+        }
+      ]
+    },
+    {
+      "type": "OpsRoom",
+      "displayName": "Ops Room",
+      "description": "Plan the big jobs",
+      "icon": "map",
+      "cost": [3500, 6000, 20000],
+      "buildSec": [120, 210, 300],
+      "requiredSuccesses": [8, 18, 26],
+      "upkeepPerDay": [250, 400, 600],
+      "levelEffects": ["Tier 3+ jobs post", "Big Score posts", "+10% tier 3+, +1 active"],
       "levels": [
-        { "effectText": "1 retake per night: re-roll a failed heist. Unlocks the Final Cut.",
-          "flavour": "Let's go again from the top. And this time, with feeling.",
-          "modifiers": [ { "kind": "Retakes", "value": 1 }, { "kind": "UnlockFinalCut" } ] },
-        { "effectText": "1 retake per night. Final Cut. +1 Luck for the whole crew.",
-          "flavour": "Re-upholstered front row. The Director's seat has cup holders.",
-          "modifiers": [ { "kind": "Retakes", "value": 1 }, { "kind": "UnlockFinalCut" }, { "kind": "LuckBonus", "value": 1 } ] },
-        { "effectText": "2 retakes per night. Final Cut. +1 Luck for the whole crew.",
-          "flavour": "Restored marquee, red curtains, and a standing ovation every time someone gets home.",
-          "modifiers": [ { "kind": "Retakes", "value": 2 }, { "kind": "UnlockFinalCut" }, { "kind": "LuckBonus", "value": 1 } ] }
-      ] },
-    { "type": "Clinic", "displayName": "The Back-Alley Clinic", "priority": "Should",
-      "description": "The former first-aid room. The doctor's licence is framed. It's framed very loosely.",
-      "buildCost": 10000, "upgradeCosts": [7000, 10000], "requiredHeists": 0,
-      "upkeepPerNight": 200,
+        {"effects": [{"kind": "unlockTier", "value": 3}]},
+        {"effects": [{"kind": "unlockTier", "value": 3}, {"kind": "unlockFinal", "value": 1}]},
+        {
+          "effects": [
+            {"kind": "unlockTier", "value": 3},
+            {"kind": "unlockFinal", "value": 1},
+            {"kind": "chanceTierMin", "value": 0.1, "threshold": 3},
+            {"kind": "maxActive", "value": 1}
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Clinic",
+      "displayName": "Clinic",
+      "description": "Faster healing, paid patch-ups",
+      "icon": "heart-pulse",
+      "cost": [3000, 7000, 12000],
+      "buildSec": [60, 150, 210],
+      "requiredSuccesses": [4, 11, 20],
+      "upkeepPerDay": [100, 200, 300],
+      "levelEffects": ["-30% injury time", "-50% time, patch-up", "-50% injuries, patch-up"],
       "levels": [
-        { "effectText": "Injuries heal twice as fast.",
-          "flavour": "Bandages, ice packs and a lollipop for the brave.",
-          "modifiers": [ { "kind": "InjuryHealRate", "value": 2 } ] },
-        { "effectText": "Injuries heal twice as fast. Patch up injured crew for $1,500 per night of injury.",
-          "flavour": "The doc now makes house calls. The house is this one.",
-          "modifiers": [ { "kind": "InjuryHealRate", "value": 2 }, { "kind": "PatchUp", "value": 1500 } ] },
-        { "effectText": "Heal twice as fast. Patch-ups. 25% lower injury chance.",
-          "flavour": "A proper X-ray machine, a pre-shoot stretching routine, and a strict no-stunts-without-padding policy.",
-          "modifiers": [ { "kind": "InjuryHealRate", "value": 2 }, { "kind": "PatchUp", "value": 1500 }, { "kind": "InjuryMult", "value": 0.75 } ] }
-      ] },
-    { "type": "ServerCloset", "displayName": "The Server Closet", "priority": "Could",
-      "description": "A broom cupboard full of blinking tape reels, humming like a beehive.",
-      "buildCost": 14000, "upgradeCosts": [9000, 12000], "requiredHeists": 0,
-      "upkeepPerNight": 200,
+        {"effects": [{"kind": "injuryTimeMult", "value": 0.7}]},
+        {"effects": [{"kind": "injuryTimeMult", "value": 0.5}, {"kind": "patchUp", "value": 8}]},
+        {
+          "effects": [
+            {"kind": "injuryTimeMult", "value": 0.5},
+            {"kind": "injuryChanceMult", "value": 0.5},
+            {"kind": "patchUp", "value": 5}
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ServerRoom",
+      "displayName": "Server Room",
+      "description": "Faster leads, Hacker bonus",
+      "icon": "server",
+      "cost": [7000, 10000, 16000],
+      "buildSec": [90, 180, 240],
+      "requiredSuccesses": [8, 14, 22],
+      "upkeepPerDay": [150, 250, 350],
+      "levelEffects": ["Leads 25% faster", "+1 board, Hacker +5%", "+2 board, Hacker +10%"],
       "levels": [
-        { "effectText": "Intel: see exact arrest risk and outcome bands. Hacker jobs pay +20%.",
-          "flavour": "The police radio codes, on punch cards, alphabetised.",
-          "modifiers": [ { "kind": "Intel" }, { "kind": "PayoutMult", "value": 1.2, "condition": "HackerJob" } ] },
-        { "effectText": "Intel. Hacker jobs pay +20%. Everyone +5 Tech.",
-          "flavour": "A second mainframe. It doesn't do anything, but the first one seems happier.",
-          "modifiers": [ { "kind": "Intel" }, { "kind": "PayoutMult", "value": 1.2, "condition": "HackerJob" }, { "kind": "StatBonus", "stat": "Tech", "value": 5 } ] },
-        { "effectText": "Intel. Hacker jobs pay +30%. Everyone +8 Tech.",
-          "flavour": "The whole city's traffic lights, on a dial. Use responsibly.",
-          "modifiers": [ { "kind": "Intel" }, { "kind": "PayoutMult", "value": 1.3, "condition": "HackerJob" }, { "kind": "StatBonus", "stat": "Tech", "value": 8 } ] }
-      ] },
-    { "type": "LawyerOffice", "displayName": "The Lawyer's Office", "priority": "Could",
-      "description": "The old box office, now with a brass plaque and a man who bills by the quarter-minute.",
-      "buildCost": 20000, "upgradeCosts": [10000, 14000], "requiredHeists": 0,
-      "upkeepPerNight": 200,
+        {"effects": [{"kind": "postIntervalMult", "value": 0.75}]},
+        {
+          "effects": [
+            {"kind": "postIntervalMult", "value": 0.7},
+            {"kind": "boardSize", "value": 1},
+            {"kind": "chanceIfType", "value": 0.05, "param": "Hacker"}
+          ]
+        },
+        {
+          "effects": [
+            {"kind": "postIntervalMult", "value": 0.6},
+            {"kind": "boardSize", "value": 2},
+            {"kind": "chanceIfType", "value": 0.1, "param": "Hacker"},
+            {"kind": "lootChanceAdd", "value": 0.05}
+          ]
+        }
+      ]
+    },
+    {
+      "type": "LawyerOffice",
+      "displayName": "Lawyer",
+      "description": "Fewer arrests, bail",
+      "icon": "scale",
+      "cost": [8000, 12000, 18000],
+      "buildSec": [90, 180, 270],
+      "requiredSuccesses": [12, 18, 24],
+      "upkeepPerDay": [200, 300, 450],
+      "levelEffects": ["-20% arrests", "-35% arrests, bail", "-50% arrests, cheap bail"],
       "levels": [
-        { "effectText": "Bail out arrested crew within 1 night (costs their hire price). Arrest chance -15%.",
-          "flavour": "Objection! Sustained. Probably.",
-          "modifiers": [ { "kind": "Bail", "value": 1.0 }, { "kind": "ArrestMult", "value": 0.85 } ] },
-        { "effectText": "Bail at 75% of hire price. Arrest chance -20%.",
-          "flavour": "A junior partner who went to law school. Night school. It counts.",
-          "modifiers": [ { "kind": "Bail", "value": 0.75 }, { "kind": "ArrestMult", "value": 0.8 } ] },
-        { "effectText": "Bail at 50% of hire price. Arrest chance -30%.",
-          "flavour": "The judge plays golf with your lawyer. The judge always loses.",
-          "modifiers": [ { "kind": "Bail", "value": 0.5 }, { "kind": "ArrestMult", "value": 0.7 } ] }
-      ] }
+        {"effects": [{"kind": "arrestMult", "value": 0.8}]},
+        {"effects": [{"kind": "arrestMult", "value": 0.65}, {"kind": "bail", "value": 1500, "threshold": 180}]},
+        {"effects": [{"kind": "arrestMult", "value": 0.5}, {"kind": "bail", "value": 900, "threshold": 300}]}
+      ]
+    }
   ]
 }

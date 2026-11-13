@@ -1,0 +1,16 @@
+{
+  "abilities": [
+    { "id": "getaway",        "displayName": "Getaway Driver",  "icon": "car-front",     "counters": "Pursuit" },
+    { "id": "police_scanner", "displayName": "Police Scanner",  "icon": "radio",         "counters": "Patrols" },
+    { "id": "strongarm",      "displayName": "Strongarm",       "icon": "biceps-flexed", "counters": "Guards" },
+    { "id": "crowd_control",  "displayName": "Crowd Control",   "icon": "megaphone",     "counters": "Witnesses" },
+    { "id": "loop_feed",      "displayName": "Loop the Feed",   "icon": "cctv",          "counters": "Cameras" },
+    { "id": "kill_alarm",     "displayName": "Kill the Alarm",  "icon": "bell-off",      "counters": "Alarms" },
+    { "id": "blind_spot",     "displayName": "Blind Spot",      "icon": "eye-off",       "counters": "Cameras" },
+    { "id": "pick_lock",      "displayName": "Pick the Lock",   "icon": "lock-open",     "counters": "Locks" },
+    { "id": "sweet_talk",     "displayName": "Sweet Talk",      "icon": "handshake",     "counters": "Guards" },
+    { "id": "cover_story",    "displayName": "Cover Story",     "icon": "venetian-mask", "counters": "Witnesses" },
+    { "id": "crack_vault",    "displayName": "Crack the Vault", "icon": "vault",         "counters": "Vault" },
+    { "id": "bypass_wiring",  "displayName": "Bypass Wiring",   "icon": "cable",         "counters": "Alarms" }
+  ]
+}
