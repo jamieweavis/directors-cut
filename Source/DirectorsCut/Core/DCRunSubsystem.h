@@ -123,7 +123,13 @@ public:
 
 private:
 	// ═══ Agent A owns everything below this line ═══
-	// Wave 0 stub state (believable fake data).
+	// All logic lives in Sim/ (FDCSimImpl); this section only holds run state.
+	friend struct FDCSimImpl;
+	friend struct FDCSimTestAccess; // automation tests (Tests/Sim)
+
+	TSharedPtr<struct FDCSimData> Data;   // loaded JSON (Sim/DCSimData.h)
+	FString DataDirOverride;              // tests: force a data directory
+
 	bool bActive = false;
 	EDCGamePhase Phase = EDCGamePhase::Title;
 	int32 Seed = 0;
@@ -131,20 +137,34 @@ private:
 	int32 Cash = 0;
 	int32 Night = 1;
 	int32 HeistsCompleted = 0;
+	int32 HeistsAttempted = 0;
+	int32 TotalTake = 0;
+	FString BestHeistName;
+	int32 BestHeistTake = 0;
 	int32 NextId = 1;
+	int32 RecruitRefreshIn = 3;
+	int32 PerkOffersGiven = 0;
+	int32 LastUnlockedTier = 1;
+	int32 RetakesRemaining = 0;
+	bool bFirstArrestPrevented = false;
+	bool bWonRun = false;
+	FString EndReason;
+
 	TArray<FDCCriminal> Roster;
 	TArray<FDCCriminal> Fallen;
 	TArray<FDCCriminal> Recruits;
 	TArray<FDCJob> Jobs;
-	TArray<FDCGearItem> Gear;
 	TArray<FDCCrewPlan> Plans;
-	TArray<FDCRoom> Rooms;
+	TArray<FDCRoom> Rooms;               // state + level only; display fields filled by GetRooms()
 	TArray<FDCPerk> PerkOffer;
 	TArray<FDCPerk> PerksTaken;
 	FDCNightReport LastReport;
 
-	void SetPhase(EDCGamePhase NewPhase);
-	FDCCriminal MakeStubCriminal(EDCCriminalType Type);
-	void MakeStubJobs();
+	TMap<int32, int32> JobRollSeeds;                   // job id -> seed of its heist dice (Dailies perk can peek)
+	TMap<int32, int32> ArrestedOnNight;                // fallen criminal id -> night of arrest (Lawyer bail)
+	TMap<int32, TArray<FDCCriminal>> RetakeSnapshots;  // failed result id -> crew before the heist
+	TMap<int32, FDCJob> RetakeJobs;                    // failed result id -> job as it was
+	TMap<int32, FDCSuccessBreakdown> RetakeBreakdowns; // failed result id -> breakdown used
+
 	FDCCriminal* FindCriminalMutable(int32 Id);
 };
