@@ -1,0 +1,22 @@
+{ "traits": [
+  { "id": "night_owl", "displayName": "Night Owl", "description": "+15% at night", "icon": "moon", "negative": false, "effects": [ { "kind": "chanceNight", "value": 0.15 } ] },
+  { "id": "early_bird", "displayName": "Early Bird", "description": "+10% by day", "icon": "sunrise", "negative": false, "effects": [ { "kind": "chanceDay", "value": 0.10 } ] },
+  { "id": "lead_foot", "displayName": "Lead Foot", "description": "-25% duration", "icon": "gauge", "negative": false, "effects": [ { "kind": "durationMult", "value": 0.75 } ] },
+  { "id": "marathoner", "displayName": "Marathoner", "description": "+15% on long jobs", "icon": "timer", "negative": false, "effects": [ { "kind": "chanceLong", "value": 0.15, "threshold": 300 } ] },
+  { "id": "quick_hands", "displayName": "Quick Hands", "description": "+15% on short jobs", "icon": "zap", "negative": false, "effects": [ { "kind": "chanceShort", "value": 0.15, "threshold": 120 } ] },
+  { "id": "lone_wolf", "displayName": "Lone Wolf", "description": "+15% working solo", "icon": "user", "negative": false, "effects": [ { "kind": "chanceSolo", "value": 0.15 } ] },
+  { "id": "partners_wheelman", "displayName": "Ride or Die", "description": "+10% with a Wheelman", "icon": "handshake", "negative": false, "effects": [ { "kind": "chanceWithType", "value": 0.10, "param": "Wheelman" } ] },
+  { "id": "partners_face", "displayName": "Old Partners", "description": "+10% with a Face", "icon": "users", "negative": false, "effects": [ { "kind": "chanceWithType", "value": 0.10, "param": "Face" } ] },
+  { "id": "treasure_hunter", "displayName": "Treasure Hunter", "description": "+20% payout", "icon": "gem", "negative": false, "effects": [ { "kind": "payoutMult", "value": 1.2 } ] },
+  { "id": "fast_learner", "displayName": "Fast Learner", "description": "+50% XP", "icon": "graduation-cap", "negative": false, "effects": [ { "kind": "xpMult", "value": 1.5 } ] },
+  { "id": "tough", "displayName": "Tough", "description": "Half injury chance", "icon": "shield", "negative": false, "effects": [ { "kind": "injuryChanceMult", "value": 0.5 } ] },
+  { "id": "slippery", "displayName": "Slippery", "description": "Half arrest chance", "icon": "wind", "negative": false, "effects": [ { "kind": "arrestMult", "value": 0.5 } ] },
+  { "id": "haggler", "displayName": "Haggler", "description": "-30% job cost", "icon": "badge-percent", "negative": false, "effects": [ { "kind": "costMult", "value": 0.7 } ] },
+  { "id": "vault_rat", "displayName": "Vault Rat", "description": "+10% on vault jobs", "icon": "vault", "negative": false, "effects": [ { "kind": "chanceThreat", "value": 0.10, "param": "Vault" } ] },
+  { "id": "camera_shy", "displayName": "Camera Savvy", "description": "+10% vs cameras", "icon": "cctv", "negative": false, "effects": [ { "kind": "chanceThreat", "value": 0.10, "param": "Cameras" } ] },
+  { "id": "veteran", "displayName": "Veteran", "description": "+10% on tier 3+", "icon": "medal", "negative": false, "effects": [ { "kind": "chanceTierMin", "value": 0.10, "threshold": 3 } ] },
+  { "id": "greedy", "displayName": "Greedy", "description": "Wants a bigger cut", "icon": "hand-coins", "negative": true, "effects": [ { "kind": "fairCutAdd", "value": 0.10 } ] },
+  { "id": "hothead", "displayName": "Hothead", "description": "-5% success", "icon": "flame", "negative": true, "effects": [ { "kind": "chance", "value": -0.05 } ] },
+  { "id": "rat", "displayName": "Rat", "description": "+50% arrest chance", "icon": "rat", "negative": true, "effects": [ { "kind": "arrestMult", "value": 1.5 } ] },
+  { "id": "slow", "displayName": "Slow", "description": "+15% duration", "icon": "snail", "negative": true, "effects": [ { "kind": "durationMult", "value": 1.15 } ] }
+] }

@@ -1,0 +1,14 @@
+{
+  "first": ["Marco", "Dana", "Vic", "Lena", "Theo", "Rosa", "Kai", "Nina", "Andrei", "Yusuf", "Mila", "Jonas", "Priya", "Diego", "Sasha",
+            "Tomas", "Aiko", "Omar", "Keira", "Luca", "Zara", "Ivan", "Noor", "Felix", "Camila", "Dmitri", "Ines", "Rafael", "Jade", "Malik"],
+  "last": ["Reyes", "Kowalski", "Okafor", "Brandt", "Moreau", "Sato", "Quinn", "Vance", "Petrov", "Haddad", "Lindqvist", "Costa", "Novak", "Mensah", "Romero",
+           "Fischer", "Tanaka", "Byrne", "Silva", "Kaya", "Dubois", "Mazur", "Osei", "Varga", "Nakamura", "Ferreira", "Ward", "Ilic", "Ahmed", "Castillo"],
+  "nicknames": {
+    "Wheelman": ["Clutch", "Redline", "Skid", "Torque", "Nitro", "Drift"],
+    "Muscle": ["Brick", "Tank", "Knuckles", "Anvil", "Bull", "Crusher"],
+    "Hacker": ["Static", "Glitch", "Root", "Packet", "Cipher", "Zero"],
+    "Ghost": ["Smoke", "Whisper", "Shade", "Mist", "Echo", "Nobody"],
+    "Face": ["Silk", "Charm", "Velvet", "Dimples", "Promise", "Smiles"],
+    "Safecracker": ["Tumbler", "Click", "Feather", "Dial", "Pins", "Fingers"]
+  }
+}

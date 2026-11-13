@@ -1,0 +1,8 @@
+{ "types": [
+  { "type": "Wheelman",    "abilities": ["getaway", "evasive", "hotwire"],    "traitPool": ["lead_foot", "night_owl", "marathoner", "partners_face", "slippery", "slow", "hothead"] },
+  { "type": "Muscle",      "abilities": ["brawler", "intimidate"],            "traitPool": ["tough", "lone_wolf", "early_bird", "partners_wheelman", "veteran", "hothead", "greedy"] },
+  { "type": "Hacker",      "abilities": ["loop_feed", "kill_alarm", "wire_tap"], "traitPool": ["night_owl", "quick_hands", "fast_learner", "camera_shy", "rat", "slow"] },
+  { "type": "Ghost",       "abilities": ["shadow", "blind_spot", "scanner"],  "traitPool": ["night_owl", "slippery", "lone_wolf", "quick_hands", "greedy", "rat"] },
+  { "type": "Face",        "abilities": ["smooth_talk", "inside_man"],        "traitPool": ["haggler", "early_bird", "treasure_hunter", "partners_wheelman", "veteran", "greedy", "hothead"] },
+  { "type": "Safecracker", "abilities": ["crack_vault", "lockpick", "thermal_lance"], "traitPool": ["marathoner", "treasure_hunter", "vault_rat", "fast_learner", "slow", "rat"] }
+] }

@@ -1,0 +1,18 @@
+{ "abilities": [
+  { "id": "getaway",     "displayName": "Getaway Driver",  "icon": "car-front",      "counters": "Pursuit" },
+  { "id": "hotwire",     "displayName": "Hotwire",         "icon": "key-round",      "counters": "Locks" },
+  { "id": "intimidate",  "displayName": "Intimidate",      "icon": "hand",           "counters": "Witnesses" },
+  { "id": "brawler",     "displayName": "Brawler",         "icon": "swords",         "counters": "Guards" },
+  { "id": "loop_feed",   "displayName": "Loop the Feed",   "icon": "cctv",           "counters": "Cameras" },
+  { "id": "kill_alarm",  "displayName": "Kill the Alarm",  "icon": "bell-off",       "counters": "Alarms" },
+  { "id": "shadow",      "displayName": "Shadow",          "icon": "moon",           "counters": "Patrols" },
+  { "id": "blind_spot",  "displayName": "Blind Spot",      "icon": "eye-off",        "counters": "Cameras" },
+  { "id": "smooth_talk", "displayName": "Smooth Talk",     "icon": "message-circle", "counters": "Witnesses" },
+  { "id": "inside_man",  "displayName": "Inside Man",      "icon": "id-card",        "counters": "Guards" },
+  { "id": "crack_vault", "displayName": "Crack the Vault", "icon": "vault",          "counters": "Vault" },
+  { "id": "lockpick",    "displayName": "Lockpick",        "icon": "key",            "counters": "Locks" },
+  { "id": "scanner",     "displayName": "Police Scanner",  "icon": "radio",          "counters": "Patrols" },
+  { "id": "wire_tap",    "displayName": "Wire Tap",        "icon": "zap-off",        "counters": "Alarms" },
+  { "id": "evasive",     "displayName": "Evasive Driving", "icon": "route",          "counters": "Pursuit" },
+  { "id": "thermal_lance","displayName": "Thermal Lance",  "icon": "flame",          "counters": "Vault" }
+] }

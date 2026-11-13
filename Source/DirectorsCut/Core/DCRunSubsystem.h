@@ -212,4 +212,31 @@ private:
 	TArray<FDCRoom> Rooms;
 	TArray<FDCPerk> PerkOffer;
 	TArray<FDCPerk> PerksTaken;
+
+	// timers (run seconds) and run bookkeeping
+	double NextPostAt = 0.0;
+	double RecruitRefreshAt = 0.0;
+	double NextAutosaveAt = 0.0;
+	int32 LastDawnIndex = 0;
+	int32 MissionsSucceeded = 0;
+	int32 MissionsAttempted = 0;
+	int32 TotalTake = 0;
+	int32 BestMissionTake = 0;
+	FString BestMissionName;
+	int32 RoomsBuilt = 0;
+	int32 PendingPerkOffers = 0;          // queued offers beyond the current one
+	bool bArrestPreventUsed = false;
+	FString EndReason;
+	TMap<int32, double> ArrestedAt;      // fallen criminal id -> run time of arrest (bail window)
+
+	bool bSaveEnabled = true;             // tests/bots may disable disk writes
+	bool bSaveDirty = false;              // save at the end of the current AdvanceTime
+	bool bStateDirty = false;             // broadcast OnRunStateChanged at the end of the current AdvanceTime
+	int32 AdvanceDepth = 0;
+
+	void EnsureData();
+	void ResetRunState();
+	void MarkChanged();
+	void FlushChanged();
+	FString GetSlotName() const;
 };

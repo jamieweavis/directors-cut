@@ -1,0 +1,16 @@
+{ "perks": [
+  { "id": "burner_phones", "displayName": "Burner Phones", "description": "-20% arrest chance", "icon": "smartphone", "effects": [ { "kind": "arrestMult", "value": 0.8 } ] },
+  { "id": "clean_hands", "displayName": "Clean Hands", "description": "First arrest is dropped", "icon": "hand", "effects": [ { "kind": "preventFirstArrest", "value": 1 } ] },
+  { "id": "fixer", "displayName": "The Fixer", "description": "+5% success", "icon": "badge-check", "effects": [ { "kind": "chance", "value": 0.05 } ] },
+  { "id": "night_shift", "displayName": "Night Shift", "description": "+8% at night", "icon": "moon-star", "effects": [ { "kind": "chanceNight", "value": 0.08 } ] },
+  { "id": "fence_network", "displayName": "Fence Network", "description": "+10% payout", "icon": "network", "effects": [ { "kind": "payoutMult", "value": 1.1 } ] },
+  { "id": "fast_cars", "displayName": "Fast Cars", "description": "-15% duration", "icon": "gauge", "effects": [ { "kind": "durationMult", "value": 0.85 } ] },
+  { "id": "street_cred", "displayName": "Street Cred", "description": "Crew accept +5% cut", "icon": "trophy", "effects": [ { "kind": "fairCutAdd", "value": 0.05 } ] },
+  { "id": "cheap_rent", "displayName": "Cheap Rent", "description": "-25% upkeep", "icon": "house", "effects": [ { "kind": "upkeepMult", "value": 0.75 } ] },
+  { "id": "headhunter", "displayName": "Headhunter", "description": "Recruits +1 level", "icon": "user-plus", "effects": [ { "kind": "recruitLevelAdd", "value": 1 } ] },
+  { "id": "field_medic", "displayName": "Field Medic", "description": "-30% injury time", "icon": "heart-pulse", "effects": [ { "kind": "injuryTimeMult", "value": 0.7 } ] },
+  { "id": "loyal_crew", "displayName": "Loyal Crew", "description": "Willingness at least 60%", "icon": "heart-handshake", "effects": [ { "kind": "willMin", "value": 0.6 } ] },
+  { "id": "more_leads", "displayName": "More Leads", "description": "+1 board posting", "icon": "list-plus", "effects": [ { "kind": "boardSize", "value": 1 } ] },
+  { "id": "talent_scout", "displayName": "Talent Scout", "description": "Better recruits", "icon": "star", "effects": [ { "kind": "recruitQualityAdd", "value": 0.5 } ] },
+  { "id": "lucky_charm", "displayName": "Lucky Charm", "description": "+10% loot chance", "icon": "clover", "effects": [ { "kind": "lootChanceAdd", "value": 0.10 } ] }
+] }
