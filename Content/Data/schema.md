@@ -212,3 +212,16 @@ Hothead (chance −0.05), Rat (arrestMult 1.5 for the holder), Slow (durationMul
 ## perks.json
 `{ "perks": [ { "id": "burner_phones", "displayName": "Burner Phones", "description": "-20% arrest chance", "icon": "smartphone", "effects": [ { "kind": "arrestMult", "value": 0.8 } ] } ] }`
 About 15 perks, modern-crime flavoured. No film or theatre puns.
+
+---
+
+## Clarifications (lead, Nov 13, after Wave R1 Data)
+1. **`unlockTier: v`:** tiers ≥ v may post once their `tiers.unlockSuccesses` count is met. Until a room grants it, tiers ≥ 3 never post.
+2. **The Big Score:** once unlocked (a room with `unlockFinal` plus `final.requiredSuccesses`), it is an extra board entry. It never expires, doesn't count toward board size, stays posted after a failure, and there is at most one.
+3. **Recruit levels:** rolled from `tiers.levelRange[unlockedTier-1]`, plus `recruitLevelAdd`.
+4. **Negative traits:** `negativeTraitChance` adds **one** negative trait on top of the positive count from `quality.traits`.
+5. **Loyalty:** `greedy` applies at mission start to each member where Cut > FairCut. `successFair` applies on Success to each member where Cut ≤ FairCut.
+6. **Night jobs:** a job counts as a night job if it starts when hour ≥ dusk or hour < dawn.
+7. **Director's money:** the Director pays the full mission cost and receives Payout × Cut.
+8. **Empty room levels:** an empty `effects` list for a room level is valid.
+9. **Threat coverage:** ≥ 2 counters per threat counting abilities **and** gear. 12 single-threat abilities can't cover all 8 threats twice.
