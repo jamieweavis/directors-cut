@@ -18,4 +18,6 @@ namespace DCTags
 {
 	// Component tag on lights that should fade on during the room reveal.
 	inline const FName RoomLight = TEXT("RoomLight");
+	// Scene component tag on each bunk mattress: top centre, +X runs head to foot. Crew sleep here at night.
+	inline const FName Bed = TEXT("DC.Bed");
 }
