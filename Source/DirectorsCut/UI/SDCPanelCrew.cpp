@@ -335,6 +335,7 @@ TSharedRef<SWidget> SDCRoot::BuildCrew()
 
 	TSharedRef<SUniformGridPanel> Grid = SNew(SUniformGridPanel).SlotPadding(FMargin(5.f));
 	for (int32 i = 0; i < Roster.Num(); ++i) { Grid->AddSlot(i % 2, i / 2)[CrewCard(Roster[i], false)]; }
+	if (Roster.Num() == 1) { Grid->AddSlot(1, 0)[SNew(SSpacer)]; }
 
 	TSharedRef<SVerticalBox> Left = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(-5.f, -5.f, -5.f, 0.f)[Grid];
@@ -506,6 +507,7 @@ TSharedRef<SWidget> SDCRoot::BuildWorkbench()
 	Cat.StableSort([](const FDCGearItem& X, const FDCGearItem& Y) { return X.Slot != Y.Slot ? (int32)X.Slot < (int32)Y.Slot : X.Price < Y.Price; });
 	TSharedRef<SUniformGridPanel> Shop = SNew(SUniformGridPanel).SlotPadding(FMargin(3.f));
 	for (int32 i = 0; i < Cat.Num(); ++i) { Shop->AddSlot(i % 2, i / 2)[GearCard(Cat[i], false)]; }
+	if (Cat.Num() == 1) { Shop->AddSlot(1, 0)[SNew(SSpacer)]; }
 
 	TSharedRef<SWidget> LeftCol = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 10.f)
@@ -555,6 +557,7 @@ TSharedRef<SWidget> SDCRoot::BuildRecruits()
 	TSharedRef<SUniformGridPanel> Grid = SNew(SUniformGridPanel).SlotPadding(FMargin(5.f));
 	const TArray<FDCCriminal>& Rec = R->GetRecruits();
 	for (int32 i = 0; i < Rec.Num(); ++i) { Grid->AddSlot(i % 2, i / 2)[CrewCard(Rec[i], true)]; }
+	if (Rec.Num() == 1) { Grid->AddSlot(1, 0)[SNew(SSpacer)]; }
 
 	auto Fin = [](FName IconName, const FString& Name, TAttribute<FText> V, TAttribute<FSlateColor> Col)
 	{

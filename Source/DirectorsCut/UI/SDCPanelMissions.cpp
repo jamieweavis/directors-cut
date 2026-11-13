@@ -88,6 +88,7 @@ TSharedRef<SWidget> SDCRoot::BuildMissions()
 	{
 		TSharedRef<SUniformGridPanel> Grid = SNew(SUniformGridPanel).SlotPadding(FMargin(6.f));
 		for (int32 i = 0; i < Board.Num(); ++i) { Grid->AddSlot(i % 3, i / 3)[MissionCard(*Board[i])]; }
+		for (int32 i = Board.Num(); i < 3; ++i) { Grid->AddSlot(i, 0)[SNew(SSpacer)]; } // keep three columns
 		Body->AddSlot().AutoHeight().Padding(-6.f, -6.f, -6.f, 0.f)[Grid];
 	}
 
