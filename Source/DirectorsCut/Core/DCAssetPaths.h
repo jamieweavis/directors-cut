@@ -26,6 +26,9 @@ namespace DCPaths
 	inline const TCHAR* MatEmissive = TEXT("/Game/DC/Materials/M_DC_Emissive.M_DC_Emissive");
 	inline const TCHAR* MatCriminal = TEXT("/Game/DC/Materials/M_DC_Criminal.M_DC_Criminal");
 	inline const TCHAR* MatGlass    = TEXT("/Game/DC/Materials/M_DC_Glass.M_DC_Glass");
+	//   M_DC_Highlight: translucent ADDITIVE fresnel glow for UMeshComponent::SetOverlayMaterial (hover). Params: Color(vec), Strength
+	//   (created by Agent D in Wave 1; until merged, fall back to M_DC_Glass with low Opacity)
+	inline const TCHAR* MatHighlight = TEXT("/Game/DC/Materials/M_DC_Highlight.M_DC_Highlight");
 
 	// Characters (copied from the UE template; references are internal to /Game/Characters/Mannequins)
 	inline const TCHAR* MannyMesh     = TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple");
