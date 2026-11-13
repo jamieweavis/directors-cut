@@ -227,7 +227,7 @@ void ADCDayNight::Apply(float H, float DeltaSeconds)
 	{
 		const FVector Dir = Sun->GetForwardVector();
 		const float SinEl = FMath::Max(-Dir.Z, 0.12f);
-		const float Beam = BeamK * (bDay ? 0.6f * FMath::Pow(SunA, 0.6f) : 0.2f * MoonA);
+		const float Beam = BeamK * (bDay ? 0.75f * FMath::Pow(SunA, 0.6f) : 0.06f * MoonA);
 		const FLinearColor BeamCol = bDay ? FMath::Lerp(FLinearColor(1.f, 0.55f, 0.25f), FLinearColor(1.f, 0.93f, 0.82f), FMath::Pow(SunA, 1.2f)) : FLinearColor(0.5f, 0.65f, 1.f);
 		if (BeamMat)
 		{
@@ -240,7 +240,7 @@ void ADCDayNight::Apply(float H, float DeltaSeconds)
 			if (!C) { continue; }
 			C->SetVisibility(Beam > 0.002f);
 			if (Beam <= 0.002f) { continue; }
-			const float Len = FMath::Min(B.Centre.Z / SinEl, 1300.f);
+			const float Len = FMath::Min(B.Centre.Z / SinEl, 750.f);
 			const FVector Mid = B.Centre + Dir * (Len * 0.5f);
 			C->SetWorldLocationAndRotation(Mid, FRotationMatrix::MakeFromZX(Dir, B.Along).Rotator());
 			C->SetWorldScale3D(FVector(B.W * 0.9f, B.H * 0.6f, Len) / 100.f);

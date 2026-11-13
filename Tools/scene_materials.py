@@ -329,14 +329,21 @@ def beam():
     wp = expr(m, unreal.MaterialExpressionWorldPosition, -900, 550)
     df = expr(m, unreal.MaterialExpressionDepthFade, -600, 600)
     df.set_editor_property("fade_distance_default", 40.0)
+    lp = expr(m, unreal.MaterialExpressionTransformPosition, -700, 700)
+    lp.set_editor_property("transform_source_type", unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD)
+    lp.set_editor_property("transform_type", unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
+    MEL.connect_material_expressions(wp, "", lp, "")
     code = NOISE_LIB + r"""
-float soft = pow(saturate(abs(dot(normalize(N), normalize(V)))), 2.0);
+// beams are unit cylinders (local z -50..50, light travels +z): fade in from the opening, out towards the end; kills the caps
+float lz = LP.z / 50.0;
+float along = smoothstep(-1.0, -0.75, lz) * (1.0 - smoothstep(0.1, 0.95, lz));
+float soft = pow(saturate(abs(dot(normalize(N), normalize(V)))), 2.0) * along;
 float k = floor(T * 22.0);
 float f = 1.0 - Flicker * frac(sin(k * 91.7) * 43758.5);
 float motes = 0.75 + 0.5 * d.n(P * 0.05 + float3(0, 0, T * 8.0));
 return Color.rgb * Strength * soft * f * motes * DF;
 """
-    cu = custom(m, code, [("N", nrm), ("V", cam), ("T", t), ("P", wp), ("Color", c), ("Strength", s), ("Flicker", fl), ("DF", df)])
+    cu = custom(m, code, [("N", nrm), ("V", cam), ("T", t), ("P", wp), ("Color", c), ("Strength", s), ("Flicker", fl), ("DF", df), ("LP", lp)])
     MEL.connect_material_property(cu, "", MP.MP_EMISSIVE_COLOR)
     return m
 
