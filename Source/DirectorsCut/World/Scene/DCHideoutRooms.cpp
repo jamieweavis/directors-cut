@@ -54,8 +54,8 @@ void ADCHideoutBuilder::BuildOffice()
 	CurGroup = DCGroups::Level1;
 	// concrete floor with a worn dark rug under the desk zone
 	Deco(EDCShape::Cube, FVector(60, -30, 0.6f), FVector(320, 420, 1.2f), "Fabric");
-	Pendant(FVector(40, -90, 255), true, true, 26.f);
-	Pendant(FVector(40, 60, 255), true, false);
+	Pendant(FVector(40, -90, 255), true, true, 45.f);
+	Pendant(FVector(40, 60, 255), true, true, 30.f);
 	LedBatten(FVector(-300, -230, 300), 150.f, 0.f, true, 30.f);
 
 	// ---------------- Desk: steel desk, laptop, burner phones, cash counter
