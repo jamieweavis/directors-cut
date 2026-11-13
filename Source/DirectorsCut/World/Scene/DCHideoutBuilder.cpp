@@ -40,7 +40,7 @@ namespace DCScene
 	constexpr float PartH = 55.f;    // interior partitions: knee height so no room hides its neighbour
 	constexpr float KneeH = 45.f;    // camera-facing exterior walls (cutaway)
 	constexpr float WallT = 20.f;
-	constexpr float WinBottom = 170.f, WinTop = 342.f;
+	constexpr float WinBottom = 125.f, WinTop = 342.f;
 }
 using namespace DCScene;
 
@@ -129,7 +129,7 @@ void ADCHideoutBuilder::InitAssets()
 	Proc("Plant",       5, C(0.03f, 0.07f, 0.03f), C(0.015f, 0.04f, 0.02f), 0.7f, 0.f, 3.f, 0.f);
 	Proc("CarPaint",    7, C(0.012f, 0.013f, 0.015f), C(0.02f, 0.02f, 0.022f), 0.18f, 0.6f, 0.3f, 0.1f);
 	Proc("CarGrey",     7, C(0.10f, 0.105f, 0.11f), C(0.06f, 0.06f, 0.065f), 0.22f, 0.7f, 0.3f, 0.2f);
-	Proc("CarWhite",    7, C(0.50f, 0.51f, 0.51f), C(0.32f, 0.32f, 0.32f), 0.3f, 0.2f, 0.3f, 0.5f);
+	Proc("CarWhite",    7, C(0.30f, 0.31f, 0.31f), C(0.2f, 0.2f, 0.2f), 0.35f, 0.2f, 0.3f, 0.6f);
 	Proc("Tire",        0, C(0.015f, 0.015f, 0.015f), C(0.025f, 0.025f, 0.025f), 0.9f);
 	// --- emissive (M_DC_Neon, no flicker unless asked)
 	Emis("LedCool",     FLinearColor(0.82f, 0.9f, 1.f), 30.f);
@@ -778,7 +778,12 @@ void ADCHideoutBuilder::BuildShell(const FRoomDef& Def)
 					Deco(EDCShape::Cube, LP(At, Fix + Inward * (WallT * 0.5f + 12.f), (TallH - 26.f) * 0.5f), LS(22.f, 22.f, TallH - 26.f), "SteelBlack");
 					Deco(EDCShape::Cube, LP(At, Fix + Inward * (WallT * 0.5f + 12.f), 30.f), LS(26.f, 26.f, 60.f), "Hazard");
 				}
-				for (const FOpening& W : Windows) { FactoryWindow(bAlongX, Fix, Inward, W); }
+				for (const FOpening& W : Windows)
+				{
+					FactoryWindow(bAlongX, Fix, Inward, W);
+					const FVector LocalC = bAlongX ? FVector(W.Center, Fix, (W.Bottom + W.Top) * 0.5f) : FVector(Fix, W.Center, (W.Bottom + W.Top) * 0.5f);
+					ShaftSpecs.Add({ CurRoom->GetActorTransform().TransformPosition(LocalC), bAlongX ? FVector(1, 0, 0) : FVector(0, 1, 0), W.Width, W.Top - W.Bottom });
+				}
 			}
 			else
 			{
@@ -931,6 +936,7 @@ void ADCHideoutBuilder::BuildLightingAndPost()
 		DayNight->DustMat = Cast<UMaterialInstanceDynamic>(M("Dust"));
 		DayNight->LampMat = Cast<UMaterialInstanceDynamic>(M("LampHead"));
 		for (ULocalFogVolumeComponent* LF : SunFogs) { DayNight->AddShaftFog(LF); }
+		for (const FShaftSpec& SS : ShaftSpecs) { DayNight->AddShaft(SS.Centre, SS.Along, SS.W, SS.H); }
 		for (const FStreetSpec& SS : StreetSpecs) { DayNight->AddStreetLight(SS.Pos, SS.Target, SS.Col, SS.Cd, SS.Radius, SS.Cone, SS.bShadow); }
 	}
 }

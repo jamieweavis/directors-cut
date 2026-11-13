@@ -39,6 +39,9 @@ public:
 	/** Exterior light that switches on at dusk (owned by this actor). Intensity in candelas. */
 	void AddStreetLight(const FVector& WorldPos, const FVector& WorldTarget, const FLinearColor& Color, float Candelas, float Radius, float ConeOuter, bool bShadows);
 
+	/** Fake god-ray volume through a window/skylight (world centre of the opening, its along-wall axis, size). */
+	void AddShaft(const FVector& Centre, const FVector& Along, float W, float H);
+
 	/** Hour currently displayed (smoothed). */
 	float GetDisplayHour() const { return DisplayHour; }
 
@@ -52,6 +55,10 @@ protected:
 	TArray<FShaft> Shafts;
 	struct FStreet { TWeakObjectPtr<ULightComponent> Light; float Base = 0.f; float Seed = 0.f; };
 	TArray<FStreet> Streets;
+	struct FBeam { TWeakObjectPtr<class UStaticMeshComponent> Mesh; FVector Centre; FVector Along; float W = 0.f; float H = 0.f; };
+	TArray<FBeam> Beams;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> BeamMat;
+	float BeamK = 1.f;
 
 	float DisplayHour = 17.5f;
 	bool bHaveHour = false;

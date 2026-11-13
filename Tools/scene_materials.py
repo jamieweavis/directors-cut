@@ -9,7 +9,7 @@
 #                             12 cloth 13 rubber mat 14 polished concrete slab (saw cuts) 15 painted block wall
 #                             16 diamond plate 17 plywood/OSB 18 asphalt
 #   M_DC_Neon      : unlit emissive with flicker. Color, Strength, Flicker(0..1), Seed
-#   M_DC_Beam      : translucent additive soft-edged beam (projector / fake shafts). Color, Strength, Flicker
+#   M_DC_Beam      : translucent additive soft-edged beam (fake light shafts). Color, Strength, Flicker
 #   M_DC_Rain      : translucent window with running rain streaks. Color, Opacity, Strength
 #   M_DC_Screen    : unlit monitor content (CCTV feed / data UI / city map). Color, Strength, Mode(0..2), Seed
 #   M_DC_Window    : unlit factory-window glass that glows with the sky. SkyColor, Strength, Grime

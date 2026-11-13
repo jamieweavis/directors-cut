@@ -9,6 +9,8 @@
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Engine/PostProcessVolume.h"
 #include "Engine/TextureCube.h"
+#include "Engine/StaticMesh.h"
+#include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -87,8 +89,35 @@ void ADCDayNight::BeginPlay()
 	FParse::Value(Cmd, TEXT("DCEVDay="), EVDay);
 	FParse::Value(Cmd, TEXT("DCEVNight="), EVNight);
 	FParse::Value(Cmd, TEXT("DCSkyDay="), SkyDay);
+	FParse::Value(Cmd, TEXT("DCBeamK="), BeamK);
 	FParse::Value(Cmd, TEXT("DCSkyNight="), SkyNight);
 	Sky->RecaptureSky();
+}
+
+void ADCDayNight::AddShaft(const FVector& Centre, const FVector& Along, float W, float H)
+{
+	static UStaticMesh* Cyl = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	if (!BeamMat)
+	{
+		if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/DC/Materials/M_DC_Beam.M_DC_Beam")))
+		{
+			BeamMat = UMaterialInstanceDynamic::Create(Base, this);
+			BeamMat->SetScalarParameterValue("Flicker", 0.f);
+		}
+	}
+	if (!Cyl || !BeamMat) { return; }
+	UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
+	C->SetStaticMesh(Cyl);
+	C->SetMaterial(0, BeamMat);
+	C->SetMobility(EComponentMobility::Movable);
+	C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	C->SetCastShadow(false);
+	C->bAffectDistanceFieldLighting = false;
+	C->bVisibleInRayTracing = false;
+	C->SetupAttachment(GetRootComponent());
+	C->RegisterComponent();
+	AddInstanceComponent(C);
+	Beams.Add({ C, Centre, Along, W, H });
 }
 
 void ADCDayNight::AddShaftFog(ULocalFogVolumeComponent* Fog)
@@ -192,6 +221,29 @@ void ADCDayNight::Apply(float H, float DeltaSeconds)
 		{
 			const float K = 0.25f + 0.75f * SunA;
 			F->SetRadialFogExtinction(S.Base * K);
+		}
+	}
+	// fake god rays: soft additive volumes from each opening along the light direction (cheap: ~30 meshes)
+	{
+		const FVector Dir = Sun->GetForwardVector();
+		const float SinEl = FMath::Max(-Dir.Z, 0.12f);
+		const float Beam = BeamK * (bDay ? 0.6f * FMath::Pow(SunA, 0.6f) : 0.2f * MoonA);
+		const FLinearColor BeamCol = bDay ? FMath::Lerp(FLinearColor(1.f, 0.55f, 0.25f), FLinearColor(1.f, 0.93f, 0.82f), FMath::Pow(SunA, 1.2f)) : FLinearColor(0.5f, 0.65f, 1.f);
+		if (BeamMat)
+		{
+			BeamMat->SetScalarParameterValue("Strength", Beam);
+			BeamMat->SetVectorParameterValue("Color", BeamCol);
+		}
+		for (const FBeam& B : Beams)
+		{
+			UStaticMeshComponent* C = B.Mesh.Get();
+			if (!C) { continue; }
+			C->SetVisibility(Beam > 0.002f);
+			if (Beam <= 0.002f) { continue; }
+			const float Len = FMath::Min(B.Centre.Z / SinEl, 1300.f);
+			const FVector Mid = B.Centre + Dir * (Len * 0.5f);
+			C->SetWorldLocationAndRotation(Mid, FRotationMatrix::MakeFromZX(Dir, B.Along).Rotator());
+			C->SetWorldScale3D(FVector(B.W * 0.9f, B.H * 0.6f, Len) / 100.f);
 		}
 	}
 	if (DustMat) { DustMat->SetScalarParameterValue("Strength", 1.f + 9.f * SunA); }

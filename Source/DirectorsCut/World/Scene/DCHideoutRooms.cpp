@@ -480,7 +480,7 @@ void ADCHideoutBuilder::BuildGarage()
 	for (int32 i = 0; i < 3; ++i) { Deco(EDCShape::Cube, FVector(-300 + J(i, 6), 640, 7 + i * 14.f), FVector(110, 110, 12), "Wood", FRotator(0, J(i + 2, 8), 0)); }
 	CurGroup = DCGroups::Level2;
 	Car(FVector(0, -730, 0), 0.f, "CarWhite", true); // the van
-	LedBatten(FVector(0, -730, 300), 200.f, 0.f, true, 40.f);
+	LedBatten(FVector(0, -730, 300), 200.f, 0.f, true, 22.f);
 	CurGroup = DCGroups::Level3;
 	// two-post lift around the saloon + tool chest
 	for (float X : { -150.f, 190.f }) { Deco(EDCShape::Cube, FVector(X, DY - 120, 150), FVector(26, 26, 300), "PaintBlue"); Deco(EDCShape::Cube, FVector(X, DY - 120, 6), FVector(50, 50, 12), "PaintBlue"); }
@@ -867,7 +867,7 @@ void ADCHideoutBuilder::BuildYard()
 	Deco(EDCShape::Cube, FVector(1312, -900, 330), FVector(16, 34, 20), "SteelBlack");
 	Deco(EDCShape::Cube, FVector(1320.5f, -900, 325), FVector(1, 28, 10), "LampHead", FRotator::ZeroRotator, false);
 	StreetSpecs.Add({ FVector(1335, -900, 320), FVector(1550, -900, 0), FLinearColor(0.85f, 0.92f, 1.f), 700.f, 1400.f, 65.f, false });
-	for (const FVector& P : { FVector(1760, -1100, 0), FVector(1760, 200, 0) })
+	for (const FVector& P : { FVector(1700, -1620, 0), FVector(1760, 200, 0) })
 	{
 		Tube(P, P + FVector(0, 0, 560), 12.f, "PaintGrey");
 		Tube(P + FVector(0, 0, 550), P + FVector(-140, 0, 570), 7.f, "PaintGrey");

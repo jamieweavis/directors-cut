@@ -168,6 +168,8 @@ protected:
 	UPROPERTY() TArray<TObjectPtr<ULocalFogVolumeComponent>> SunFogs;
 	struct FStreetSpec { FVector Pos; FVector Target; FLinearColor Col; float Cd; float Radius; float Cone; bool bShadow; };
 	TArray<FStreetSpec> StreetSpecs;
+	struct FShaftSpec { FVector Centre; FVector Along; float W; float H; }; // world space, windows + skylights
+	TArray<FShaftSpec> ShaftSpecs;
 	double Time = 0.0;
 	double PerfAccum = 0.0;
 	int32 PerfFrames = 0;
