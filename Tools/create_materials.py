@@ -13,7 +13,10 @@ def fresh_material(name):
     path = f"{MAT_DIR}/{name}"
     if EAL.does_asset_exist(path):
         EAL.delete_asset(path)
-    return AT.create_asset(name, MAT_DIR, unreal.Material, unreal.MaterialFactoryNew())
+    m = AT.create_asset(name, MAT_DIR, unreal.Material, unreal.MaterialFactoryNew())
+    # the scene batches props into instanced static meshes: every project material must allow it
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    return m
 
 
 def vparam(m, name, default, x, y):

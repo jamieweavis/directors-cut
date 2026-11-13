@@ -1,15 +1,18 @@
 // Director's Cut — builds the whole hideout diorama procedurally at runtime (Agent D owns World/Scene/).
 // Spawned by ADCGameMode::StartPlay before BeginPlay is dispatched. Must be deterministic and fast (< 1 s).
 //
+// The look: an industrial warehouse converted into a crew base (concrete, brick, steel, chain-link, LED, monitors).
 // Layout (world, cm; camera looks from -X-Y towards +X+Y so +X/+Y walls are the tall "back" walls):
 //   Rows X:  R1 [-1300,-500]  R2 [-500,500]  R3 [500,1300]      Cols Y: A [-1400,-400]  B [-400,400]  C [400,1600]
-//   Office R2B (centre) · Workshop R2A · Garage R3A · Screening Room R2-3 x C · Lounge R1A · Server Closet R1B
-//   Lawyer R1C(front half) · Clinic R1C(back half). R3B is open void (the street notch behind the office).
+//   Office R2B (centre) · Workshop R2A · Garage R3A · Ops Room R2-3 x C · Bunkroom (Lounge) R1A · Server Room R1B
+//   Lawyer R1C(front half) · Clinic R1C(back half). R3B is the open yard (street notch behind the office).
+// Exterior back walls carry big steel-mullioned factory windows; interior rooms get roof skylights. A hidden roof casts
+// shadows only, so the sun (ADCDayNight) reaches the floors exclusively through the glazing -> moving window patterns.
 //
 // Dev flags (World/Scene only):
 //   -DCSceneShots=wide,Office,Lounge,...   scene-review camera screenshots (independent of the gameplay rig), then quit
 //   -DCSceneShotDir=/abs/dir  -DCSceneShotDelay=8
-//   -DCExposure=<EV bias>  -DCLightScale=<mult>   tune exposure / practical brightness without rebuilding
+//   -DCLightScale=<mult>   practical brightness without rebuilding.   Day/night flags: see DCDayNight.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -19,6 +22,7 @@
 
 class ADCRoomModule;
 class ADCStation;
+class ADCDayNight;
 class UStaticMesh;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
@@ -27,11 +31,13 @@ class ULightComponent;
 class UPointLightComponent;
 class USpotLightComponent;
 class URectLightComponent;
+class ULocalFogVolumeComponent;
 class ACameraActor;
+class APostProcessVolume;
 
 
 enum class EDCShape : uint8 { Cube, Cylinder, Sphere, Cone, Plane };
-struct FDCQuad { float X, Y, Z, W; }; // sheet (x, y, size, height) / glyph segment (x0, y0, x1, y1)
+struct FDCQuad { float X, Y, Z, W; }; // sheet (x, y, size, height)
 
 UCLASS()
 class DIRECTORSCUT_API ADCHideoutBuilder : public AActor
@@ -41,12 +47,13 @@ public:
 	ADCHideoutBuilder();
 
 	/** Spawns every room module (all 8, each with Shell/Locked/Building/Level groups), stations, spawn zones,
-	 *  garage doors, lights, fog, and post-process. Rooms start Locked except the Office (Built L1). */
+	 *  garage doors, lights, fog, post-process and the day/night rig. Rooms start Locked except the Office (Built L1). */
 	void BuildHideout();
 	bool IsBuilt() const { return bBuilt; }
 
 	ADCRoomModule* GetRoom(EDCRoomType Type) const;
 	const TArray<ADCRoomModule*>& GetRooms() const { return RoomPtrs; }
+	ADCDayNight* GetDayNight() const { return DayNight; }
 
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -54,6 +61,8 @@ protected:
 	bool bBuilt = false;
 	UPROPERTY() TArray<TObjectPtr<ADCRoomModule>> Rooms;
 	TArray<ADCRoomModule*> RoomPtrs;
+	UPROPERTY() TObjectPtr<ADCDayNight> DayNight;
+	UPROPERTY() TObjectPtr<APostProcessVolume> PostVolume;
 
 	// ---------------------------------------------------------------- materials
 	UPROPERTY() TMap<FName, TObjectPtr<UMaterialInterface>> Mats;
@@ -78,14 +87,20 @@ protected:
 	void Deco(EDCShape Shape, const FVector& Loc, const FVector& Size, FName Mat, const FRotator& Rot = FRotator::ZeroRotator, bool bShadow = true);
 	/** Cylinder between two local points. */
 	void Tube(const FVector& A, const FVector& B, float Dia, FName Mat, bool bShadow = true);
+	/** Box between two local points (square section). */
+	void Bar(const FVector& A, const FVector& B, float W, float H, FName Mat, bool bShadow = true);
 	/** Individual mesh component on Owner attached to Parent (relative transform). */
 	UStaticMeshComponent* Single(AActor* Owner, USceneComponent* Parent, EDCShape Shape, const FVector& Loc, const FVector& Size, UMaterialInterface* Mat, const FRotator& Rot = FRotator::ZeroRotator);
 	/** Walkable / blocking architecture (floors, walls) in CurRoom Shell. bFloor keeps Visibility blocking. */
 	UStaticMeshComponent* Solid(const FVector& Loc, const FVector& Size, FName Mat, bool bFloor);
+	/** Shadow-only geometry (hidden in game, casts shadows): the roof and skylight mullions. On this actor, world space. */
+	void ShadowCaster(const FVector& WorldLoc, const FVector& Size);
 
 	struct FOpening { float Center; float Width; float Bottom; float Top; };
 	/** A wall run along X (bAlongX) or Y at perpendicular coord Fixed, from A to B, with openings. */
 	void WallRun(bool bAlongX, float Fixed, float A, float B, float Z0, float Z1, float Thick, const TArray<FOpening>& Ops, FName Mat, bool bSolid);
+	/** Steel-mullioned factory window filling an opening of a wall run (frame, mullion grid, glowing glass, sill). */
+	void FactoryWindow(bool bAlongX, float Fixed, float Inward, const FOpening& O);
 
 	// lights (attached to CurRoom, put in CurGroup)
 	float LightScale = 1.f;
@@ -102,29 +117,47 @@ protected:
 	UStaticMeshComponent* SP(EDCShape Shape, const FVector& Loc, const FVector& Size, FName Mat, const FRotator& Rot = FRotator::ZeroRotator, bool bShadow = true);
 	void SPTube(const FVector& A, const FVector& B, float Dia, FName Mat);
 
+	// ---------------------------------------------------------------- prop kit (room-local; bOnStation => SP on CurStation)
+	bool bKitOnStation = false;
+	void K(EDCShape Shape, const FVector& Loc, const FVector& Size, FName Mat, const FRotator& Rot = FRotator::ZeroRotator, bool bShadow = true);
+	void KTube(const FVector& A, const FVector& B, float Dia, FName Mat);
+	/** Wall/desk monitor: bezel + emissive screen facing local -X rotated by Yaw. */
+	void Monitor(const FVector& C, float W, float H, float Yaw, FName ScreenMat, float Pitch = 0.f);
+	void Car(const FVector& C, float Yaw, FName Paint, bool bVan);
+	void OfficeChair(const FVector& C, float Yaw);
+	void Crate(const FVector& C, const FVector& S, float Yaw, FName Mat);
+	void ShelfUnit(const FVector& C, float Yaw, float Len, int32 Seed);
+	void PalletRack(const FVector& C, float Yaw, int32 Bays, int32 Seed);
+	void Pendant(const FVector& C, bool bWarm, bool bLight, float Cd = 40.f);
+	void LedBatten(const FVector& C, float Len, float Yaw, bool bLight, float Cd = 60.f);
+	void Duffel(const FVector& C, float Yaw, FName Mat);
+
 	// generic dressing helpers
-	void Sheet(const FVector& Loc, const FVector& Size, float Yaw = 0.f);           // dust sheet over a shape (Locked)
-	void Tape(const FVector& A, const FVector& B);                                  // hazard tape strip
-	void NeonText(const FString& Text, const FVector& Origin, const FVector& Right, const FVector& Up, float Unit, float Dia, FName Mat, bool bVertical = false);
+	void Sheet(const FVector& Loc, const FVector& Size, float Yaw = 0.f);           // plastic sheet over a shape (Locked)
+	void Tape(const FVector& A, const FVector& B);                                  // caution tape strip
 	void Scaffold(const FVector& From, const FVector& To, float Height);             // Building group scaffolding along a wall
 	void LockedDressing(const FBox2D& Rect, const TArray<FDCQuad>& Sheets);        // sheets (x,y,size,height), tape, rim light
 	void BuildingDressing(const FBox2D& Rect);
+	void SunDust(const FVector& A, const FVector& B, int32 Count, float Spread);     // dust motes along a sun path (room local)
+	ULocalFogVolumeComponent* ShaftFog(const FVector& Loc, const FVector& Radius, float Density);
 
 	// ---------------------------------------------------------------- layout
-	struct FRoomDef { EDCRoomType Type; FBox2D Rect; FName FloorMat; FName WallMat; bool bWainscot; };
+	struct FRoomDef { EDCRoomType Type; FBox2D Rect; FName FloorMat; FName WallMat; bool bSkylight; };
 	TArray<FRoomDef> Defs;
 	TMap<uint8, TArray<TPair<int32, FOpening>>> RoomOpenings; // room -> (side, opening) side: 0 +X,1 +Y,2 -X,3 -Y
 	ADCRoomModule* SpawnRoom(const FRoomDef& Def);
 	void BuildShell(const FRoomDef& Def);
+	void BuildRoof();
 
 	void BuildOffice();
 	void BuildLounge();
 	void BuildWorkshop();
 	void BuildGarage();
-	void BuildScreening();
+	void BuildOpsRoom();
 	void BuildClinic();
-	void BuildServerCloset();
+	void BuildServerRoom();
 	void BuildLawyer();
+	void BuildYard();
 	void BuildLightingAndPost();
 	void SetCVars();
 
@@ -132,6 +165,9 @@ protected:
 	struct FFlicker { TWeakObjectPtr<ULightComponent> Light; float Base; float Rate; float Depth; float Seed; };
 	TArray<FFlicker> Flickers;
 	void AddFlicker(ULightComponent* L, float Rate, float Depth);
+	UPROPERTY() TArray<TObjectPtr<ULocalFogVolumeComponent>> SunFogs;
+	struct FStreetSpec { FVector Pos; FVector Target; FLinearColor Col; float Cd; float Radius; float Cone; bool bShadow; };
+	TArray<FStreetSpec> StreetSpecs;
 	double Time = 0.0;
 	double PerfAccum = 0.0;
 	int32 PerfFrames = 0;
