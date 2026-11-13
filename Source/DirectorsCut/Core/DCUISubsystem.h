@@ -42,11 +42,13 @@ public:
 
 private:
 	// ═══ Agent C owns everything below this line ═══
+	friend class SDCRoot;
 	virtual void Deinitialize() override;
 	void RemoveRoot();
 
 	EDCPanel OpenPanelType = EDCPanel::None;
 	TWeakObjectPtr<APlayerController> OwningPC;
-	TSharedPtr<class SWidget> Root;
+	TSharedPtr<class SDCRoot> Root;
 	TWeakObjectPtr<class UGameViewportClient> RootViewport;
+	TSharedPtr<class IInputProcessor> Hotkeys;
 };
