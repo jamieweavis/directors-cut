@@ -8,6 +8,9 @@
 #include "DCRoomModule.generated.h"
 
 class ADCStation;
+class ULightComponent;
+class UStaticMeshComponent;
+class UMaterialInstanceDynamic;
 
 UCLASS()
 class DIRECTORSCUT_API ADCRoomModule : public AActor
@@ -37,8 +40,42 @@ public:
 	FVector GetFocusPoint() const;
 	const TArray<ADCStation*>& GetStations() const { return Stations; }
 
+	// ── Additions (Agent E) ──────────────────────────────────────────────────
+	bool IsRevealPlaying() const { return bRevealing; }
+	/** Total reveal length (seconds). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DC") float RevealDuration = 3.2f;
+	/** Whether the reveal drives the camera (pan over and back). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DC") bool bRevealMovesCamera = true;
+
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Root;
+	virtual void Tick(float DeltaSeconds) override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+
+	// Reveal state
+	bool bRevealing = false;
+	float RevealTime = 0.f;
+	int32 RevealLevel = 1;
+	EDCRoomState RevealFromState = EDCRoomState::Locked;
+	bool bRevealSwapped = false;
+	bool bRevealCameraReturned = false;
+	struct FRevealLight { TWeakObjectPtr<ULightComponent> Light; float Target = 0.f; float Start = 0.f; float Seed = 0.f; };
+	TArray<FRevealLight> RevealLights;
+	TMap<TWeakObjectPtr<ULightComponent>, float> LightBaseIntensity;
+	TMap<TWeakObjectPtr<UPrimitiveComponent>, TEnumAsByte<ECollisionEnabled::Type>> OriginalCollision;
+	UPROPERTY() TArray<TObjectPtr<USceneComponent>> TempScaffold;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> DustPuff;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> DustMID;
+	FName DustParam = NAME_None;
+	float DustBaseValue = 1.f;
+
+	void RevealSwapToBuilt();
+	void FinishReveal();
+	void SpawnFallbackScaffold();
+	void ClearTempScaffold();
+	void SpawnDustPuff();
+	float GetLightBase(ULightComponent* L);
+	bool GroupHasContent(FName Group) const;
 	TMap<FName, TArray<TWeakObjectPtr<USceneComponent>>> Groups;
 	UPROPERTY() TArray<TObjectPtr<ADCStation>> Stations;
 	EDCRoomState CurrentState = EDCRoomState::Locked;

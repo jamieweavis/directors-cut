@@ -175,3 +175,23 @@ Every constant from PLAN §2.7–2.10. Key names:
 }
 ```
 `{name}`, `{job}`, `{tier}` and `{amount}` are substituted by the Sim/UI.
+
+---
+
+## Clarifications (lead, after Wave 1 B)
+
+1. **Payout tier multiplier.** Payout = rolled `payoutRange` × `tierPayoutMult^(boardTier − 1)`. A job offered at its own tier has boardTier = job.tier. The `Tier` in the difficulty formula is also the board tier.
+2. **Board size.** Night 1 shows `startingBoard` jobs. After that the board size is `max(baseJobBoard, room JobBoardSize) + perk JobBoardSize`.
+3. **`{amount}` formatting.** `{amount}` is substituted already formatted (for example "$12,500", or a plain number for counts). Strings never contain "$".
+4. **How modifiers stack across sources** (rooms + perks):
+   - Additive: `IdleLoyalty`, `LuckBonus`, `StatBonus`, `ChanceBonus`, `FairCutBonus`, `RecruitLevelBonus`, `Retakes`, and `JobBoardSize` from perks.
+   - Additive, but the total is capped at 0.5: `GearDiscount`.
+   - Multiplicative: `PayoutMult`, `UpkeepMult`, `ArrestMult`, `InjuryMult`.
+   - Max: `RosterCap`, `CrewsPerNight`, `GearSlots`, `GearTier`, `InjuryHealRate`, `MinWillingness`, and `JobBoardSize` from rooms.
+   - Present or absent: `Intel`, `UnlockHeavyJobs`, `UnlockFinalCut`, `PreventFirstArrest`, `Dailies`.
+5. **Mechanics:**
+   - XP resets on level up, and the next level needs `levelCurveBase·L^levelCurveExp`.
+   - Busted is a failed roll in the top `bustedBand` of the roll range (roll > 1 − bustedBand).
+   - A lucky break is one re-roll per heist.
+   - Arrest chance per member = `arrestRisk·(1 − margin)` (floored at 0), plus `arrestRiskPer5Heists·floor(heists/5)`, then × ArrestMult and × the gear multipliers.
+   - Recruit cost = `hireCostBase·recruitCostTierMult^(tier − 1)`.
