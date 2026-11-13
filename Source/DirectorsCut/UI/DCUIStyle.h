@@ -69,8 +69,8 @@ namespace DCUI
 
 	// ── Formatting ──────────────────────────────────────────────────────────
 	FString Money(int64 V);          // $25,000 / -$1,200
-	FString Pct(float V01);          // 42%
-	FString SignedPct(float V01);    // +4% / -3%
+	FString PctStr(float V01);          // 42%
+	FString SignedPctStr(float V01);    // +4% / -3%
 	FString Roman(int32 V);          // tier numerals
 	FString GearSummary(const FDCGearItem& G); // "+10 Finesse, -5 Stealth, +2 Luck"
 

@@ -194,8 +194,8 @@ namespace DCUI
 		const FString N = FText::AsNumber(FMath::Abs(V)).ToString();
 		return V < 0 ? FString(TEXT("-$")) + N : FString(TEXT("$")) + N;
 	}
-	FString Pct(float V01) { return FString::Printf(TEXT("%d%%"), FMath::RoundToInt(V01 * 100.f)); }
-	FString SignedPct(float V01)
+	FString PctStr(float V01) { return FString::Printf(TEXT("%d%%"), FMath::RoundToInt(V01 * 100.f)); }
+	FString SignedPctStr(float V01)
 	{
 		const int32 P = FMath::RoundToInt(V01 * 100.f);
 		return FString::Printf(TEXT("%s%d%%"), P >= 0 ? TEXT("+") : TEXT(""), P);

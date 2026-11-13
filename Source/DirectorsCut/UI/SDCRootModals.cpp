@@ -192,7 +192,7 @@ TSharedRef<SWidget> SDCRoot::BuildSettings()
 				.OnMouseCaptureEnd_Lambda([]() { Sfx(DCSfx::Click); })
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(12.f, 0.f, 0.f, 0.f)
-			[SNew(SBox).WidthOverride(50.f)[TxtA(TAttribute<FText>::CreateLambda([GetV]() { return FText::FromString(Pct(GetV())); }), Sans(16), Gold, ETextJustify::Right)]]
+			[SNew(SBox).WidthOverride(50.f)[TxtA(TAttribute<FText>::CreateLambda([GetV]() { return FText::FromString(PctStr(GetV())); }), Sans(16), Gold, ETextJustify::Right)]]
 		];
 	}
 
@@ -416,7 +416,7 @@ TSharedRef<SWidget> SDCRoot::BuildDailiesCard()
 	[
 		SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().FillWidth(1.f)
-		[Txt(FString::Printf(TEXT("CLEAN  under %s     SUCCESS  under %s     the rest is trouble"), *Pct(Cl), *Pct(S)), Sans(14), Muted)]
+		[Txt(FString::Printf(TEXT("CLEAN  under %s     SUCCESS  under %s     the rest is trouble"), *PctStr(Cl), *PctStr(S)), Sans(14), Muted)]
 		+ SHorizontalBox::Slot().AutoWidth()
 		[
 			SNew(STextBlock).Font(Big(28))
@@ -508,13 +508,13 @@ TSharedRef<SWidget> SDCRoot::BuildDailiesCard()
 			[
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()[Txt(H.JobName, Display(34), Cream)]
-				+ SVerticalBox::Slot().AutoHeight()[Txt(FString::Printf(TEXT("Starring %s.  Your cut: %s%s"), *CastNames(R, H), *Pct(H.Plan.Cut), H.bRetaken ? TEXT("   (RETAKE)") : TEXT("")), Type(15), Muted, true)]
+				+ SVerticalBox::Slot().AutoHeight()[Txt(FString::Printf(TEXT("Starring %s.  Your cut: %s%s"), *CastNames(R, H), *PctStr(H.Plan.Cut), H.bRetaken ? TEXT("   (RETAKE)") : TEXT("")), Type(15), Muted, true)]
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 			[
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)[Txt(TEXT("ODDS"), Sans(13), Muted)]
-				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.f, -6.f, 0.f, 0.f)[Txt(Pct(H.SuccessChance), Big(46), Gold)]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.f, -6.f, 0.f, 0.f)[Txt(PctStr(H.SuccessChance), Big(46), Gold)]
 			]
 		]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 14.f, 0.f, 0.f)[ChanceBar]

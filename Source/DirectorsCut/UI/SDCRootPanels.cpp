@@ -96,7 +96,7 @@ TSharedRef<SWidget> SDCRoot::JobCard(const FDCJob& J)
 				+ SHorizontalBox::Slot().FillWidth(1.2f)[Labeled(TEXT("Payout"), Txt(Money(J.Payout), Big(32), Ink))]
 				+ SHorizontalBox::Slot().FillWidth(0.7f)[Labeled(TEXT("Crew"), Txt(J.MinCrew == J.MaxCrew ? FString::FromInt(J.MinCrew) : FString::Printf(TEXT("%d-%d"), J.MinCrew, J.MaxCrew), Big(32), Ink))]
 				+ SHorizontalBox::Slot().FillWidth(0.8f)[Labeled(TEXT("Difficulty"), Txt(FString::Printf(TEXT("%.0f"), J.Difficulty), Big(32), Ink))]
-				+ SHorizontalBox::Slot().FillWidth(0.8f)[Labeled(TEXT("Heat"), Txt(Pct(J.ArrestRisk), Big(32), J.ArrestRisk >= 0.3f ? Red : Ink))]
+				+ SHorizontalBox::Slot().FillWidth(0.8f)[Labeled(TEXT("Heat"), Txt(PctStr(J.ArrestRisk), Big(32), J.ArrestRisk >= 0.3f ? Red : Ink))]
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)[Txt(FString::Printf(TEXT("Key stats: %s"), *Keys), Sans(13), InkSoft, true)]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f, 0.f, 0.f)
@@ -172,7 +172,7 @@ void SDCRoot::RecomputePlan()
 	for (int32 i = 0; i < B.Lines.Num(); ++i)
 	{
 		const FDCBreakdownLine& L = B.Lines[i];
-		const FString V = L.bIsMultiplier ? FString::Printf(TEXT("x%.2f"), L.Value) : (i == 0 ? Pct(L.Value) : SignedPct(L.Value));
+		const FString V = L.bIsMultiplier ? FString::Printf(TEXT("x%.2f"), L.Value) : (i == 0 ? PctStr(L.Value) : SignedPctStr(L.Value));
 		const FLinearColor LabelCol = L.bIsWarning ? RedBright : Cream;
 		BreakdownBox->AddSlot().AutoHeight().Padding(0.f, 3.f)
 		[
@@ -192,7 +192,7 @@ void SDCRoot::RecomputePlan()
 	[
 		SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[Txt(TEXT("= Chance of success"), Sans(16), Gold)]
-		+ SHorizontalBox::Slot().AutoWidth()[Txt(Pct(B.SuccessChance), Big(28), Gold)]
+		+ SHorizontalBox::Slot().AutoWidth()[Txt(PctStr(B.SuccessChance), Big(28), Gold)]
 	];
 }
 
@@ -272,7 +272,7 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 						const FDCSuccessBreakdown& BB = Cache->B;
 						if (BB.RefusingCriminalIds.Contains(Id)) { return FText::FromString(TEXT("REFUSES AT THIS CUT")); }
 						const float* W = BB.Willingness.Find(Id); const float* F = BB.FairCut.Find(Id);
-						return FText::FromString(FString::Printf(TEXT("Willing %s   fair cut %s"), W ? *Pct(*W) : TEXT("-"), F ? *Pct(*F) : TEXT("-")));
+						return FText::FromString(FString::Printf(TEXT("Willing %s   fair cut %s"), W ? *PctStr(*W) : TEXT("-"), F ? *PctStr(*F) : TEXT("-")));
 					})
 					.ColorAndOpacity_Lambda([Cache, Id]()
 					{
@@ -342,12 +342,10 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Txt(C.GetDisplayName(), Sans(16), Ink)]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0.f, 0.f, 0.f)[TypeChip(C.Type, 12.f)]
-						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.f, 0.f, 0.f, 0.f)
-						[bRoleMatch ? Txt(TEXT("role match"), Type(12), Green) : SNullWidget::NullWidget]
 					]
 					+ SVerticalBox::Slot().AutoHeight()
 					[
-						Txt(FString::Printf(TEXT("Lv %d   Luck %d   Loyalty %d"), C.Level, R->GetEffectiveLuck(C.Id), C.Loyalty), Sans(13), InkSoft)
+						Txt(FString::Printf(TEXT("Lv %d   Luck %d   Loyalty %d%s"), C.Level, R->GetEffectiveLuck(C.Id), C.Loyalty, bRoleMatch ? TEXT("   -   fits a required role") : TEXT("")), Sans(13), bRoleMatch ? Green : InkSoft)
 					]
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.f, 0.f)[StatsRow]
@@ -378,15 +376,15 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 			[
 				SNew(STextBlock).Font(Big(104))
-				.Text_Lambda([this, Cache]() { return FText::FromString(PlanCrew.Num() ? Pct(Cache->B.SuccessChance) : FString(TEXT("--"))); })
+				.Text_Lambda([this, Cache]() { return FText::FromString(PlanCrew.Num() ? PctStr(Cache->B.SuccessChance) : FString(TEXT("--"))); })
 				.ColorAndOpacity_Lambda([this, ChanceCol]() { return PlanCrew.Num() ? ChanceCol() : FSlateColor(WithAlpha(Muted, 0.5f)); })
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(16.f, 0.f, 0.f, 0.f)
 			[
 				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()[TxtA(TAttribute<FText>::CreateLambda([Cache]() { return FText::FromString(FString::Printf(TEXT("Clean wrap  %s"), *Pct(Cache->B.CleanThreshold))); }), Sans(16), Cream)]
-				+ SVerticalBox::Slot().AutoHeight()[TxtA(TAttribute<FText>::CreateLambda([Cache]() { return FText::FromString(FString::Printf(TEXT("Lucky break  %s"), *Pct(Cache->B.LuckyBreakChance))); }), Sans(16), Cream)]
-				+ SVerticalBox::Slot().AutoHeight()[TxtA(TAttribute<FText>::CreateLambda([Cache]() { return FText::FromString(FString::Printf(TEXT("Arrest risk if it fails  %s"), *Pct(Cache->B.ArrestChanceOnFail))); }), Sans(16), FSlateColor(Rgb(0xe0, 0x8a, 0x70)))]
+				+ SVerticalBox::Slot().AutoHeight()[TxtA(TAttribute<FText>::CreateLambda([Cache]() { return FText::FromString(FString::Printf(TEXT("Clean wrap  %s"), *PctStr(Cache->B.CleanThreshold))); }), Sans(16), Cream)]
+				+ SVerticalBox::Slot().AutoHeight()[TxtA(TAttribute<FText>::CreateLambda([Cache]() { return FText::FromString(FString::Printf(TEXT("Lucky break  %s"), *PctStr(Cache->B.LuckyBreakChance))); }), Sans(16), Cream)]
+				+ SVerticalBox::Slot().AutoHeight()[TxtA(TAttribute<FText>::CreateLambda([Cache]() { return FText::FromString(FString::Printf(TEXT("Arrest risk if it fails  %s"), *PctStr(Cache->B.ArrestChanceOnFail))); }), Sans(16), FSlateColor(Rgb(0xe0, 0x8a, 0x70)))]
 			]
 		];
 
@@ -398,10 +396,10 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 			[
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()[Txt(TEXT("THE DIRECTOR'S CUT"), Sans(14), Muted)]
-				+ SVerticalBox::Slot().AutoHeight()[Txt(MinFair < 1.f ? FString::Printf(TEXT("This crew thinks %s is fair. Greed costs willingness."), *Pct(MinFair)) : FString(TEXT("Your share of the payout. Greed costs willingness.")), Type(13), Muted, true)]
+				+ SVerticalBox::Slot().AutoHeight()[Txt(MinFair < 1.f ? FString::Printf(TEXT("This crew thinks %s is fair. Greed costs willingness."), *PctStr(MinFair)) : FString(TEXT("Your share of the payout. Greed costs willingness.")), Type(13), Muted, true)]
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
-			[TxtA(TAttribute<FText>::CreateLambda([this]() { return FText::FromString(Pct(PlanCut)); }), Big(48), Gold)]
+			[TxtA(TAttribute<FText>::CreateLambda([this]() { return FText::FromString(PctStr(PlanCut)); }), Big(48), Gold)]
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f)
 		[
