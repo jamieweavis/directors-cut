@@ -238,8 +238,8 @@ def highlight():
     t = expr(m, unreal.MaterialExpressionTime, -900, 450)
     code = r"""
 float fr = pow(1.0 - saturate(abs(dot(normalize(N), normalize(V)))), 2.5);
-float pulse = 0.85 + 0.15 * sin(T * 4.0);
-return Color.rgb * Strength * (0.12 + fr) * pulse;
+// x8 gain: the scene runs at a dark manual exposure (EV bias ~-2.5), callers pass Strength ~0.7..1.4
+return Color.rgb * Strength * 8.0 * (0.08 + fr);
 """
     cu = custom(m, code, [("N", nrm), ("V", cam), ("T", t), ("Color", c), ("Strength", s)])
     MEL.connect_material_property(cu, "", MP.MP_EMISSIVE_COLOR)
@@ -400,7 +400,11 @@ return float3(sin(T * 0.21 + r * 7.0) + 0.5 * sin(T * 0.53 + r * 3.0),
     return m
 
 
+import os
+_only = [x for x in os.environ.get("DC_MATS", "").split(",") if x]
 for f in (highlight, proc, neon, beam, rain, screen, smoke, dust):
+    if _only and f.__name__ not in _only:
+        continue
     try:
         mat = f()
         MEL.recompile_material(mat)

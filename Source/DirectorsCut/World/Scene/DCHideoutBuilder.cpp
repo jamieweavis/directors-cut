@@ -34,7 +34,7 @@
 namespace DCScene
 {
 	constexpr float TallH = 380.f;   // exterior back walls / projection booth wall
-	constexpr float PartH = 130.f;   // interior partitions (low so the camera sees over them)
+	constexpr float PartH = 55.f;    // interior partitions: knee height so no room hides its neighbour
 	constexpr float KneeH = 45.f;    // camera-facing exterior walls (cutaway)
 	constexpr float WallT = 20.f;
 }
@@ -142,14 +142,14 @@ void ADCHideoutBuilder::InitAssets()
 	Neon("Marquee",    FLinearColor(1.f, 0.7f, 0.35f), 30.f, 0.1f, 13.f);
 	// --- special
 	Special("Glass", DCPaths::MatGlass, [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(0.4f, 0.5f, 0.55f)); D->SetScalarParameterValue("Opacity", 0.2f); });
-	Special("Rain", TEXT("/Game/DC/Materials/M_DC_Rain.M_DC_Rain"), [](UMaterialInstanceDynamic* D) {});
-	Special("Screen", TEXT("/Game/DC/Materials/M_DC_Screen.M_DC_Screen"), [](UMaterialInstanceDynamic* D) {});
+	Special("Rain", TEXT("/Game/DC/Materials/M_DC_Rain.M_DC_Rain"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(1.2f, 2.f, 2.8f)); });
+	Special("Screen", TEXT("/Game/DC/Materials/M_DC_Screen.M_DC_Screen"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Strength", 14.f); });
 	Special("ScreenOff", TEXT("/Game/DC/Materials/M_DC_Screen.M_DC_Screen"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Strength", 0.05f); });
-	Special("Smoke", TEXT("/Game/DC/Materials/M_DC_Smoke.M_DC_Smoke"), [](UMaterialInstanceDynamic* D) {});
-	Special("Beam", TEXT("/Game/DC/Materials/M_DC_Beam.M_DC_Beam"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Strength", 0.12f); });
+	Special("Smoke", TEXT("/Game/DC/Materials/M_DC_Smoke.M_DC_Smoke"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(2.2f, 2.2f, 2.5f)); D->SetScalarParameterValue("Opacity", 0.45f); });
+	Special("Beam", TEXT("/Game/DC/Materials/M_DC_Beam.M_DC_Beam"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Strength", 0.6f); });
 	Special("ShaftPink", TEXT("/Game/DC/Materials/M_DC_Beam.M_DC_Beam"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(1.f, 0.2f, 0.55f)); D->SetScalarParameterValue("Strength", 0.05f); D->SetScalarParameterValue("Flicker", 0.f); });
-	Special("Dust", TEXT("/Game/DC/Materials/M_DC_Dust.M_DC_Dust"), [](UMaterialInstanceDynamic* D) {});
-	Special("DustPink", TEXT("/Game/DC/Materials/M_DC_Dust.M_DC_Dust"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(1.f, 0.4f, 0.7f)); });
+	Special("Dust", TEXT("/Game/DC/Materials/M_DC_Dust.M_DC_Dust"), [](UMaterialInstanceDynamic* D) { D->SetScalarParameterValue("Strength", 10.f); });
+	Special("DustPink", TEXT("/Game/DC/Materials/M_DC_Dust.M_DC_Dust"), [](UMaterialInstanceDynamic* D) { D->SetVectorParameterValue("Color", FLinearColor(1.f, 0.4f, 0.7f)); D->SetScalarParameterValue("Strength", 10.f); });
 }
 
 UMaterialInterface* ADCHideoutBuilder::M(FName Key) const
@@ -466,9 +466,9 @@ void ADCHideoutBuilder::Tape(const FVector& A, const FVector& B)
 namespace
 {
 	// Tiny stroke font on a 2x3 grid: (x0,y0,x1,y1) segments.
-	const TArray<FVector4>* Glyph(TCHAR C)
+	const TArray<FDCQuad>* Glyph(TCHAR C)
 	{
-		static TMap<TCHAR, TArray<FVector4>> G;
+		static TMap<TCHAR, TArray<FDCQuad>> G;
 		if (G.Num() == 0)
 		{
 			G.Add('A', { {0,0,0,2},{0,2,1,3},{1,3,2,2},{2,2,2,0},{0,1.4,2,1.4} });
@@ -503,9 +503,9 @@ void ADCHideoutBuilder::NeonText(const FString& Text, const FVector& Origin, con
 	for (int32 i = 0; i < Text.Len(); ++i)
 	{
 		// vertical text stacks top-down: Origin is the bottom-left of the FIRST letter
-		if (const TArray<FVector4>* Segs = Glyph(FChar::ToUpper(Text[i])))
+		if (const TArray<FDCQuad>* Segs = Glyph(FChar::ToUpper(Text[i])))
 		{
-			for (const FVector4& S : *Segs)
+			for (const FDCQuad& S : *Segs)
 			{
 				const FVector A = Cursor + Right * (S.X * Unit) + Up * (S.Y * Unit);
 				const FVector B = Cursor + Right * (S.Z * Unit) + Up * (S.W * Unit);
@@ -548,10 +548,10 @@ void ADCHideoutBuilder::Scaffold(const FVector& From, const FVector& To, float H
 	}
 }
 
-void ADCHideoutBuilder::LockedDressing(const FBox2D& R, const TArray<FVector4>& Sheets)
+void ADCHideoutBuilder::LockedDressing(const FBox2D& R, const TArray<FDCQuad>& Sheets)
 {
 	CurGroup = DCGroups::Locked;
-	for (const FVector4& S : Sheets) { Sheet(FVector(S.X, S.Y, 0), FVector(S.Z, S.Z * 0.8f, S.W), S.X * 0.1f); }
+	for (const FDCQuad& S : Sheets) { Sheet(FVector(S.X, S.Y, 0), FVector(S.Z, S.Z * 0.8f, S.W), S.X * 0.1f); }
 	// tape X across the camera-facing side, strung between two sawhorses
 	const FVector2D C = R.GetCenter();
 	const float Fx = R.Min.X + 60.f, Y0 = R.Min.Y + 80.f, Y1 = R.Max.Y - 80.f;
@@ -570,7 +570,7 @@ void ADCHideoutBuilder::LockedDressing(const FBox2D& R, const TArray<FVector4>& 
 	// "CLOSED" in faint red neon on the floor-front
 	NeonText(TEXT("CLOSED"), FVector(Fx - 20.f, C.Y - 70.f, 2.f), FVector(0, 1, 0), FVector(1, 0, 0), 8.f, 2.2f, "CloseRed");
 	// cold rim light from the back corner so the sheets read as silhouettes
-	Spot(FVector(R.Max.X - 40, R.Max.Y - 40, TallH + 80), FVector(C.X - 60, C.Y - 60, 0), FLinearColor(0.35f, 0.5f, 1.f), 120.f, 2600.f, 25.f, 55.f, false, false);
+	Spot(FVector(R.Max.X - 40, R.Max.Y - 40, TallH + 80), FVector(C.X - 60, C.Y - 60, 0), FLinearColor(0.35f, 0.5f, 1.f), 260.f, 2600.f, 25.f, 60.f, false, false);
 }
 
 void ADCHideoutBuilder::BuildingDressing(const FBox2D& R)
@@ -748,7 +748,7 @@ void ADCHideoutBuilder::SetCVars()
 	};
 	// Manual exposure lives around EV ~ -3..-1 (dim practicals). Centre Lumen's cached-lighting range on it so nothing clips
 	// (removes the "Cached lighting in Lumen ... r.EyeAdaptation.CachedLightingPreExposure" warning).
-	float EV = -4.f;
+	float EV = -2.5f;
 	FParse::Value(FCommandLine::Get(), TEXT("DCExposure="), EV);
 	float CachedEV = FMath::Clamp(2.f - EV, -16.f, 16.f);
 	FParse::Value(FCommandLine::Get(), TEXT("DCCachedEV="), CachedEV);
@@ -769,7 +769,7 @@ void ADCHideoutBuilder::BuildLightingAndPost()
 	PPV->bUnbound = true;
 	PPV->Priority = -1.f; // gameplay (camera / reveal) volumes can override
 	FPostProcessSettings& S = PPV->Settings;
-	float EV = -4.f;
+	float EV = -2.5f;
 	FParse::Value(FCommandLine::Get(), TEXT("DCExposure="), EV);
 	S.bOverride_AutoExposureMethod = true; S.AutoExposureMethod = AEM_Manual;
 	S.bOverride_AutoExposureBias = true; S.AutoExposureBias = EV;
@@ -848,14 +848,12 @@ void ADCHideoutBuilder::BuildHideout()
 		{ EDCRoomType::Clinic,        R(-1300, -500, 1000, 1600), "Tiles",      "TileWall",   false },
 	};
 	// Openings in room-local coordinates along the side. side: 0 +X, 1 +Y, 2 -X, 3 -Y
-	RoomOpenings.Add((uint8)EDCRoomType::Office, {
-		{ 0, { 150.f, 220.f, 165.f, 335.f } },   // high window (neon spill)
-		{ 0, { -250.f, 120.f, 0.f, 225.f } },    // street door
-		{ 1, { 300.f, 56.f, 95.f, 140.f } },     // projection port
-		{ 1, { -430.f, 90.f, 0.f, 215.f } },     // booth door to the auditorium
-	});
-	RoomOpenings.Add((uint8)EDCRoomType::Garage, { { 0, { 0.f, 360.f, 0.f, 290.f } } }); // roll-up door
-	RoomOpenings.Add((uint8)EDCRoomType::ScreeningRoom, {});
+	auto Op = [this](EDCRoomType T, int32 Side, float C, float W, float B, float Tp) { RoomOpenings.FindOrAdd((uint8)T).Add(TPair<int32, FOpening>(Side, FOpening{ C, W, B, Tp })); };
+	Op(EDCRoomType::Office, 0, 150.f, 220.f, 165.f, 335.f);   // high window (neon spill)
+	Op(EDCRoomType::Office, 0, -250.f, 120.f, 0.f, 225.f);    // street door
+	Op(EDCRoomType::Office, 1, 300.f, 56.f, 95.f, 140.f);     // projection port
+	Op(EDCRoomType::Office, 1, -430.f, 90.f, 0.f, 215.f);     // booth door to the auditorium
+	Op(EDCRoomType::Garage, 0, 0.f, 360.f, 0.f, 290.f);       // roll-up door
 
 	for (const FRoomDef& D : Defs) { SpawnRoom(D); }
 	for (const FRoomDef& D : Defs) { BuildShell(D); }

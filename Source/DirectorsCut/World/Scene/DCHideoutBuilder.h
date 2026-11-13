@@ -31,6 +31,7 @@ class ACameraActor;
 
 
 enum class EDCShape : uint8 { Cube, Cylinder, Sphere, Cone, Plane };
+struct FDCQuad { float X, Y, Z, W; }; // sheet (x, y, size, height) / glyph segment (x0, y0, x1, y1)
 
 UCLASS()
 class DIRECTORSCUT_API ADCHideoutBuilder : public AActor
@@ -106,7 +107,7 @@ protected:
 	void Tape(const FVector& A, const FVector& B);                                  // hazard tape strip
 	void NeonText(const FString& Text, const FVector& Origin, const FVector& Right, const FVector& Up, float Unit, float Dia, FName Mat, bool bVertical = false);
 	void Scaffold(const FVector& From, const FVector& To, float Height);             // Building group scaffolding along a wall
-	void LockedDressing(const FBox2D& Rect, const TArray<FVector4>& Sheets);        // sheets (x,y,size,height), tape, rim light
+	void LockedDressing(const FBox2D& Rect, const TArray<FDCQuad>& Sheets);        // sheets (x,y,size,height), tape, rim light
 	void BuildingDressing(const FBox2D& Rect);
 
 	// ---------------------------------------------------------------- layout

@@ -85,14 +85,14 @@ void ADCHideoutBuilder::BuildOffice()
 	Tube(FVector(508, SY - 8.5f, 275), FVector(602, SY - 8.5f, 275), 3, "NeonCyan", false);
 	for (int32 i = 0; i < 7; ++i) { Deco(EDCShape::Sphere, FVector(515 + i * 13.f, SY - 9, 676), FVector(5), "Marquee", FRotator::ZeroRotator, false); }
 	// the spill: pink sign light through the window + blinds into a local fog volume => shafts
-	USpotLightComponent* Spill = Spot(FVector(700, 160, 420), FVector(-100, 40, 0), FLinearColor(1.f, 0.22f, 0.55f), 2200.f, 2600.f, 6.f, 17.f, true, false);
+	USpotLightComponent* Spill = Spot(FVector(700, 160, 420), FVector(-100, 40, 0), FLinearColor(1.f, 0.22f, 0.55f), 5000.f, 2600.f, 6.f, 17.f, true, false);
 	Spill->SetVolumetricScatteringIntensity(4.f);
 	Spill->SourceRadius = 8.f;
 	AddFlicker(Spill, 9.f, 0.25f);
 	// faint cyan bounce from the border tubes (no shadow, low; mostly lights the sign board and window reveal)
 	UPointLightComponent* CyanGlow = Point(FVector(540, SY - 40, 560), FLinearColor(0.1f, 0.7f, 1.f), 60.f, 420.f, false, false, 10.f);
 	CyanGlow->SetVolumetricScatteringIntensity(0.f);
-	AddLocalFog(CurRoom, DCGroups::Level1, FVector(180, 80, 140), FVector(380, 300, 220), 0.35f);
+	AddLocalFog(CurRoom, DCGroups::Level1, FVector(180, 80, 140), FVector(380, 300, 220), 0.6f);
 	// dust motes drifting in the shaft
 	for (int32 i = 0; i < 240; ++i)
 	{
@@ -325,10 +325,14 @@ void ADCHideoutBuilder::BuildOffice()
 
 		ADCGarageDoor* D = GetWorld()->SpawnActor<ADCGarageDoor>(ADCGarageDoor::StaticClass(), FTransform(CurRoom->GetActorTransform().TransformPosition(FVector(490, -250, 0))));
 		D->RoomType = EDCRoomType::Office;
-		D->ExitPoint = FVector(160, 0, 0);
-		Single(D, D->DoorPanel, EDCShape::Cube, FVector(0, 0, 112), FVector(8, 118, 222), M("DarkWood"));
-		Single(D, D->DoorPanel, EDCShape::Cube, FVector(-1, 0, 175), FVector(9, 70, 50), M("Glass"));
-		Single(D, D->DoorPanel, EDCShape::Sphere, FVector(-8, 44, 105), FVector(6), M("Brass"));
+		D->ExitPoint = FVector(170, 0, 0); // outside, into the street notch behind the office
+		D->bRollUp = false;
+		D->SwingAngle = 95.f;
+		D->bFallbackPanel = false;
+		D->DoorPanel->SetRelativeLocation(FVector(0, -59, 0)); // pivot on the hinge jamb
+		Single(D, D->DoorPanel, EDCShape::Cube, FVector(0, 59, 112), FVector(8, 118, 222), M("DarkWood"));
+		Single(D, D->DoorPanel, EDCShape::Cube, FVector(-1, 59, 175), FVector(9, 70, 50), M("Glass"));
+		Single(D, D->DoorPanel, EDCShape::Sphere, FVector(-8, 103, 105), FVector(6), M("Brass"));
 		D->AttachToActor(CurRoom, FAttachmentTransformRules::KeepWorldTransform);
 	}
 	CurGroup = DCGroups::Shell;
@@ -453,6 +457,7 @@ void ADCHideoutBuilder::BuildLounge()
 	CurGroup = DCGroups::Level3;
 	Bunk(210.f);
 	Deco(EDCShape::Cube, FVector(130, 492, 182), FVector(150, 6, 64), "Black");
+	Tube(FVector(65, 494, 0), FVector(65, 494, 150), 4, "Iron"); Tube(FVector(195, 494, 0), FVector(195, 494, 150), 4, "Iron");
 	NeonText(TEXT("BAR"), FVector(160, 488, 160), FVector(-1, 0, 0), FVector(0, 0, 1), 14.f, 3.f, "NeonPink");
 	Rect(FVector(130, 470, 190), FVector(130, 0, 60), FLinearColor(1.f, 0.2f, 0.55f), 30.f, 150.f, 40.f, 800.f, false, true);
 	// jukebox
@@ -616,7 +621,10 @@ void ADCHideoutBuilder::BuildGarage()
 	{
 		ADCGarageDoor* D = GetWorld()->SpawnActor<ADCGarageDoor>(ADCGarageDoor::StaticClass(), FTransform(CurRoom->GetActorTransform().TransformPosition(FVector(390, 0, 0))));
 		D->RoomType = EDCRoomType::Garage;
-		D->ExitPoint = FVector(320, 0, 0);
+		D->ExitPoint = FVector(320, 0, 0); // out through the roll-up door into the void
+		D->bRollUp = true;
+		D->RollUpHeight = 280.f;
+		D->bFallbackPanel = false;
 		Single(D, D->DoorPanel, EDCShape::Cube, FVector(0, 0, 145), FVector(8, 360, 290), M("Corrugated"));
 		Single(D, D->DoorPanel, EDCShape::Cube, FVector(-5, 0, 6), FVector(6, 362, 10), M("Iron"));
 		Single(D, D->DoorPanel, EDCShape::Cube, FVector(-7, 0, 40), FVector(4, 30, 6), M("Chrome"));
@@ -805,6 +813,7 @@ void ADCHideoutBuilder::BuildServerCloset()
 	CurGroup = DCGroups::Level3;
 	NeonText(TEXT("INTEL"), FVector(-160, 380, 160), FVector(-1, 0, 0), FVector(0, 0, 1), 9.f, 2.4f, "NeonGreen");
 	Deco(EDCShape::Cube, FVector(-215, 392, 175), FVector(160, 6, 50), "Black");
+	Tube(FVector(-285, 394, 0), FVector(-285, 394, 150), 4, "Iron"); Tube(FVector(-145, 394, 0), FVector(-145, 394, 150), 4, "Iron");
 	Point(FVector(-215, 330, 180), FLinearColor(0.1f, 1.f, 0.3f), 8.f, 450.f, false, true, 10.f);
 
 	LockedDressing(R, { {200, 0, 120, 210}, {-150, 280, 130, 110} });
@@ -889,6 +898,7 @@ void ADCHideoutBuilder::BuildLawyer()
 	Deco(EDCShape::Cylinder, FVector(-300, 125, 170), FVector(16, 16, 2), "Brass");
 	Deco(EDCShape::Cylinder, FVector(-300, 175, 170), FVector(16, 16, 2), "Brass");
 	Deco(EDCShape::Cube, FVector(150, 292, 175), FVector(130, 6, 56), "Black");
+	Tube(FVector(95, 294, 0), FVector(95, 294, 147), 4, "Brass"); Tube(FVector(205, 294, 0), FVector(205, 294, 147), 4, "Brass");
 	NeonText(TEXT("LAW"), FVector(185, 288, 158), FVector(-1, 0, 0), FVector(0, 0, 1), 12.f, 2.8f, "NeonAmber");
 	Point(FVector(150, 250, 180), FLinearColor(1.f, 0.5f, 0.1f), 8.f, 450.f, false, true, 10.f);
 
