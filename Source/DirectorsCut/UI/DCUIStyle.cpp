@@ -134,8 +134,12 @@ namespace DCUI
 		return S;
 	}
 
+	// Small sizes get a nudge: the UI is laid out at 1080p and scales down to 720p, where 7-8 pt gets too thin.
+	static float Legible(float Size) { return Size < 10.f ? Size + 0.5f : Size; }
+
 	FSlateFontInfo Font(float Size, EW Weight, int32 LetterSpacing)
 	{
+		Size = Legible(Size);
 		const TSharedPtr<const FCompositeFont>& F = Fonts().Inter[(int32)Weight];
 		FSlateFontInfo I = F.IsValid() ? FSlateFontInfo(F, Size) : FCoreStyle::GetDefaultFontStyle(Weight >= EW::SemiBold ? TEXT("Bold") : TEXT("Regular"), FMath::RoundToInt(Size));
 		I.LetterSpacing = LetterSpacing;
@@ -143,6 +147,7 @@ namespace DCUI
 	}
 	FSlateFontInfo Mono(float Size, int32 LetterSpacing)
 	{
+		Size = Legible(Size);
 		const TSharedPtr<const FCompositeFont>& F = Fonts().Mono;
 		FSlateFontInfo I = F.IsValid() ? FSlateFontInfo(F, Size) : FCoreStyle::GetDefaultFontStyle(TEXT("Mono"), FMath::RoundToInt(Size));
 		I.LetterSpacing = LetterSpacing;

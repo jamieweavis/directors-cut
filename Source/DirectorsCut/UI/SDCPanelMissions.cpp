@@ -645,7 +645,7 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 			[TxtA(TAttribute<FText>::CreateLambda([Cache]() { return FText::FromString(Cache->B.bValid ? TEXT("Send the crew") : BlockText(Cache->B.Block)); }), Font(10.5f, EW::Medium), FSlateColor(Text))]),
 		FMargin(18.f, 11.f));
-	TSharedRef<SWidget> BlockHint = SNew(SBox).Visibility_Lambda([Cache]() { return Cache->B.bValid ? EVisibility::Collapsed : EVisibility::Visible; })
+	TSharedRef<SWidget> BlockHint = SNew(SBox).Visibility_Lambda([Cache]() { return Cache->B.bValid ? EVisibility::Hidden : EVisibility::Visible; })
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 6.f, 0.f)
