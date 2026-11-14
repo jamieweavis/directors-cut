@@ -3,7 +3,7 @@
     {
       "type": "Office",
       "displayName": "Office",
-      "description": "Job board and the desk",
+      "description": "The old house: job board and desk",
       "icon": "monitor",
       "cost": [0, 7000, 14000],
       "buildSec": [0, 120, 240],
@@ -19,7 +19,7 @@
     {
       "type": "Lounge",
       "displayName": "Lounge",
-      "description": "Bunks, bar, room for more crew",
+      "description": "Bunk wing: room for more crew",
       "icon": "sofa",
       "cost": [3500, 7500, 12000],
       "buildSec": [60, 150, 240],
@@ -41,7 +41,7 @@
     {
       "type": "Garage",
       "displayName": "Garage",
-      "description": "Run more jobs at once",
+      "description": "Car shed: more cars, more jobs at once",
       "icon": "warehouse",
       "cost": [2000, 10000, 20000],
       "buildSec": [60, 150, 270],
