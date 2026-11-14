@@ -66,7 +66,7 @@ TSharedRef<SWidget> SDCRoot::RoomTile(const FDCRoom& Room)
 		FString BlockTip;
 		if (Block == EDCPlanBlock::NoCash) { BlockTip = TEXT("Not enough cash"); }
 		else if (Block == EDCPlanBlock::Locked) { BlockTip = Room.RequiredSuccesses > 0 ? FString::Printf(TEXT("Needs %d successful jobs"), Room.RequiredSuccesses) : TEXT("Locked"); }
-		else if (!Room.bCanAct) { BlockTip = TEXT("One build at a time"); }
+		else if (!Room.bCanAct) { BlockTip = TEXT("One extension at a time"); }
 		TSharedRef<SHorizontalBox> Req = SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 			[TxtA(FText::FromString(Money(Room.NextCost)), Mono(12.f), TAttribute<FSlateColor>::CreateLambda([RR, C = Room.NextCost]() { const UDCRunSubsystem* X = RR(); return FSlateColor((X && X->GetCash() < C) ? Bad : Text); }))]
@@ -153,7 +153,7 @@ TSharedRef<SWidget> SDCRoot::BuildBuild()
 		[IconTextA(TEXT("trophy"), TAttribute<FText>::CreateLambda([RR]() { const UDCRunSubsystem* X = RR(); return FText::FromString(X ? FString::FromInt(X->GetMissionsSucceeded()) : TEXT("")); }), Mono(11.f), FSlateColor(TextDim), FSlateColor(Text), 12.f, 5.f)]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(14.f, 0.f, 0.f, 0.f)
 		[IconTextA(TEXT("banknote"), TAttribute<FText>::CreateLambda([RR]() { const UDCRunSubsystem* X = RR(); return FText::FromString(X ? Money(X->GetCash()) : TEXT("")); }), Mono(11.f), FSlateColor(Accent), FSlateColor(Text), 12.f, 5.f)];
-	return Shell(TEXT("hammer"), TEXT("Build"), Body, HR);
+	return Shell(TEXT("hammer"), TEXT("Expand the house"), Body, HR);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -166,8 +166,8 @@ TSharedRef<SWidget> SDCRoot::RoomLocked(EDCRoomType Room)
 		[
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[IconTile(TEXT("lock"), 56.f, TextDim, 0.45f, 0.06f)]
-			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 14.f, 0.f, 4.f)[Txt(FString::Printf(TEXT("%s not built"), DC::RoomName(Room)), Font(12.f, EW::SemiBold), Text)]
-			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 0.f, 0.f, 16.f)[Txt(TEXT("Build it from the build table."), Font(10.f), TextDim)]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 14.f, 0.f, 4.f)[Txt(FString::Printf(TEXT("No %s wing yet"), DC::RoomName(Room)), Font(12.f, EW::SemiBold), Text)]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 0.f, 0.f, 16.f)[Txt(TEXT("Add this wing to the house from the build table."), Font(10.f), TextDim)]
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[TextButton(TEXT("hammer"), TEXT("Build"), [this]() { Open(EDCPanel::Build); }, EBtn::Primary)]
 		];
 }
@@ -536,7 +536,7 @@ TSharedRef<SWidget> SDCRoot::BuildEnd(bool bWon)
 	Tiles->AddSlot(0, 0)[StatTile(TEXT("calendar"), FString::FromInt(S.DaysSurvived), TEXT("Days"), Col)];
 	Tiles->AddSlot(1, 0)[StatTile(TEXT("trophy"), FString::Printf(TEXT("%d/%d"), S.MissionsSucceeded, S.MissionsAttempted), TEXT("Jobs"), Col)];
 	Tiles->AddSlot(2, 0)[StatTile(TEXT("banknote"), MoneyShort(S.TotalTake), TEXT("Total take"), Col)];
-	Tiles->AddSlot(3, 0)[StatTile(TEXT("hammer"), FString::FromInt(S.RoomsBuilt), TEXT("Rooms"), Col)];
+	Tiles->AddSlot(3, 0)[StatTile(TEXT("hammer"), FString::FromInt(S.RoomsBuilt), TEXT("Wings"), Col)];
 	Tiles->AddSlot(4, 0)[StatTile(TEXT("clock"), DC::Clock(S.PlayTime), TEXT("Play time"), Col)];
 
 	auto NameList = [](const TArray<FString>& Names, FName IconName, const FLinearColor& IC)

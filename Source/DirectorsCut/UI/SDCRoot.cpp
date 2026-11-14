@@ -135,7 +135,7 @@ void SDCRoot::BindRun()
 		const FString Name = Room.DisplayName.IsEmpty() ? FString(DC::RoomName(Room.Type)) : Room.DisplayName;
 		if (Room.State == EDCRoomState::Built)
 		{
-			Toast(Room.Level <= 1 ? FString::Printf(TEXT("%s built"), *Name) : FString::Printf(TEXT("%s · level %d"), *Name, Room.Level), Room.Icon.IsNone() ? DC::RoomIcon(Room.Type) : Room.Icon, false);
+			Toast(Room.Level <= 1 ? FString::Printf(TEXT("%s wing added"), *Name) : FString::Printf(TEXT("%s · level %d"), *Name, Room.Level), Room.Icon.IsNone() ? DC::RoomIcon(Room.Type) : Room.Icon, false);
 		}
 	});
 	HPayday = R->OnPayday.AddLambda([this](int32 Day, int32 Paid)
@@ -697,7 +697,7 @@ TSharedRef<SWidget> SDCRoot::BuildHudClock()
 	W->SetToolTip(TipWidget(
 		SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()[Txt(TEXT("Payday at dawn"), Font(11.f, EW::SemiBold), Text)]
-		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f, 0.f, 0.f)[Txt(TEXT("Crew wages and room upkeep are paid at 06:00. Can't pay = game over."), Font(10.f), TextDim, true)]));
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f, 0.f, 0.f)[Txt(TEXT("Crew wages and building upkeep are paid at 06:00. Can't pay = game over."), Font(10.f), TextDim, true)]));
 	return W;
 }
 
@@ -720,7 +720,7 @@ TSharedRef<SWidget> SDCRoot::BuildHudStats()
 					}))
 			]
 		];
-	Cash->SetToolTip(Tip(TEXT("Cash"), TEXT("Your take from every job. Pays for gear, rooms, hires and wages."), TEXT("banknote")));
+	Cash->SetToolTip(Tip(TEXT("Cash"), TEXT("Your take from every job. Pays for gear, new wings, hires and wages."), TEXT("banknote")));
 
 	TSharedRef<SWidget> Crew = IconTextA(TEXT("users"), TAttribute<FText>::CreateLambda([R]()
 		{
@@ -743,7 +743,7 @@ TSharedRef<SWidget> SDCRoot::BuildHudStats()
 			const UDCRunSubsystem* X = R();
 			return X ? FText::FromString(FString::FromInt(X->GetMissionsSucceeded())) : FText::GetEmpty();
 		}), Mono(13.f), FSlateColor(TextDim), FSlateColor(Text), 13.f, 7.f);
-	Wins->SetToolTip(Tip(TEXT("Successful jobs"), TEXT("Unlock tiers, rooms and perks"), TEXT("trophy")));
+	Wins->SetToolTip(Tip(TEXT("Successful jobs"), TEXT("Unlock tiers, wings and perks"), TEXT("trophy")));
 
 	TSharedRef<SWidget> Bell = SNew(SOverlay)
 		+ SOverlay::Slot()
@@ -823,7 +823,7 @@ TSharedRef<SWidget> SDCRoot::BuildDock()
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("users"), TEXT("Crew"), TEXT("C"), EDCPanel::Crew, Zero)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("wrench"), TEXT("Gear"), TEXT("G"), EDCPanel::Workbench, Zero)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("user-plus"), TEXT("Recruits"), TEXT("R"), EDCPanel::Recruits, Zero)]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("hammer"), TEXT("Build"), TEXT("B"), EDCPanel::Build, TAttribute<int32>::CreateLambda([this, R]()
+			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("hammer"), TEXT("Expand"), TEXT("B"), EDCPanel::Build, TAttribute<int32>::CreateLambda([this, R]()
 				{
 					const UDCRunSubsystem* X = R();
 					return (X && X->HasPendingPerkOffer()) || CanBuildSomething() ? 1 : 0;
