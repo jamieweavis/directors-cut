@@ -62,7 +62,6 @@ protected:
 	UPROPERTY() TArray<TObjectPtr<ADCRoomModule>> Rooms;
 	TArray<ADCRoomModule*> RoomPtrs;
 	UPROPERTY() TObjectPtr<ADCDayNight> DayNight;
-	UPROPERTY() TObjectPtr<APostProcessVolume> PostVolume;
 
 	// ---------------------------------------------------------------- materials
 	UPROPERTY() TMap<FName, TObjectPtr<UMaterialInterface>> Mats;
@@ -159,7 +158,6 @@ protected:
 	void BuildLawyer();
 	void BuildYard();
 	void BuildLightingAndPost();
-	void SetCVars();
 
 	// ---------------------------------------------------------------- runtime FX
 	struct FFlicker { TWeakObjectPtr<ULightComponent> Light; float Base; float Rate; float Depth; float Seed; };
