@@ -149,7 +149,7 @@ void ADCCameraRig::PanAxis(const FVector2D& Axis, float DeltaTime)
 {
 	if (bCinematic || Axis.IsNearlyZero()) { return; }
 	const FVector2D A = Axis.GetSafeNormal() * FMath::Min(1.f, Axis.Size());
-	const float Speed = CurDistance * KeyPanSpeed;
+	const float Speed = CurDistance * KeyPanSpeed * PanSpeedMul;
 	Mode = EMode::Free;
 	TargetPivot = ClampPivot(TargetPivot + (FlatRight() * A.X + FlatForward() * A.Y) * Speed * DeltaTime);
 	ActiveSmoothTime = PanSmoothTime;
@@ -159,7 +159,7 @@ void ADCCameraRig::Zoom(float Delta)
 {
 	if (bCinematic || FMath::IsNearlyZero(Delta)) { return; }
 	if (Mode == EMode::Overview) { Mode = EMode::Free; }
-	TargetDistance = FMath::Clamp(TargetDistance * FMath::Pow(0.87f, Delta), MinDistance, GetMaxDistance());
+	TargetDistance = FMath::Clamp(TargetDistance * FMath::Pow(0.87f, Delta * ZoomSpeedMul), MinDistance, GetMaxDistance());
 	if (ActiveSmoothTime > ZoomSmoothTime) { ActiveSmoothTime = ZoomSmoothTime; }
 	Distance = TargetDistance;
 }

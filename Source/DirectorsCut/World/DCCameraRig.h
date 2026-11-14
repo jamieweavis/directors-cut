@@ -36,6 +36,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float ZoomSmoothTime = 0.18f;
 	/** Keyboard pan speed as a fraction of the current distance per second. */
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float KeyPanSpeed = 0.35f;
+	/** Player settings multipliers (options screen), pushed by the player controller. */
+	float PanSpeedMul = 1.f;
+	float ZoomSpeedMul = 1.f;
 	/** Tilt-shift DOF. */
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") bool bTiltShiftDOF = true;
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float DOFFstop = 0.9f;

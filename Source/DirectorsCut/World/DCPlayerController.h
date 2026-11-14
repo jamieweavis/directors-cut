@@ -59,4 +59,7 @@ protected:
 	bool bPanelBound = false;
 	EDCPanel LastPanel = EDCPanel::None;
 	float ZoomAccum = 0.f;
+
+	float SettingsPoll = 0.f;
+	bool bEdgeScroll = false;
 };

@@ -1,4 +1,5 @@
 #include "World/DCPlayerController.h"
+#include "Core/DCSettings.h"
 #include "World/DCCameraRig.h"
 #include "World/DCStation.h"
 #include "World/DCWorldDirector.h"
@@ -241,7 +242,17 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 		bRmbDragging = false;
 	}
 
-	// WASD / arrows pan (not while typing), plus edge-pan when the window is focused and no panel is open.
+	// Options-screen settings (cheap ini reads, refreshed once a second).
+	SettingsPoll -= DeltaTime;
+	if (SettingsPoll <= 0.f)
+	{
+		SettingsPoll = 1.f;
+		bEdgeScroll = DCSettings::EdgeScroll();
+		CameraRig->PanSpeedMul = FMath::Clamp(DCSettings::CameraPanSpeed(), 0.25f, 3.f);
+		CameraRig->ZoomSpeedMul = FMath::Clamp(DCSettings::CameraZoomSpeed(), 0.25f, 3.f);
+	}
+
+	// WASD / arrows pan (not while typing), plus edge-pan (if enabled) when the window is focused and no panel is open.
 	if (!bBlocked)
 	{
 		FVector2D Axis = FVector2D::ZeroVector;
@@ -253,7 +264,7 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 			if (IsInputKeyDown(EKeys::A) || IsInputKeyDown(EKeys::Left)) { Axis.X -= 1.f; }
 		}
 		const UDCUISubsystem* UI = UDCUISubsystem::Get(this);
-		if (bHaveMouse && !bRmbDragging && (!UI || !UI->IsAnyPanelOpen()) && IsGameWindowFocused(GetWorld()))
+		if (bEdgeScroll && bHaveMouse && !bRmbDragging && (!UI || !UI->IsAnyPanelOpen()) && IsGameWindowFocused(GetWorld()))
 		{
 			int32 VX = 0, VY = 0;
 			GetViewportSize(VX, VY);

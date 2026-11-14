@@ -119,6 +119,7 @@ protected:
 	float QueuedReturnDelay = 0.f;
 	float StuckTime = 0.f;
 	float LimpPhase = 0.f;
+	float NamePoll = 0.f;
 	TWeakObjectPtr<ADCGarageDoor> ActiveDoor;
 	FRandomStream Rng;
 	UPROPERTY() TObjectPtr<UClass> AnimClass;

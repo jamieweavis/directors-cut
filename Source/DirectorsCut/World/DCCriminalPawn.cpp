@@ -1,4 +1,5 @@
 #include "World/DCCriminalPawn.h"
+#include "Core/DCSettings.h"
 #include "World/DCCriminalSpawnZone.h"
 #include "World/DCGarageDoor.h"
 #include "World/DCWorldLabel.h"
@@ -316,7 +317,7 @@ void ADCCriminalPawn::UpdateSpeed()
 void ADCCriminalPawn::SetHidden(bool bHide)
 {
 	SetActorHiddenInGame(bHide);
-	if (Plate) { Plate->SetVisibility(!bHide); }
+	if (Plate) { Plate->SetVisibility(!bHide && DCSettings::ShowCrewNames()); }
 	if (Bandage) { Bandage->SetVisibility(!bHide && bInjured); }
 	if (bHide)
 	{
@@ -623,6 +624,12 @@ void ADCCriminalPawn::Tick(float DeltaSeconds)
 	if (!bInitialized) { return; }
 	const float Dt = FMath::Min(DeltaSeconds, 0.1f);
 	TickLevelUp(Dt);
+	NamePoll -= Dt;
+	if (NamePoll <= 0.f)
+	{
+		NamePoll = 1.f + Rng.FRand() * 0.2f;
+		if (Plate) { Plate->SetVisibility(!IsHidden() && DCSettings::ShowCrewNames()); }
+	}
 
 	if (Mode == EDCPawnMode::Away) { return; }
 	if (StartDelay > 0.f)
