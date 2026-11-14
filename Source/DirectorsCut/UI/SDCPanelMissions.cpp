@@ -165,6 +165,42 @@ static TSharedRef<SWidget> CrewSlotsIcons(int32 Size, float IconSize, const FLin
 // Missions board
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Empty board slot waiting for a posting: a dim dashed card with its own countdown.
+ *  Index is the slot's position in GetPendingPostingTimes() (0 = next to post). */
+static TSharedRef<SWidget> IncomingCard(TFunction<UDCRunSubsystem*()> RR, int32 Index)
+{
+	auto Left = [RR, Index]() -> double
+	{
+		const UDCRunSubsystem* X = RR();
+		if (!X) { return -1.0; }
+		const TArray<double> P = X->GetPendingPostingTimes();
+		return P.IsValidIndex(Index) ? P[Index] : -1.0;
+	};
+	const bool bNext = Index == 0;
+	TSharedRef<SWidget> W = SNew(SBox)
+		.MinDesiredHeight(176.f)
+		[
+			SNew(SOverlay)
+			+ SOverlay::Slot()[SNew(SBorder).BorderImage(Box(A(Card, 0.35f), 10.f)).Visibility(EVisibility::HitTestInvisible)]
+			+ SOverlay::Slot()[SNew(SDCDashedOutline).Radius(10.f).Thickness(1.f).Dash(6.f).Gap(5.f).Color(A(FLinearColor::White, bNext ? 0.22f : 0.14f))]
+			+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(14.f)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+				[
+					SNew(SBorder).BorderImage(NoBrush()).Padding(0.f)
+					.ColorAndOpacity_Lambda([bNext]() { return FLinearColor(1, 1, 1, bNext && !Prefs().bReduceMotion ? 0.55f + 0.45f * Pulse(0.6f) : 0.7f); })
+					[Icon(TEXT("radio"), 20.f, TextFaint)]
+				]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 10.f, 0.f, 0.f)[Label(TEXT("Incoming job"), TextFaint, 8.f)]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 4.f, 0.f, 0.f)
+				[TxtA(TAttribute<FText>::CreateLambda([Left]() { const double L = Left(); return FText::FromString(L >= 0.0 ? DC::Clock(L) : TEXT("--:--")); }), Mono(15.f), FSlateColor(bNext ? TextDim : TextFaint))]
+			]
+		];
+	W->SetToolTip(Tip(TEXT("Incoming job"), TEXT("A new posting fills this slot when the timer runs out"), TEXT("radio")));
+	return W;
+}
+
 TSharedRef<SWidget> SDCRoot::BuildMissions()
 {
 	UDCRunSubsystem* R = Run();
@@ -202,7 +238,10 @@ TSharedRef<SWidget> SDCRoot::BuildMissions()
 	];
 	if (Final) { Body->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 12.f)[MissionCard(*Final)]; }
 
-	if (Board.Num() == 0 && !Final && Ghosts.Num() == 0)
+	// One placeholder per empty slot (an expired posting still fading out keeps its slot until it's gone).
+	const int32 NumIncoming = FMath::Max(0, R->GetPendingPostingTimes().Num() - Ghosts.Num());
+
+	if (Board.Num() == 0 && !Final && Ghosts.Num() == 0 && NumIncoming == 0)
 	{
 		Body->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 40.f)
 		[
@@ -235,19 +274,14 @@ TSharedRef<SWidget> SDCRoot::BuildMissions()
 				];
 			Cards.Insert(W, FMath::Clamp(G.Index, 0, Cards.Num()));
 		}
+		for (int32 i = 0; i < NumIncoming; ++i) { Cards.Add(IncomingCard(RR, i)); }
 		TSharedRef<SUniformGridPanel> Grid = SNew(SUniformGridPanel).SlotPadding(FMargin(6.f));
 		for (int32 i = 0; i < Cards.Num(); ++i) { Grid->AddSlot(i % 3, i / 3)[Cards[i]]; }
 		for (int32 i = Cards.Num(); i < 3; ++i) { Grid->AddSlot(i, 0)[SNew(SSpacer)]; } // keep three columns
 		Body->AddSlot().AutoHeight().Padding(-6.f, -6.f, -6.f, 0.f)[Grid];
 	}
 
-	TSharedRef<SWidget> Right = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 6.f, 0.f)[Icon(TEXT("radio"), 12.f, TextDim)]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-		[TxtA(TAttribute<FText>::CreateLambda([RR]() { const UDCRunSubsystem* X = RR(); return FText::FromString(X ? DC::Clock(X->GetNextMissionIn()) : TEXT("")); }), Mono(11.f), FSlateColor(TextDim))];
-	Right->SetToolTip(Tip(TEXT("Next posting"), TEXT("New jobs post while the board has room"), TEXT("radio")));
-
-	return Shell(TEXT("map"), TEXT("Missions"), Scroll(Body), Right);
+	return Shell(TEXT("map"), TEXT("Missions"), Scroll(Body));
 }
 
 TSharedRef<SWidget> SDCRoot::ActiveMissionRow(const FDCMission& M)

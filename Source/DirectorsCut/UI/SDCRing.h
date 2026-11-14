@@ -105,3 +105,71 @@ private:
 	FSlateRoundedBoxBrush Track = FSlateRoundedBoxBrush(FLinearColor::White, 4.f);
 	FSlateRoundedBoxBrush Marker = FSlateRoundedBoxBrush(FLinearColor::White, 1.5f);
 };
+
+/** Dashed rounded-rect outline that fills its slot (placeholder cards). Paint-only, hit-test invisible. */
+class SDCDashedOutline : public SLeafWidget
+{
+public:
+	SLATE_BEGIN_ARGS(SDCDashedOutline) : _Radius(10.f), _Thickness(1.f), _Dash(6.f), _Gap(4.f), _Color(FLinearColor(1, 1, 1, 0.18f)) {}
+		SLATE_ARGUMENT(float, Radius)
+		SLATE_ARGUMENT(float, Thickness)
+		SLATE_ARGUMENT(float, Dash)
+		SLATE_ARGUMENT(float, Gap)
+		SLATE_ATTRIBUTE(FLinearColor, Color)
+	SLATE_END_ARGS()
+
+	void Construct(const FArguments& InArgs)
+	{
+		Radius = InArgs._Radius; Thickness = InArgs._Thickness; Dash = FMath::Max(1.f, InArgs._Dash); Gap = FMath::Max(0.f, InArgs._Gap); Color = InArgs._Color;
+		SetVisibility(EVisibility::HitTestInvisible);
+	}
+	virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(0.f, 0.f); }
+	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geo, const FSlateRect& Clip, FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& Style, bool bParentEnabled) const override
+	{
+		const FVector2f L = Geo.GetLocalSize();
+		const float H = Thickness * 0.5f;
+		const float W = L.X - Thickness, Ht = L.Y - Thickness;
+		if (W <= 2.f || Ht <= 2.f) { return Layer; }
+		const float R = FMath::Clamp(Radius - H, 0.f, FMath::Min(W, Ht) * 0.5f);
+		// Perimeter as a dense polyline: corners as quarter arcs, clockwise from the top-left corner's end.
+		TArray<FVector2f> P;
+		auto Corner = [&](FVector2f C, float A0)
+		{
+			for (int32 i = 0; i <= 6; ++i) { const float A = A0 + (PI * 0.5f) * (float)i / 6.f; P.Add(C + FVector2f(FMath::Cos(A), FMath::Sin(A)) * R); }
+		};
+		const FVector2f O(H, H);
+		Corner(O + FVector2f(W - R, R), -PI * 0.5f);
+		Corner(O + FVector2f(W - R, Ht - R), 0.f);
+		Corner(O + FVector2f(R, Ht - R), PI * 0.5f);
+		Corner(O + FVector2f(R, R), PI);
+		{ const FVector2f Start = P[0]; P.Add(Start); } // copy first: Add(P[0]) aliases the array
+		// Walk the path, emitting dash-length runs separated by gaps.
+		FLinearColor Tint = Color.Get(); Tint.A *= Style.GetColorAndOpacityTint().A;
+		const float Period = Dash + Gap;
+		float Dist = 0.f;
+		TArray<FVector2f> Run;
+		auto Flush = [&]() { if (Run.Num() >= 2) { FSlateDrawElement::MakeLines(Out, Layer, Geo.ToPaintGeometry(), Run, ESlateDrawEffect::None, Tint, true, Thickness); } Run.Reset(); };
+		for (int32 i = 0; i + 1 < P.Num(); ++i)
+		{
+			const FVector2f A = P[i], B = P[i + 1];
+			const float Len = FVector2f::Distance(A, B);
+			float T = 0.f;
+			while (T < Len)
+			{
+				const float Phase = FMath::Fmod(Dist, Period);
+				const bool bOn = Phase < Dash;
+				const float Step = FMath::Min(Len - T, bOn ? Dash - Phase : Period - Phase);
+				if (Step <= KINDA_SMALL_NUMBER && T + Step < Len) { Dist += 0.01f; continue; } // float edge at a dash boundary
+				const FVector2f From = A + (B - A) * (T / Len), To = A + (B - A) * ((T + Step) / Len);
+				if (bOn) { if (Run.Num() == 0) { Run.Add(From); } Run.Add(To); }
+				else { Flush(); }
+				T += Step; Dist += Step;
+			}
+		}
+		Flush();
+		return Layer;
+	}
+private:
+	float Radius = 10.f, Thickness = 1.f, Dash = 6.f, Gap = 4.f;
+	TAttribute<FLinearColor> Color;
+};

@@ -272,8 +272,11 @@ TSharedRef<SWidget> SDCRoot::BuildRoomPanel(EDCPanel P)
 			[
 				CardBox(SNew(SVerticalBox)
 					+ SVerticalBox::Slot().AutoHeight()[Icon(TEXT("radio"), 16.f, Accent)]
-					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f, 0.f, 0.f)[TxtA(TAttribute<FText>::CreateLambda([RR]() { const UDCRunSubsystem* X = RR(); return FText::FromString(X ? DC::Clock(X->GetNextMissionIn()) : TEXT("")); }), Mono(20.f), FSlateColor(Text))]
-					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)[Label(TEXT("Next posting"), TextFaint, 7.5f)], FMargin(14.f))
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f, 0.f, 0.f)[TxtA(TAttribute<FText>::CreateLambda([RR]() {
+						const UDCRunSubsystem* X = RR(); if (!X) { return FText::GetEmpty(); }
+						const TArray<double> Pend = X->GetPendingPostingTimes();
+						return FText::FromString(Pend.Num() ? DC::Clock(Pend[0]) : TEXT("FULL")); }), Mono(20.f), FSlateColor(Text))]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)[TxtA(TAttribute<FText>::CreateLambda([RR]() { const UDCRunSubsystem* X = RR(); return FText::FromString(X && X->GetPendingPostingTimes().Num() == 0 ? TEXT("BOARD FULL") : TEXT("NEXT POSTING")); }), Caps(7.5f), FSlateColor(TextFaint))], FMargin(14.f))
 			]
 		];
 	}

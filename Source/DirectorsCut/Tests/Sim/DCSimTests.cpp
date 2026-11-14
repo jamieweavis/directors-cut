@@ -222,10 +222,21 @@ bool FDCSimLifecycle::RunTest(const FString&)
 	S->AdvanceTime(2.0);
 	TestNull(TEXT("expired"), S->FindMission(ExId));
 	A::NextPostAt(*S) = S->GetRunTime() + 5.0;
+	{
+		const TArray<double> Pend = S->GetPendingPostingTimes();
+		TestEqual(TEXT("one pending time per empty slot"), Pend.Num(), 4);
+		if (Pend.Num() == 4) { TestEqual(TEXT("pending 0"), Pend[0], 5.0, 1e-6); TestEqual(TEXT("pending 3 staggered"), Pend[3], 5.0 + 40.0 * 3, 1e-6); }
+	}
 	S->AdvanceTime(5.0);
 	TestEqual(TEXT("new posting"), S->GetMissions().Num(), 1);
+	{
+		const TArray<double> Pend = S->GetPendingPostingTimes();
+		TestEqual(TEXT("pending shrinks as slots fill"), Pend.Num(), 3);
+		if (Pend.Num() == 3) { TestEqual(TEXT("next after a post"), Pend[0], 40.0, 1e-6); TestEqual(TEXT("last pending"), Pend[2], 120.0, 1e-6); }
+	}
 	S->AdvanceTime(40.0 * 3 + 1.0);
 	TestEqual(TEXT("board fills at interval"), S->GetMissions().Num(), 4);
+	TestEqual(TEXT("no pending postings when full"), S->GetPendingPostingTimes().Num(), 0);
 	S->AdvanceTime(200.0);
 	TestTrue(TEXT("board never overfills"), S->GetMissions().Num() <= 4);
 	return true;

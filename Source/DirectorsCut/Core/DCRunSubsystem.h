@@ -137,6 +137,9 @@ public:
 	double GetRecruitRefreshIn() const;                    // run seconds
 	int32 GetRecruitRefreshCost() const;                   // pay to reroll now
 	double GetNextMissionIn() const;                       // run seconds until the next posting (board not full)
+	/** Run seconds until each empty board slot fills, soonest first; empty when the board is full.
+	 *  Postings arrive one per post interval, so slot i is due at the next post time + i intervals. */
+	TArray<double> GetPendingPostingTimes() const;
 	/** Seconds left / progress 0..1 for an in-progress mission (0 / 0 if not running). */
 	double GetMissionTimeRemaining(int32 MissionId) const;
 	float GetMissionProgress(int32 MissionId) const;

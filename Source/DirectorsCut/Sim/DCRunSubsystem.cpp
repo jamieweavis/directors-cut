@@ -718,6 +718,19 @@ double UDCRunSubsystem::GetRecruitRefreshIn() const { return FMath::Max(0.0, Rec
 int32 UDCRunSubsystem::GetRecruitRefreshCost() const { return DCImpl::Bal(*this).RecruitRefreshCost; }
 double UDCRunSubsystem::GetNextMissionIn() const { return FMath::Max(0.0, NextPostAt - RunTime); }
 
+TArray<double> UDCRunSubsystem::GetPendingPostingTimes() const
+{
+	TArray<double> Out;
+	if (!Data.IsValid()) { return Out; }
+	const int32 Empty = DCImpl::BoardSize(*this) - DCImpl::BoardCount(*this);
+	if (Empty <= 0) { return Out; }
+	const double First = FMath::Max(0.0, NextPostAt - RunTime);
+	const double Interval = DCImpl::PostInterval(*this);
+	Out.Reserve(Empty);
+	for (int32 i = 0; i < Empty; ++i) { Out.Add(First + Interval * i); }
+	return Out;
+}
+
 double UDCRunSubsystem::GetMissionTimeRemaining(int32 Id) const
 {
 	const FDCMission* M = FindMission(Id);
