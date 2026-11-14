@@ -9,7 +9,7 @@
 //  - Clock: hour = StartHour + RunTime * GameMinutesPerSecond / 60 (default 1 game minute per real second, so a day is
 //    24 real minutes). Payday (upkeep) is charged at every dawn (DawnHour).
 //  - Saving: autosave every AutosaveInterval s, on every mission start/complete/build, and on Deinitialize.
-//    Closing the game freezes time: Continue restores RunTime exactly (no offline progress). GameOver/Won delete the save.
+//    Closing the game freezes time: Continue restores RunTime exactly (no offline progress). GameOver/Won keep the save, marked finished.
 #pragma once
 
 #include "CoreMinimal.h"
