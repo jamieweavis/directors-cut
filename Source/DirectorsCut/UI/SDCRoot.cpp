@@ -175,6 +175,19 @@ void SDCRoot::OnMissionCompleted(const FDCMissionReport& R)
 	if (bOk && R.DirectorTake > 0) { Msg += FString::Printf(TEXT("  +%s"), *Money(R.DirectorTake)); }
 	const FName Icon = bOk ? FName(TEXT("circle-check")) : (R.Outcome == EDCMissionOutcome::Busted ? FName(TEXT("siren")) : FName(TEXT("circle-x")));
 	Toast(Msg, Icon, !bOk);
+	const UDCRunSubsystem* Rs = Run();
+	const bool bLawyer = Rs && Rs->IsRoomBuilt(EDCRoomType::LawyerOffice);
+	for (const FDCCrewMemberResult& MR : R.Members)
+	{
+		if (MR.bArrested)
+		{
+			Toast(FString::Printf(TEXT("%s was arrested%s"), *MR.Name, bLawyer ? TEXT(" · bail them out at the Lawyer") : TEXT(" · no Lawyer, they're gone")), TEXT("siren"), true);
+		}
+		else if (MR.bQuit)
+		{
+			Toast(FString::Printf(TEXT("%s walked out · loyalty too low"), *MR.Name), TEXT("door-open"), true);
+		}
+	}
 }
 
 void SDCRoot::OnPerkOffered(const TArray<FDCPerk>&)
@@ -871,7 +884,13 @@ TSharedRef<SWidget> SDCRoot::MissionChip(const FDCMission& M)
 			[
 				SNew(STextBlock).Text(FText::FromString(M.DisplayName)).Font(Font(10.5f, EW::SemiBold)).ColorAndOpacity(Text).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f, 0.f, 0.f)[Crew]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f, 0.f, 0.f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[Crew]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.f, 0.f, 0.f, 0.f)
+				[Txt(FString::Printf(TEXT("+%s"), *Money(FMath::RoundToInt(M.Payout * M.Cut))), Mono(10.f), Accent)]
+			]
 		]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.f, 0.f, 0.f, 0.f)
 		[
@@ -883,7 +902,7 @@ TSharedRef<SWidget> SDCRoot::MissionChip(const FDCMission& M)
 		];
 
 	TSharedRef<SWidget> B = Button(SNew(SBox).WidthOverride(272.f)[Content], [this, Id]() { OpenPlanner(Id); }, EBtn::Card, true, nullptr, FMargin(8.f, 7.f, 12.f, 7.f));
-	B->SetToolTip(Tip(M.DisplayName, FString::Printf(TEXT("%s odds · click for details"), *Pct(Chance)), M.Icon, TC));
+	B->SetToolTip(Tip(M.DisplayName, FString::Printf(TEXT("%s odds · your take %s if it lands (payout %s) · click for details"), *Pct(Chance), *Money(FMath::RoundToInt(M.Payout * M.Cut)), *Money(M.Payout)), M.Icon, TC));
 	return SNew(SBorder).BorderImage(Box(FLinearColor(0, 0, 0, 0.25f), 11.f)).Padding(0.f)[B];
 }
 

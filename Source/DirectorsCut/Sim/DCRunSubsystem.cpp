@@ -413,6 +413,7 @@ int32 UDCRunSubsystem::GetUnlockedTier() const
 int32 UDCRunSubsystem::GetRosterCap() const { return BaseRosterCap + FMath::RoundToInt(DCImpl::SumGlobal(*this, K_rosterCap)); }
 int32 UDCRunSubsystem::GetMaxActiveMissions() const { return BaseMaxActive + FMath::RoundToInt(DCImpl::SumGlobal(*this, K_maxActive)); }
 int32 UDCRunSubsystem::GetActiveMissionCount() const { return Missions.FilterByPredicate([](const FDCMission& M) { return M.bInProgress; }).Num(); }
+int32 UDCRunSubsystem::GetBoardSize() const { return DCImpl::BoardSize(*this); }
 
 int32 UDCRunSubsystem::GetUpkeepDue() const
 {

@@ -1,6 +1,133 @@
 // Director's Cut — mission board, mission planner and reports (Agent C).
 #include "UI/SDCRootInternal.h"
 #include "DirectorsCut.h"
+#include "Input/DragAndDrop.h"
+#include "Widgets/Input/SMenuAnchor.h"
+#include "Framework/Application/SlateApplication.h"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Drag and drop: roster rows -> crew slots
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace
+{
+	class FDCCrewDragOp : public FDragDropOperation
+	{
+	public:
+		DRAG_DROP_OPERATOR_TYPE(FDCCrewDragOp, FDragDropOperation)
+		int32 CriminalId = INDEX_NONE;
+		TSharedPtr<SWidget> Visual;
+		virtual TSharedPtr<SWidget> GetDefaultDecorator() const override { return Visual; }
+		static TSharedRef<FDCCrewDragOp> New(int32 InId, TSharedRef<SWidget> InVisual)
+		{
+			TSharedRef<FDCCrewDragOp> Op = MakeShared<FDCCrewDragOp>();
+			Op->CriminalId = InId;
+			Op->Visual = InVisual;
+			Op->Construct();
+			return Op;
+		}
+	};
+
+	/** A card-styled row that clicks like a button and can be dragged (left mouse). */
+	class SDCDragRow : public SCompoundWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SDCDragRow) : _CriminalId(INDEX_NONE), _bCanDrag(true), _bSelected(false) {}
+			SLATE_DEFAULT_SLOT(FArguments, Content)
+			SLATE_ARGUMENT(int32, CriminalId)
+			SLATE_ARGUMENT(bool, bCanDrag)
+			SLATE_ARGUMENT(bool, bSelected)
+			SLATE_ARGUMENT(FMargin, Pad)
+			SLATE_ARGUMENT(TSharedPtr<SWidget>, DragVisual)
+			SLATE_EVENT(FSimpleDelegate, OnClicked)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& InArgs)
+		{
+			CriminalId = InArgs._CriminalId;
+			bCanDrag = InArgs._bCanDrag;
+			DragVisual = InArgs._DragVisual;
+			OnClicked = InArgs._OnClicked;
+			const FButtonStyle* St = &ButtonStyle(InArgs._bSelected ? EBtn::CardSelected : EBtn::Card);
+			ChildSlot
+			[
+				SNew(SBorder).Padding(InArgs._Pad)
+				.BorderImage_Lambda([this, St]() { return bPressed ? &St->Pressed : (IsHovered() ? &St->Hovered : &St->Normal); })
+				[InArgs._Content.Widget]
+			];
+		}
+		virtual FReply OnMouseButtonDown(const FGeometry&, const FPointerEvent& E) override
+		{
+			if (E.GetEffectingButton() != EKeys::LeftMouseButton) { return FReply::Unhandled(); }
+			bPressed = true;
+			FReply Rep = FReply::Handled();
+			return bCanDrag ? Rep.DetectDrag(SharedThis(this), EKeys::LeftMouseButton) : Rep;
+		}
+		virtual FReply OnMouseButtonUp(const FGeometry&, const FPointerEvent& E) override
+		{
+			if (E.GetEffectingButton() != EKeys::LeftMouseButton || !bPressed) { return FReply::Unhandled(); }
+			bPressed = false;
+			OnClicked.ExecuteIfBound();
+			return FReply::Handled();
+		}
+		virtual void OnMouseLeave(const FPointerEvent& E) override { SCompoundWidget::OnMouseLeave(E); bPressed = false; }
+		virtual FReply OnDragDetected(const FGeometry&, const FPointerEvent&) override
+		{
+			bPressed = false;
+			if (!bCanDrag || !DragVisual.IsValid()) { return FReply::Unhandled(); }
+			Sfx(DCSfx::Click);
+			return FReply::Handled().BeginDragDrop(FDCCrewDragOp::New(CriminalId, DragVisual.ToSharedRef()));
+		}
+
+	private:
+		int32 CriminalId = INDEX_NONE;
+		bool bCanDrag = true;
+		bool bPressed = false;
+		TSharedPtr<SWidget> DragVisual;
+		FSimpleDelegate OnClicked;
+	};
+
+	/** Accepts an FDCCrewDragOp and glows while one hovers over it. */
+	class SDCCrewDropSlot : public SCompoundWidget
+	{
+	public:
+		DECLARE_DELEGATE_OneParam(FOnCrewDropped, int32 /*CriminalId*/);
+		SLATE_BEGIN_ARGS(SDCCrewDropSlot) {}
+			SLATE_DEFAULT_SLOT(FArguments, Content)
+			SLATE_EVENT(FOnCrewDropped, OnDropped)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& InArgs)
+		{
+			OnDropped = InArgs._OnDropped;
+			ChildSlot
+			[
+				SNew(SOverlay)
+				+ SOverlay::Slot()[InArgs._Content.Widget]
+				+ SOverlay::Slot()
+				[
+					SNew(SBorder).BorderImage(Box(A(Accent, 0.10f), 10.f, Accent, 2.f)).Padding(0.f)
+					.Visibility_Lambda([this]() { return bOver ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+				]
+			];
+		}
+		virtual void OnDragEnter(const FGeometry&, const FDragDropEvent& E) override { bOver = E.GetOperationAs<FDCCrewDragOp>().IsValid(); }
+		virtual void OnDragLeave(const FDragDropEvent&) override { bOver = false; }
+		virtual FReply OnDragOver(const FGeometry&, const FDragDropEvent& E) override { return E.GetOperationAs<FDCCrewDragOp>().IsValid() ? FReply::Handled() : FReply::Unhandled(); }
+		virtual FReply OnDrop(const FGeometry&, const FDragDropEvent& E) override
+		{
+			bOver = false;
+			TSharedPtr<FDCCrewDragOp> Op = E.GetOperationAs<FDCCrewDragOp>();
+			if (!Op.IsValid()) { return FReply::Unhandled(); }
+			OnDropped.ExecuteIfBound(Op->CriminalId);
+			return FReply::Handled();
+		}
+
+	private:
+		bool bOver = false;
+		FOnCrewDropped OnDropped;
+	};
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared bits
@@ -71,7 +198,7 @@ TSharedRef<SWidget> SDCRoot::BuildMissions()
 	[
 		SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Label(TEXT("Board"))]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0.f)[Txt(FString::FromInt(Board.Num() + (Final ? 1 : 0)), Mono(9.f), TextFaint)]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0.f)[Txt(FString::Printf(TEXT("%d/%d"), Board.Num(), R->GetBoardSize()) + (Final ? TEXT(" + Big Score") : TEXT("")), Mono(9.f), TextFaint)]
 	];
 	if (Final) { Body->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 12.f)[MissionCard(*Final)]; }
 
@@ -209,7 +336,8 @@ TSharedRef<SWidget> SDCRoot::MissionCard(const FDCMission& M)
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 1.f, 0.f, 0.f)[Txt(Money(M.Payout), Mono(M.bFinal ? 17.f : 14.f), Text)]
 		]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(10.f, 0.f, 0.f, 2.f)
-		[M.Cost > 0 ? Txt(FString::Printf(TEXT("cost %s"), *Money(M.Cost)), Mono(9.f), TextFaint) : SNullWidget::NullWidget]
+		[M.Cost > 0 ? TxtA(FText::FromString(FString::Printf(TEXT("cost %s"), *Money(M.Cost))), Mono(9.f),
+			TAttribute<FSlateColor>::CreateLambda([RR, Cost = M.Cost]() { const UDCRunSubsystem* X = RR(); return FSlateColor(X && X->GetCash() < Cost ? Bad : TextFaint); })) : SNullWidget::NullWidget]
 		+ SHorizontalBox::Slot().FillWidth(1.f)[SNullWidget::NullWidget]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 		[
@@ -458,11 +586,30 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 		TSharedRef<SWidget> SlotW = SNew(SBox).WidthOverride(124.f).HeightOverride(124.f)
 			[
 				Button(SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)[Inner], [this, SlotCId]() { if (SlotCId != INDEX_NONE) { ToggleCrew(SlotCId); } },
-					C ? EBtn::Card : EBtn::Ghost, true, C ? Tip(C->GetDisplayName(), TEXT("Click to remove"), DC::TypeIcon(C->Type), DC::TypeColor(C->Type)) : Tip(TEXT("Empty slot"), TEXT("Pick crew from the list on the right")), FMargin(6.f))
+					C ? EBtn::Card : EBtn::Ghost, true, C ? Tip(C->GetDisplayName(), TEXT("Click to remove"), DC::TypeIcon(C->Type), DC::TypeColor(C->Type)) : Tip(TEXT("Empty slot"), TEXT("Click or drag crew from the roster on the right")), FMargin(6.f))
 			];
+		const int32 SlotIdx = i;
+		const int32 MaxCrew = M.CrewSize;
 		CrewSlots->AddSlot().AutoWidth().Padding(0.f, 0.f, 10.f, 0.f)
 		[
-			C ? SlotW : (TSharedRef<SWidget>)(SNew(SBorder).BorderImage(Box(FLinearColor::Transparent, 10.f, A(FLinearColor::White, 0.10f), 1.f)).Padding(0.f)[SlotW])
+			SNew(SDCCrewDropSlot)
+			.OnDropped_Lambda([this, SlotIdx, MaxCrew](int32 CId)
+			{
+				const UDCRunSubsystem* X = Run();
+				const FDCCriminal* Q = X ? X->FindCriminal(CId) : nullptr;
+				if (!Q || !Q->IsAvailable() || !X->GetRoster().ContainsByPredicate([CId](const FDCCriminal& Z) { return Z.Id == CId; })) { Sfx(DCSfx::Error); return; }
+				const int32 Old = PlanCrew.Find(CId);
+				if (Old != INDEX_NONE) { PlanCrew.RemoveAt(Old); PlanCrew.Insert(CId, FMath::Min(SlotIdx, PlanCrew.Num())); }
+				else if (SlotIdx < PlanCrew.Num()) { PlanCrew[SlotIdx] = CId; }
+				else if (PlanCrew.Num() < MaxCrew) { PlanCrew.Add(CId); }
+				else { PlanCrew.Last() = CId; }
+				Sfx(DCSfx::SlotFill);
+				RecomputePlan();
+				Rebuild();
+			})
+			[
+				C ? SlotW : (TSharedRef<SWidget>)(SNew(SBorder).BorderImage(Box(FLinearColor::Transparent, 10.f, A(FLinearColor::White, 0.10f), 1.f)).Padding(0.f)[SlotW])
+			]
 		];
 	}
 
@@ -668,6 +815,105 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 	Sorted.StableSort([](const FDCCriminal& X, const FDCCriminal& Y) { return X.IsAvailable() && !Y.IsAvailable(); });
 	TSharedRef<SVerticalBox> Roster = SNew(SVerticalBox);
 	const double Now_ = R->GetRunTime();
+
+	// One gear slot with a dropdown of matching stash items.
+	const int32 SlotCount = R->GetGearSlotCount();
+	auto GearPicker = [this, SlotCount](const FDCCriminal& C, EDCGearSlot S) -> TSharedRef<SWidget>
+	{
+		const UDCRunSubsystem* X = Run();
+		const int32 CId = C.Id;
+		const FName* Item = C.Equipped.Find(S);
+		const bool bHas = Item && !Item->IsNone();
+		const FDCGearItem* G = (bHas && X) ? X->FindGear(*Item) : nullptr;
+		const bool bLocked = (int32)S >= SlotCount;
+		const bool bAway = C.Status == EDCCriminalStatus::OnMission;
+		constexpr float Sz = 24.f;
+
+		const FLinearColor IcCol = bLocked ? A(TextFaint, 0.5f) : (bHas ? Accent : TextFaint);
+		TSharedRef<SWidget> Tile = SNew(SBox).WidthOverride(Sz).HeightOverride(Sz)
+			[
+				SNew(SBorder).BorderImage(bHas ? Box(A(Accent, 0.10f), 6.f, A(Accent, 0.35f), 1.f) : Box(FLinearColor::Transparent, 6.f, A(FLinearColor::White, bLocked ? 0.05f : 0.12f), 1.f))
+				.HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(0.f)
+				[Icon(bLocked ? FName(TEXT("lock")) : (bHas ? (G ? G->Icon : FName(TEXT("package"))) : DC::SlotIcon(S)), 12.f, IcCol)]
+			];
+		if (bLocked)
+		{
+			Tile->SetToolTip(Tip(FString::Printf(TEXT("%s slot · locked"), DC::SlotName(S)), TEXT("Build the Workshop to unlock a third gear slot"), TEXT("lock"), TextDim));
+			return Tile;
+		}
+
+		// Menu: stash items for this slot (deduplicated with counts) + unequip.
+		auto MakeMenu = [this, CId, S, bHas, Item = bHas ? *Item : FName()]() -> TSharedRef<SWidget>
+		{
+			const UDCRunSubsystem* Y = Run();
+			TSharedRef<SVerticalBox> L = SNew(SVerticalBox);
+			L->AddSlot().AutoHeight().Padding(4.f, 2.f, 4.f, 6.f)[Label(FString::Printf(TEXT("%s slot"), DC::SlotName(S)), TextFaint, 7.5f)];
+			TMap<FName, int32> Counts;
+			TArray<FName> Order;
+			if (Y)
+			{
+				for (FName Id : Y->GetStash())
+				{
+					const FDCGearItem* GI = Y->FindGear(Id);
+					if (!GI || GI->Slot != S) { continue; }
+					if (!Counts.Contains(Id)) { Order.Add(Id); }
+					Counts.FindOrAdd(Id)++;
+				}
+			}
+			auto Close_ = []() { FSlateApplication::Get().DismissAllMenus(); };
+			for (FName Id : Order)
+			{
+				const FDCGearItem* GI = Y->FindGear(Id);
+				const int32 N = Counts[Id];
+				TSharedRef<SWidget> Row = SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)[Icon(GI->Icon, 12.f, Accent)]
+					+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[Txt(GI->DisplayName, Font(10.f, EW::SemiBold), Text)]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0.f, 0.f, 0.f)[Txt(N > 1 ? FString::Printf(TEXT("x%d"), N) : FString(), Mono(9.f), TextFaint)];
+				TSharedRef<SWidget> B = Button(Row, [this, Id, CId, Close_]()
+				{
+					Close_();
+					FString Err;
+					UDCRunSubsystem* Z = Run();
+					if (Z && Z->EquipFromStash(Id, CId, &Err)) { Sfx(DCSfx::SlotFill); }
+					else { Sfx(DCSfx::Error); Toast(Err.IsEmpty() ? TEXT("Can't equip that") : Err, TEXT("triangle-alert"), true); }
+					RecomputePlan();
+					Rebuild();
+				}, EBtn::Ghost, true, Tip(GI->DisplayName, GI->Description, GI->Icon), FMargin(8.f, 5.f));
+				L->AddSlot().AutoHeight()[B];
+			}
+			if (Order.Num() == 0)
+			{
+				L->AddSlot().AutoHeight().Padding(8.f, 4.f)[Txt(TEXT("Nothing in the stash for this slot.\nBuy gear at the Workbench (G)."), Font(9.5f), TextDim, true)];
+			}
+			if (bHas)
+			{
+				L->AddSlot().AutoHeight().Padding(0.f, 4.f)[HLine()];
+				L->AddSlot().AutoHeight()[Button(IconText(TEXT("x"), TEXT("Unequip"), Font(10.f), Bad, Text, 11.f, 6.f), [this, CId, S, Close_]()
+				{
+					Close_();
+					if (UDCRunSubsystem* Z = Run()) { Z->Unequip(CId, S); }
+					Sfx(DCSfx::Click);
+					RecomputePlan();
+					Rebuild();
+				}, EBtn::Ghost, true, nullptr, FMargin(8.f, 5.f))];
+			}
+			(void)Item;
+			return SNew(SBox).WidthOverride(230.f)
+				[SNew(SBorder).BorderImage(Box(Hex(0x12151A, 0.98f), 10.f, Line, 1.f)).Padding(6.f)[L]];
+		};
+
+		TSharedRef<SMenuAnchor> Anchor = SNew(SMenuAnchor)
+			.Placement(MenuPlacement_BelowAnchor)
+			.Method(EPopupMethod::UseCurrentWindow)
+			.OnGetMenuContent_Lambda(MakeMenu);
+		Anchor->SetContent(
+				Button(Tile, [WA = TWeakPtr<SMenuAnchor>(Anchor)]() { if (TSharedPtr<SMenuAnchor> P = WA.Pin()) { P->SetIsOpen(!P->IsOpen()); Sfx(DCSfx::Click); } },
+					EBtn::Ghost, !bAway,
+					Tip(bHas ? (G ? G->DisplayName : Item->ToString()) : FString::Printf(TEXT("%s slot · empty"), DC::SlotName(S)),
+						bAway ? TEXT("On a job · can't swap gear now") : (G ? G->Description + TEXT("\nClick to change") : FString(TEXT("Click to equip from your stash"))), DC::SlotIcon(S), bHas ? Accent : TextDim),
+					FMargin(0.f)));
+		return Anchor;
+	};
 	for (const FDCCriminal* CP : Sorted)
 	{
 		const FDCCriminal& C = *CP;
@@ -724,9 +970,29 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 				[SNew(STextBlock).Text(FText::FromString(C.GetShortName())).Font(Font(10.5f, EW::SemiBold)).ColorAndOpacity(bAvail ? Text : TextFaint).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 3.f, 0.f, 0.f)[Ctr]
 			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.f, 0.f, 0.f, 0.f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 3.f, 0.f)[GearPicker(C, EDCGearSlot::Tool)]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 3.f, 0.f)[GearPicker(C, EDCGearSlot::Outfit)]
+				+ SHorizontalBox::Slot().AutoWidth()[GearPicker(C, EDCGearSlot::Gadget)]
+			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.f, 0.f, 0.f, 0.f)[Right_];
 
-		TSharedRef<SWidget> Btn = Button(Row, [this, CId]() { ToggleCrew(CId); }, bIn ? EBtn::CardSelected : EBtn::Card, true, nullptr, FMargin(10.f, 7.f));
+		TSharedRef<SWidget> DragVis = SNew(SBorder).BorderImage(Box(Hex(0x221D14, 0.95f), 10.f, Accent, 1.f)).Padding(FMargin(8.f, 6.f, 12.f, 6.f))
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)[Avatar(C, 30.f)]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Txt(C.GetShortName(), Font(10.5f, EW::SemiBold), Text)]
+			];
+		TSharedRef<SWidget> Btn = SNew(SDCDragRow)
+			.CriminalId(CId)
+			.bCanDrag(bAvail)
+			.bSelected(bIn)
+			.Pad(FMargin(10.f, 7.f))
+			.DragVisual(DragVis)
+			.OnClicked_Lambda([this, CId]() { ToggleCrew(CId); })
+			[Row];
 		Btn->SetToolTip(TipWidget(CrewTip(C)));
 		Roster->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 6.f)
 		[
@@ -806,7 +1072,7 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 	TSharedRef<SWidget> Body = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().FillWidth(1.f)[Left]
 		+ SHorizontalBox::Slot().AutoWidth().Padding(24.f, 0.f)[VLine()]
-		+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(330.f)[RightCol]];
+		+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(400.f)[RightCol]];
 
 	return Shell(M.Icon, M.DisplayName, Body, HR, M.Flavour);
 }
@@ -984,7 +1250,9 @@ TSharedRef<SWidget> SDCRoot::ReportCard(const FDCMissionReport& Rep)
 		};
 		if (MR.bLevelledUp) { AddIcon(TEXT("chevrons-up"), Accent, FString::Printf(TEXT("Level %d"), MR.NewLevel)); }
 		if (MR.bInjured) { AddIcon(TEXT("bandage"), Bad, FString::Printf(TEXT("Injured · %s"), *DC::Clock(MR.InjurySeconds))); }
-		if (MR.bArrested) { AddIcon(TEXT("siren"), Bad, TEXT("Arrested")); }
+		const bool bLawyer = R && R->IsRoomBuilt(EDCRoomType::LawyerOffice);
+		if (MR.bArrested) { AddIcon(TEXT("siren"), Bad, bLawyer ? TEXT("Arrested · bail them out at the Lawyer") : TEXT("Arrested · gone for good (no Lawyer to bail them out)")); }
+		if (MR.bQuit) { AddIcon(TEXT("door-open"), Bad, FString::Printf(TEXT("Walked out · loyalty fell to %d. Their gear went to the stash."), MR.LoyaltyAfter)); }
 		if (MR.bArrestPrevented) { AddIcon(TEXT("shield-check"), Good, TEXT("Arrest prevented")); }
 		if (MR.LoyaltyDelta != 0) { AddIcon(MR.LoyaltyDelta > 0 ? TEXT("heart") : TEXT("heart-crack"), MR.LoyaltyDelta > 0 ? Good : Bad, FString::Printf(TEXT("Loyalty %+d"), MR.LoyaltyDelta)); }
 
@@ -1000,7 +1268,7 @@ TSharedRef<SWidget> SDCRoot::ReportCard(const FDCMissionReport& Rep)
 				[
 					SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)
-					[C ? Avatar(*C, 28.f, MR.bArrested) : AvatarType(EDCCriminalType::Muscle, EDCQuality::Street, 28.f, true)]
+					[(C && !MR.bQuit) ? Avatar(*C, 28.f, MR.bArrested) : AvatarType(MR.Type, MR.Quality, 28.f, true)]
 					+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 					[
 						SNew(SVerticalBox)
@@ -1008,12 +1276,16 @@ TSharedRef<SWidget> SDCRoot::ReportCard(const FDCMissionReport& Rep)
 						[
 							SNew(SHorizontalBox)
 							+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
-							[SNew(STextBlock).Text(FText::FromString(C ? C->GetShortName() : MR.Name)).Font(Font(10.f, EW::SemiBold)).ColorAndOpacity(MR.bArrested ? Bad : Text).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
+							[SNew(STextBlock).Text(FText::FromString(C ? C->GetShortName() : MR.Name)).Font(Font(10.f, EW::SemiBold)).ColorAndOpacity((MR.bArrested || MR.bQuit) ? Bad : Text).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Icons]
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Txt(FString::Printf(TEXT("+%d"), MR.XPGained), Mono(9.f), TextDim)]
 						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 3.f, 0.f, 0.f)
+						[(MR.bQuit || MR.bArrested)
+							? Txt(MR.bQuit ? TEXT("Walked out · loyalty too low") : (bLawyer ? TEXT("Arrested · see the Lawyer") : TEXT("Arrested · gone for good")), Font(8.5f), Bad)
+							: SNullWidget::NullWidget]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 5.f, 0.f, 0.f)
-						[Bar(TAttribute<float>::CreateLambda([Phase, Delay, XPFrom, XPFrac, bLv]()
+						[(MR.bQuit || MR.bArrested) ? SNullWidget::NullWidget : Bar(TAttribute<float>::CreateLambda([Phase, Delay, XPFrom, XPFrac, bLv]()
 							{
 								const float P = EaseOut((Phase() - Delay - 0.1f) / 0.7f);
 								if (bLv) { return P < 0.5f ? FMath::Lerp(XPFrom, 1.f, P * 2.f) : FMath::Lerp(0.f, XPFrac, (P - 0.5f) * 2.f); }

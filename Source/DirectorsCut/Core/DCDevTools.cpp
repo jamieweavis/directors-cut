@@ -152,7 +152,11 @@ void UDCDevTools::PrepareShot(const FShot& Shot)
 		if (!Shot.Panel.IsEmpty())
 		{
 			const int64 P = StaticEnum<EDCPanel>()->GetValueByNameString(Shot.Panel);
-			if (P != INDEX_NONE) { UI->OpenPanel((EDCPanel)P); }
+			const UDCRunSubsystem* RunS = UDCRunSubsystem::Get(W);
+			const FDCMission* First = nullptr;
+			if (RunS) { for (const FDCMission& M : RunS->GetMissions()) { if (!M.bInProgress) { First = &M; break; } } }
+			if (P == (int64)EDCPanel::MissionPlanner && First) { UI->OpenMissionPlanner(First->Id); }
+			else if (P != INDEX_NONE) { UI->OpenPanel((EDCPanel)P); }
 		}
 		else { UI->ClosePanel(); }
 	}

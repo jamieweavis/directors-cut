@@ -179,10 +179,22 @@ FDCCriminal FDCSimImpl::MakeCriminal(S& Sim, EDCCriminalType Type, EDCQuality Qu
 	C.Id = Sim.NextId++;
 	C.Type = Type;
 	C.Quality = Quality;
-	C.FirstName = D.FirstNames[R.RandRange(0, D.FirstNames.Num() - 1)];
-	C.LastName = D.LastNames[R.RandRange(0, D.LastNames.Num() - 1)];
-	const TArray<FString>& Nicks = D.Nicknames.FindChecked(Type);
-	C.Nickname = Nicks[R.RandRange(0, Nicks.Num() - 1)];
+	// Prefer names nobody in the roster, recruit pool or memorial is using; fall back to the full list.
+	TSet<FString> UsedFirst, UsedLast, UsedNick;
+	for (const TArray<FDCCriminal>* List : { &Sim.Roster, &Sim.Recruits, &Sim.Fallen })
+	{
+		for (const FDCCriminal& O : *List) { UsedFirst.Add(O.FirstName); UsedLast.Add(O.LastName); UsedNick.Add(O.Nickname); }
+	}
+	auto PickUnused = [&R](const TArray<FString>& All, const TSet<FString>& Used) -> FString
+	{
+		TArray<FString> Free;
+		for (const FString& N : All) { if (!Used.Contains(N)) { Free.Add(N); } }
+		const TArray<FString>& Pool = Free.Num() > 0 ? Free : All;
+		return Pool[R.RandRange(0, Pool.Num() - 1)];
+	};
+	C.FirstName = PickUnused(D.FirstNames, UsedFirst);
+	C.LastName = PickUnused(D.LastNames, UsedLast);
+	C.Nickname = PickUnused(D.Nicknames.FindChecked(Type), UsedNick);
 	C.Seed = R.RandRange(0, MAX_int32 - 1);
 	C.Level = FMath::Clamp(Level, 1, B.MaxLevel);
 	C.XP = 0;
@@ -655,7 +667,10 @@ void FDCSimImpl::CompleteMission(S& Sim, int32 MissionId)
 		const int32 OldLoy = C->Loyalty;
 		C->Loyalty = FMath::Clamp(C->Loyalty + dLoy, B.LoyaltyMin, B.LoyaltyMax);
 		MR.LoyaltyDelta = C->Loyalty - OldLoy;
-		if (!MR.bArrested && C->Loyalty < B.LoyaltyQuitBelow) { Quit.Add(Id); }
+		MR.LoyaltyAfter = C->Loyalty;
+		MR.Type = C->Type;
+		MR.Quality = C->Quality;
+		if (!MR.bArrested && C->Loyalty < B.LoyaltyQuitBelow) { MR.bQuit = true; Quit.Add(Id); }
 		Rep.Members.Add(MR);
 	}
 	for (int32 Id : Arrested)

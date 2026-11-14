@@ -381,6 +381,10 @@ struct FDCCrewMemberResult
 	UPROPERTY(BlueprintReadOnly) bool bLevelledUp = false;
 	UPROPERTY(BlueprintReadOnly) int32 NewLevel = 1;
 	UPROPERTY(BlueprintReadOnly) int32 LoyaltyDelta = 0;
+	UPROPERTY(BlueprintReadOnly) bool bQuit = false;          // loyalty fell below the quit line: they walked out (gear -> stash)
+	UPROPERTY(BlueprintReadOnly) int32 LoyaltyAfter = 0;
+	UPROPERTY(BlueprintReadOnly) EDCCriminalType Type = EDCCriminalType::Muscle; // for the avatar once they're gone
+	UPROPERTY(BlueprintReadOnly) EDCQuality Quality = EDCQuality::Street;
 };
 
 /** Result of a finished mission. Applied to state at completion; the UI reveals it from GetReports(). */

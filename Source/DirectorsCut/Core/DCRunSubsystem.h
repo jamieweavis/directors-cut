@@ -113,6 +113,7 @@ public:
 	int32 GetRosterCap() const;
 	int32 GetMaxActiveMissions() const;
 	int32 GetActiveMissionCount() const;
+	int32 GetBoardSize() const;                            // max postings on the board (excludes the Big Score)
 	int32 GetUpkeepDue() const;                            // charged at next dawn
 	double GetRecruitRefreshIn() const;                    // run seconds
 	int32 GetRecruitRefreshCost() const;                   // pay to reroll now
