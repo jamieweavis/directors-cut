@@ -660,7 +660,7 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 9.f)
 		[BarRow(TEXT("shield-check"), TEXT("Counters"), [Cache]() { return Cache->B.ThreatChance; }, [Cache]() { return Pct(Cache->B.ThreatChance); }, Good, TEXT("Every countered threat adds odds"))]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 9.f)
-		[BarRow(TEXT("sparkles"), TEXT("Modifiers"), [Cache]() { return FMath::Abs(Cache->B.ModifierChance); }, [Cache]() { return SignedPct(Cache->B.ModifierChance); }, Accent, TEXT("Traits, perks, rooms and the night bonus"))]
+		[BarRow(TEXT("sparkles"), TEXT("Modifiers"), [Cache]() { return FMath::Abs(Cache->B.ModifierChance); }, [Cache]() { return SignedPct(Cache->B.ModifierChance); }, Accent, TEXT("Traits, perks, wings and the night bonus"))]
 		+ SVerticalBox::Slot().AutoHeight()
 		[BarRow(TEXT("handshake"), TEXT("Willing"), [Cache]() { return Cache->B.WillFactor; }, [Cache]() { return FString::Printf(TEXT("x%.2f"), Cache->B.WillFactor); }, Warn, TEXT("A greedy cut makes the crew less willing, which multiplies the odds down"))];
 
