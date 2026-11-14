@@ -2,7 +2,7 @@
 // camera bounds, station enabling + badges, crew pawns (idle life tied to the clock, leaving for / returning from
 // missions, hires, dismissals) and the doors. Spawned by ADCPlayerController. Agent E owns.
 //
-// Pawns never path through walls: built rooms form a graph (adjacent rooms, doorway found by tracing the shared wall)
+// Pawns never path through walls: built rooms form a graph (grid neighbours, doorway at the shared edge's midpoint)
 // plus one OUTSIDE region reached through each room's open (collapsed) -X/-Y sides. Outdoors, pawns walk a
 // visibility graph around built/under-construction wings and parked cars. Idle goals are only ever spawn-zone points
 // or the floor in front of a station, inside usable rooms.
@@ -102,6 +102,7 @@ protected:
 	TArray<FVector> SleepSpots;
 	TArray<float> SleepYaws;
 	TArray<int32> SleepOwner; // criminal id per spot, INDEX_NONE = free
+	FIntPoint SleepCell = FIntPoint(-999, -999); // grid cell the beds were laid out in
 	void BuildSleepSpots();
 	int32 AcquireSleepSlot(ADCCriminalPawn* P);
 	bool TrySendToBed(ADCCriminalPawn* P, bool bInstant);

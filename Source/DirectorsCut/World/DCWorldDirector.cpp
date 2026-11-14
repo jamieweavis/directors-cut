@@ -107,9 +107,8 @@ int32 ADCWorldDirector::RoomIndexAt(const FVector& P) const
 	for (int32 i = 0; i < Rooms.Num(); ++i)
 	{
 		const ADCRoomModule* R = Rooms[i].Get();
-		if (!R) { continue; }
-		const FBox B = R->GetWorldBounds();
-		if (P.X >= B.Min.X - 1.f && P.X <= B.Max.X + 1.f && P.Y >= B.Min.Y - 1.f && P.Y <= B.Max.Y + 1.f) { return i; }
+		if (!R || !R->bPlaced) { continue; }
+		if (R->ContainsPoint2D(P)) { return i; }
 	}
 	return INDEX_NONE;
 }
@@ -158,7 +157,7 @@ ADCGarageDoor* ADCWorldDirector::GetMissionDoor() const
 
 bool ADCWorldDirector::IsWalkable(const ADCRoomModule* R) const
 {
-	if (!R) { return false; }
+	if (!R || !R->bPlaced) { return false; }
 	if (UDCDevTools::IsBuildAll()) { return true; }
 	return R->IsUsable() && !RevealQueue.Contains(R->RoomType);
 }
@@ -166,7 +165,7 @@ bool ADCWorldDirector::IsWalkable(const ADCRoomModule* R) const
 bool ADCWorldDirector::IsSolidOutdoors(const ADCRoomModule* R) const
 {
 	// Anything standing on the plot: finished wings, frames under construction, a wing mid-reveal.
-	if (!R) { return false; }
+	if (!R || !R->bPlaced) { return false; }
 	if (UDCDevTools::IsBuildAll()) { return true; }
 	return R->GetState() != EDCRoomState::Locked || R->IsRevealPlaying() || RevealQueue.Contains(R->RoomType);
 }
@@ -177,7 +176,8 @@ uint32 ADCWorldDirector::ComputeNavSignature() const
 	for (int32 i = 0; i < Rooms.Num(); ++i)
 	{
 		const ADCRoomModule* R = Rooms[i].Get();
-		H = HashCombineFast(H, (IsWalkable(R) ? 1u : 0u) | (IsSolidOutdoors(R) ? 2u : 0u) | (R && R->IsRevealPlaying() ? 4u : 0u));
+		H = HashCombineFast(H, (IsWalkable(R) ? 1u : 0u) | (IsSolidOutdoors(R) ? 2u : 0u) | (R && R->IsRevealPlaying() ? 4u : 0u) | (R && R->bPlaced ? 8u : 0u));
+		if (R && R->bPlaced) { H = HashCombineFast(H, GetTypeHash(R->GridCell)); }
 	}
 	return H;
 }
@@ -193,9 +193,8 @@ int32 ADCWorldDirector::NavRoomAt(const FVector& P) const
 	for (int32 i = 0; i < Rooms.Num(); ++i)
 	{
 		const ADCRoomModule* R = Rooms[i].Get();
-		if (!R || !IsWalkable(R)) { continue; }
-		const FBox B = R->GetWorldBounds();
-		if (P.X >= B.Min.X - 1.f && P.X <= B.Max.X + 1.f && P.Y >= B.Min.Y - 1.f && P.Y <= B.Max.Y + 1.f) { return i; }
+		if (!R || !R->bPlaced || !IsWalkable(R)) { continue; }
+		if (R->ContainsPoint2D(P)) { return i; }
 	}
 	return INDEX_NONE;
 }
@@ -206,101 +205,68 @@ void ADCWorldDirector::BuildNav()
 	NavSignature = ComputeNavSignature();
 	Portals.Reset();
 	Exits.Reset();
-	UWorld* W = GetWorld();
-	if (!W) { return; }
-	FCollisionQueryParams Q(SCENE_QUERY_STAT(DCNav), false);
+	// Rooms appeared on the grid: framing follows; beds follow the Bunkroom if it moved.
+	if (const ADCRoomModule* Lounge = FindRoom(EDCRoomType::Lounge))
+	{
+		if (Lounge->GridCell != SleepCell) { SleepCell = Lounge->GridCell; SleepSpots.Reset(); SleepYaws.Reset(); SleepOwner.Reset(); }
+	}
+	UpdateBounds();
 
-	// Doorways between built rooms.
+	// Grid rooms: two finished neighbours always share a doorway centred on their common edge (DCHideoutGrid.cpp).
+	auto EdgeMid = [](const ADCRoomModule* R, int32 E) { return (R->FloorQuad[E] + R->FloorQuad[(E + 1) & 3]) * 0.5f; };
+	auto Inward = [](const ADCRoomModule* R, int32 E)
+	{
+		const FVector2D D = (R->FloorQuad[(E + 1) & 3] - R->FloorQuad[E]).GetSafeNormal();
+		return FVector2D(-D.Y, D.X);
+	};
 	for (int32 i = 0; i < Rooms.Num(); ++i)
 	{
+		const ADCRoomModule* RA = Rooms[i].Get();
+		if (!IsWalkable(RA) || RA->FloorQuad.Num() != 4) { continue; }
 		for (int32 j = i + 1; j < Rooms.Num(); ++j)
 		{
-			const ADCRoomModule* RA = Rooms[i].Get();
 			const ADCRoomModule* RB = Rooms[j].Get();
-			if (!IsWalkable(RA) || !IsWalkable(RB)) { continue; }
-			const FBox A = RA->GetWorldBounds(), B = RB->GetWorldBounds();
-			// Shared wall: along Y at a fixed X, or along X at a fixed Y.
-			for (int32 Axis = 0; Axis < 2; ++Axis)
+			if (!IsWalkable(RB) || RB->FloorQuad.Num() != 4) { continue; }
+			for (int32 E = 0; E < 4; ++E)
 			{
-				const int32 Fix = Axis == 0 ? 0 : 1;   // fixed coordinate (0 = X, 1 = Y)
-				const int32 Run = 1 - Fix;
-				float Line = 0.f, Sign = 0.f;
-				if (FMath::Abs(A.Max[Fix] - B.Min[Fix]) < 5.f) { Line = A.Max[Fix]; Sign = 1.f; }
-				else if (FMath::Abs(A.Min[Fix] - B.Max[Fix]) < 5.f) { Line = A.Min[Fix]; Sign = -1.f; }
-				else { continue; }
-				const float Lo = FMath::Max(A.Min[Run], B.Min[Run]), Hi = FMath::Min(A.Max[Run], B.Max[Run]);
-				if (Hi - Lo < 150.f) { continue; }
-				FVector N = FVector::ZeroVector; N[Fix] = Sign;
-				const float Z = RA->GetActorLocation().Z;
-				constexpr float Step = 10.f;
-				int32 BestStart = -1, BestLen = 0, CurStart = -1, CurLen = 0, Samples = 0, Hits = 0;
-				for (float T = Lo + 30.f; T <= Hi - 30.f; T += Step, ++Samples)
-				{
-					FVector P(0.f, 0.f, Z + 30.f); P[Fix] = Line; P[Run] = T;
-					const bool bHit = W->LineTraceTestByChannel(P - N * 45.f, P + N * 45.f, ECC_WorldStatic, Q);
-					if (bHit) { ++Hits; CurLen = 0; CurStart = -1; continue; }
-					if (CurStart < 0) { CurStart = Samples; }
-					++CurLen;
-					if (CurLen > BestLen) { BestLen = CurLen; BestStart = CurStart; }
-				}
-				if (BestLen * Step < 70.f) { continue; } // solid wall, no doorway
-				const float Mid = Lo + 30.f + (BestStart + (BestLen - 1) * 0.5f) * Step;
-				FVector P(0.f, 0.f, Z); P[Fix] = Line; P[Run] = Mid;
+				if (DCSite::Grid::Neighbour(RA->GridCell, E) != RB->GridCell) { continue; }
+				const FVector2D M = EdgeMid(RA, E), N = Inward(RA, E);
 				FPortal Portal;
 				Portal.A = i; Portal.B = j;
-				Portal.InA = P - N * 60.f;
-				Portal.InB = P + N * 60.f;
-				Portal.InA.Z = RA->GetActorLocation().Z;
-				Portal.InB.Z = RB->GetActorLocation().Z;
+				Portal.InA = FVector(M + N * 60.f, RA->GetActorLocation().Z);
+				Portal.InB = FVector(M - N * 60.f, RB->GetActorLocation().Z);
 				Portals.Add(Portal);
-				UE_LOG(LogDC, Verbose, TEXT("WorldDirector nav: %s <-> %s doorway %.0f cm at %s (wall hits %d/%d)"),
-					DC::RoomName(RA->RoomType), DC::RoomName(RB->RoomType), BestLen * Step, *P.ToCompactString(), Hits, Samples);
 			}
 		}
 	}
 
-	// Ways out: the collapsed -X / -Y sides of each built room, wherever no other wing stands against them.
+	// Ways out: the collapsed front edges (-X / -Y) of each walkable room with nothing standing in front of them.
 	const FBox2D Walk = DCSite::OutdoorWalkRect();
 	for (int32 i = 0; i < Rooms.Num(); ++i)
 	{
 		const ADCRoomModule* R = Rooms[i].Get();
-		if (!IsWalkable(R)) { continue; }
-		const FBox B = R->GetWorldBounds();
-		for (int32 Fix = 0; Fix < 2; ++Fix) // 0: the -X side (runs along Y), 1: the -Y side (runs along X)
+		if (!IsWalkable(R) || R->FloorQuad.Num() != 4) { continue; }
+		for (int32 E = 0; E < 4; ++E)
 		{
-			const int32 Run = 1 - Fix;
-			const float Line = B.Min[Fix];
-			TArray<FVector2D> Blocked;
-			for (int32 j = 0; j < Rooms.Num(); ++j)
+			if (!DCSite::Grid::IsFrontEdge(E)) { continue; }
+			const FIntPoint NC = DCSite::Grid::Neighbour(R->GridCell, E);
+			bool bBlocked = false;
+			for (const TWeakObjectPtr<ADCRoomModule>& OW : Rooms)
 			{
-				const ADCRoomModule* O = Rooms[j].Get();
-				if (j == i || !IsSolidOutdoors(O)) { continue; }
-				const FBox OB = O->GetWorldBounds();
-				if (FMath::Abs(OB.Max[Fix] - Line) > 6.f) { continue; }
-				const float Lo = FMath::Max(OB.Min[Run], B.Min[Run]), Hi = FMath::Min(OB.Max[Run], B.Max[Run]);
-				if (Hi > Lo) { Blocked.Add(FVector2D(Lo, Hi)); }
+				const ADCRoomModule* O = OW.Get();
+				if (O && O != R && O->bPlaced && O->GridCell == NC && IsSolidOutdoors(O)) { bBlocked = true; break; }
 			}
-			Blocked.Sort([](const FVector2D& A, const FVector2D& C) { return A.X < C.X; });
-			TArray<FVector2D> Free;
-			float Cur = B.Min[Run];
-			for (const FVector2D& Bl : Blocked) { if (Bl.X > Cur) { Free.Add(FVector2D(Cur, Bl.X)); } Cur = FMath::Max(Cur, Bl.Y); }
-			if (B.Max[Run] > Cur) { Free.Add(FVector2D(Cur, B.Max[Run])); }
-			for (const FVector2D& F : Free)
+			if (bBlocked) { continue; }
+			const FVector2D A = R->FloorQuad[E], B = R->FloorQuad[(E + 1) & 3], N = Inward(R, E);
+			for (float T : { 0.3f, 0.5f, 0.7f })
 			{
-				const float Lo = F.X + 90.f, Hi = F.Y - 90.f;
-				if (Hi - Lo < 0.f) { continue; }
-				const int32 Count = (Hi - Lo) > 600.f ? 3 : 1;
-				for (int32 k = 0; k < Count; ++k)
-				{
-					const float T = Count == 1 ? (Lo + Hi) * 0.5f : FMath::Lerp(Lo, Hi, (k + 0.5f) / Count);
-					FExit E;
-					E.Room = i;
-					E.In = FVector::ZeroVector; E.In[Fix] = Line + 70.f; E.In[Run] = T;
-					E.Out = FVector::ZeroVector; E.Out[Fix] = Line - 85.f; E.Out[Run] = T;
-					E.In.Z = E.Out.Z = R->GetActorLocation().Z;
-					if (!Walk.IsInside(FVector2D(E.Out.X, E.Out.Y))) { continue; }
-					Exits.Add(E);
-				}
+				const FVector2D P = FMath::Lerp(A, B, T);
+				FExit X;
+				X.Room = i;
+				X.In = FVector(P + N * 75.f, R->GetActorLocation().Z);
+				X.Out = FVector(P - N * 120.f, R->GetActorLocation().Z);
+				if (!Walk.IsInside(FVector2D(X.Out.X, X.Out.Y))) { continue; }
+				Exits.Add(X);
 			}
 		}
 	}

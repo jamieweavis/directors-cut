@@ -1,4 +1,5 @@
 // Director's Cut — simulation automation tests: DirectorsCut.Sim.* (Agent A). Fixture data, separate save slot.
+#include "Core/DCSiteLayout.h"
 #include "Misc/AutomationTest.h"
 #include "Tests/Sim/DCSimTestUtils.h"
 #include "DirectorsCut.h"
@@ -282,6 +283,54 @@ bool FDCSimPayday::RunTest(const FString&)
 	A::Cash(*S2) = 10;
 	S2->AdvanceTime(1.0);
 	TestEqual(TEXT("no crew no cash"), S2->GetPhase(), EDCGamePhase::GameOver);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCSimRoomPlacement, "DirectorsCut.Sim.RoomPlacement", DCSimFlags)
+bool FDCSimRoomPlacement::RunTest(const FString&)
+{
+	using namespace DCSite;
+	// grid rules
+	const TArray<FIntPoint> JustOffice = { Grid::OfficeCell() };
+	TestTrue(TEXT("left of the house"), Grid::CanPlace(FIntPoint(-1, 0), JustOffice));
+	TestTrue(TEXT("right of the house"), Grid::CanPlace(FIntPoint(1, 0), JustOffice));
+	TestTrue(TEXT("behind the house"), Grid::CanPlace(FIntPoint(0, 1), JustOffice));
+	TestFalse(TEXT("never in front"), Grid::CanPlace(FIntPoint(0, -1), JustOffice));
+	TestFalse(TEXT("must touch"), Grid::CanPlace(FIntPoint(2, 0), JustOffice));
+	TestFalse(TEXT("diagonal doesn't count"), Grid::CanPlace(FIntPoint(1, 1), JustOffice));
+	TestFalse(TEXT("taken"), Grid::CanPlace(Grid::OfficeCell(), JustOffice));
+	FIntPoint At;
+	TestTrue(TEXT("centre is in its cell"), Grid::CellAt(Grid::Centre(FIntPoint(1, 2)), At) && At == FIntPoint(1, 2));
+	FVector2D Q[4]; Grid::Corners(FIntPoint(0, 0), Q);
+	TestTrue(TEXT("irregular"), !FMath::IsNearlyEqual(Q[1].X - Q[0].X, Grid::CellSize, 1.f) || !FMath::IsNearlyEqual(Q[3].Y - Q[0].Y, Grid::CellSize, 1.f));
+
+	// run placement
+	TStrongObjectPtr<UDCRunSubsystem> S = DCSimTest::NewSim();
+	DCSimTest::FEndGuard G(S.Get());
+	S->StartNewRun(9);
+	A::ClearRun(*S);
+	A::AddCriminal(*S, EDCCriminalType::Muscle, 1, { TEXT("brawler") });
+	A::Successes(*S) = 5;
+	A::Cash(*S) = 100000;
+	TestTrue(TEXT("office placed"), S->GetRoom(EDCRoomType::Office).bPlaced && S->GetRoom(EDCRoomType::Office).Cell == Grid::OfficeCell());
+	const FIntPoint Bad(2, 3);
+	EDCPlanBlock Block = EDCPlanBlock::None;
+	TestFalse(TEXT("rejects a cell away from the house"), S->BuildRoom(EDCRoomType::Lounge, &Block, &Bad));
+	TestEqual(TEXT("no charge when rejected"), S->GetCash(), 100000);
+	TestFalse(TEXT("still unplaced"), S->GetRoom(EDCRoomType::Lounge).bPlaced);
+	const FIntPoint Left(-1, 0);
+	TestTrue(TEXT("builds on a chosen cell"), S->BuildRoom(EDCRoomType::Lounge, &Block, &Left));
+	TestEqual(TEXT("cell kept"), S->GetRoom(EDCRoomType::Lounge).Cell, Left);
+	S->AdvanceTime(10000.0);
+	const FIntPoint Behind(-1, 1);
+	TestTrue(TEXT("chains from a new room"), S->BuildRoom(EDCRoomType::Workshop, &Block, &Behind));
+	S->AdvanceTime(10000.0);
+	TestTrue(TEXT("upgrade keeps the cell"), S->BuildRoom(EDCRoomType::Lounge));
+	TestEqual(TEXT("same cell after upgrade"), S->GetRoom(EDCRoomType::Lounge).Cell, Left);
+	S->AdvanceTime(10000.0);
+	TestTrue(TEXT("default spot when none given"), S->BuildRoom(EDCRoomType::Garage) && Grid::IsInGrid(S->GetRoom(EDCRoomType::Garage).Cell));
+	TArray<FIntPoint> Occ = S->GetOccupiedCells();
+	TestEqual(TEXT("4 cells taken"), Occ.Num(), 4);
 	return true;
 }
 

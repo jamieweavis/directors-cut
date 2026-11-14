@@ -1,16 +1,17 @@
 // Director's Cut — builds the hideout procedurally at runtime (Scene / House agent owns this + DCHideoutRooms/Kit).
 // Spawned by ADCGameMode::StartPlay (after ADCLandscape) before BeginPlay is dispatched. Deterministic and fast.
 //
-// The look: a small abandoned farmhouse (the Office) in open country, taken over by a crew. Its camera-facing walls
-// (-X, -Y) have collapsed to knee-high stubs and rubble so the iso camera sees in; the back walls (+X, +Y) stand tall
-// with old windows, the roof is a skeleton of rafters with a few tiles left. Every other room is a WING that does not
-// exist until built (Core/DCSiteLayout.h): Locked = staked-out overgrown plot, Building = slab + stud frame + scaffold,
-// Level 1..3 = a rustic annex in the same language (stone, plaster, timber boards, rusty tin).
+// The look: a small abandoned farmhouse (the Office) in open country, taken over by a crew. Camera-facing walls
+// (-X, -Y) are collapsed to knee-high stubs and rubble so the iso camera sees in; the back walls (+X, +Y) stand tall
+// with old windows.
 //
-// Walls between two rooms ("shared walls") are owned by the builder and switch between variants in Tick, reading each
-// room's state: hidden (neither side exists) / collapsed stub without collision (only the back room exists, so it is
-// that room's open front) / tall back wall (only the front room exists) / knee partition with a doorway (both exist).
-// Collapsed fronts and rubble NEVER collide, so pawns walk in and out along every -X/-Y side.
+// v3 build grid (DCHideoutGrid.cpp, Core/DCSiteLayout.h DCSite::Grid): every room is one cell of an irregular
+// (jittered) grid and the player chooses where each new room goes. All 8 room modules exist from the start; an
+// unplaced one is parked off-site and hidden. Whenever a placement or a room's stage changes, the builder regenerates
+// the whole house: per cell a floor, and per edge either a tall back wall (exterior +X/+Y), a collapsed stub (exterior
+// -X/-Y) or a low partition with a doorway at the edge midpoint (two finished rooms; built by the -side room). A room
+// under its first build is a slab + timber frame + scaffold. Rooms are EMPTY for now: one clickable station covers
+// each whole room and opens its panel. No house geometry collides (pawns path through the doorway midpoints).
 //
 // Dev flags (World/Scene only):
 //   -DCSceneShots=wide,Office,Lounge,...   scene-review camera screenshots (independent of the gameplay rig), then quit
@@ -52,8 +53,8 @@ class DIRECTORSCUT_API ADCHideoutBuilder : public AActor
 public:
 	ADCHideoutBuilder();
 
-	/** Spawns every room module (all 8, each with Shell/Locked/Building/Level groups), stations, spawn zones,
-	 *  garage doors, lights, fog, post-process and the day/night rig. Rooms start Locked except the Office (Built L1). */
+	/** Spawns every room module (all 8) with its room-wide station and spawn zone, and the materials. Rooms start
+	 *  Locked except the Office (Built L1); geometry follows the run's grid placement (see SyncGrid). */
 	void BuildHideout();
 	bool IsBuilt() const { return bBuilt; }
 
@@ -222,6 +223,32 @@ protected:
 	void BuildServerRoom();
 	void BuildLawyer();
 	void BuildLightingAndPost();
+
+	// ---------------------------------------------------------------- build grid (DCHideoutGrid.cpp)
+	struct FGridStyle { FName Floor, Outer, Skin, Front; };
+	FGridStyle StyleFor(EDCRoomType T) const;
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> GridFloors;   // per room (index = room order in RoomPtrs)
+	UPROPERTY() TArray<TObjectPtr<ADCStation>> GridStations;
+	UPROPERTY() TArray<TObjectPtr<class ADCCriminalSpawnZone>> GridZones;
+	TArray<TArray<TWeakObjectPtr<UActorComponent>>> GridGen;          // generated components per room
+	TMap<uint8, FIntPoint> DevCells;                                  // rooms forced on by dev flags get a stable cell
+	uint32 GridSignature = 0;
+	void SpawnGridRooms();
+	/** Re-reads placements + stages; regenerates the house when anything changed (or bForce). */
+	void SyncGrid(bool bForce);
+	/** 0 = not on site, 1 = first build in progress (frame), 2 = finished (walls). */
+	static int32 GridStage(const ADCRoomModule* R);
+	void BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 Stage, const TMap<FIntPoint, int32>& StageAt);
+	// edge geometry, room-local 2D endpoints (counter-clockwise outline, so +left of A->B is inside)
+	void EdgeBox(const FVector2D& A, const FVector2D& B, float T0, float T1, float Inset, float Z0, float Z1, float Thick, FName Mat, float Pitch = 0.f);
+	void EdgeWall(const FVector2D& A, const FVector2D& B, float T0, float T1, float Inset, float Z0, float Z1, float Thick, const TArray<FOpening>& Ops, FName Mat);
+	void EdgeWindow(const FVector2D& A, const FVector2D& B, const FOpening& O, float Inset, int32 Seed);
+	void TallEdge(const FVector2D& A, const FVector2D& B, float H, const FGridStyle& St, int32 Seed, bool bStepStart, bool bStepEnd);
+	void RuinEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed, float EndA, float EndB);
+	void PartitionEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed);
+	void FrameRoom(const FVector2D Q[4], float H, int32 Seed, int32 ScaffoldEdge);
+	/** Scaffolding along edge E, just outside the room (E < 0: none). */
+	void EdgeScaffold(const FVector2D Q[4], int32 E, float H);
 
 	// ---------------------------------------------------------------- runtime FX
 	struct FFlicker { TWeakObjectPtr<ULightComponent> Light; float Base; float Rate; float Depth; float Seed; };

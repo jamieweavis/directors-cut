@@ -171,8 +171,13 @@ public:
 	TArray<FDCRoom> GetRooms() const;
 	FDCRoom GetRoom(EDCRoomType Type) const;
 	bool IsRoomBuilt(EDCRoomType Type) const;              // Level >= 1 (still true while upgrading)
-	/** Starts a build (Locked) or upgrade (Built, <3) timer and pays the cost. One build at a time. */
-	bool BuildRoom(EDCRoomType Type, EDCPlanBlock* OutBlock = nullptr);
+	/** Starts a build (Locked) or upgrade (Built, <3) timer and pays the cost. One build at a time.
+	 *  A first build needs a grid cell (DCSite::Grid::CanPlace); without one the default spot is picked. */
+	bool BuildRoom(EDCRoomType Type, EDCPlanBlock* OutBlock = nullptr, const FIntPoint* Cell = nullptr);
+	/** Grid cells taken by rooms (placed = built, being built, or the Office). */
+	TArray<FIntPoint> GetOccupiedCells() const;
+	/** Where a room stands on the build grid (false = not placed yet). Cheap; safe every frame. */
+	bool GetRoomCell(EDCRoomType Type, FIntPoint& OutCell) const;
 	bool IsAnyRoomBuilding() const;
 
 	// Room actions

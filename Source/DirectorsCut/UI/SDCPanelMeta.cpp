@@ -85,7 +85,13 @@ TSharedRef<SWidget> SDCRoot::RoomTile(const FDCRoom& Room)
 				TextButton(bCan ? (bBuilt ? FName(TEXT("arrow-up")) : FName(TEXT("hammer"))) : (Block == EDCPlanBlock::None ? FName(TEXT("hourglass")) : BlockIcon(Block)), bBuilt ? TEXT("Upgrade") : TEXT("Build"), [this, Type]()
 				{
 					UDCRunSubsystem* X = Run(); EDCPlanBlock B = EDCPlanBlock::None;
-					if (X && X->BuildRoom(Type, &B)) { Sfx(DCSfx::BuildStart); }
+					if (X && !X->IsRoomBuilt(Type) && X->GetRoom(Type).bCanAct && Owner.IsValid())
+					{
+						// A new room: pick where it goes on the build grid first.
+						Sfx(DCSfx::Click);
+						Owner->RequestRoomPlacement(Type);
+					}
+					else if (X && X->BuildRoom(Type, &B)) { Sfx(DCSfx::BuildStart); }
 					else { Sfx(DCSfx::Error); Toast(BlockText(B), BlockIcon(B), true); }
 				}, bCan ? EBtn::Primary : EBtn::Secondary, bCan, bCan ? nullptr : TSharedPtr<IToolTip>(Tip(TEXT("Can't build yet"), BlockTip, Block == EDCPlanBlock::None ? FName(TEXT("hourglass")) : BlockIcon(Block), Bad)), 10.f)
 			];
@@ -167,7 +173,7 @@ TSharedRef<SWidget> SDCRoot::RoomLocked(EDCRoomType Room)
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[IconTile(TEXT("lock"), 56.f, TextDim, 0.45f, 0.06f)]
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 14.f, 0.f, 4.f)[Txt(FString::Printf(TEXT("No %s wing yet"), DC::RoomName(Room)), Font(12.f, EW::SemiBold), Text)]
-			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 0.f, 0.f, 16.f)[Txt(TEXT("Add this wing to the house from the build table."), Font(10.f), TextDim)]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 0.f, 0.f, 16.f)[Txt(TEXT("Add this room to the house from the Expand menu."), Font(10.f), TextDim)]
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[TextButton(TEXT("hammer"), TEXT("Build"), [this]() { Open(EDCPanel::Build); }, EBtn::Primary)]
 		];
 }

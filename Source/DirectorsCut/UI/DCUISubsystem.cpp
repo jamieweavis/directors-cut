@@ -129,6 +129,12 @@ void UDCUISubsystem::ClosePanel()
 	else { OpenPanelType = EDCPanel::None; OnPanelChanged.Broadcast(EDCPanel::None); }
 }
 
+void UDCUISubsystem::RequestRoomPlacement(EDCRoomType Room)
+{
+	ClosePanel();
+	OnRoomPlacementRequested.Broadcast(Room);
+}
+
 EDCPanel UDCUISubsystem::GetOpenPanel() const { return OpenPanelType; }
 bool UDCUISubsystem::IsAnyPanelOpen() const { return OpenPanelType != EDCPanel::None; }
 bool UDCUISubsystem::IsWorldInputBlocked() const { return Root.IsValid() && Root->IsWorldBlocked(); }

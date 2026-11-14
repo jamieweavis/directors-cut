@@ -10,6 +10,7 @@
 #include "DCUISubsystem.generated.h"
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FDCOnPanelChanged, EDCPanel /*NowOpen, None = closed*/);
+DECLARE_MULTICAST_DELEGATE_OneParam(FDCOnRoomPlacementRequested, EDCRoomType);
 
 UCLASS()
 class DIRECTORSCUT_API UDCUISubsystem : public ULocalPlayerSubsystem
@@ -39,6 +40,11 @@ public:
 	void ShowToast(const FString& Message, FName Icon = NAME_None, bool bIsWarning = false);
 
 	FDCOnPanelChanged OnPanelChanged;
+
+	/** "Build" on a room that isn't built yet: closes the panel and asks the world to start grid placement
+	 *  (the player controller picks a cell, then calls UDCRunSubsystem::BuildRoom with it). */
+	void RequestRoomPlacement(EDCRoomType Room);
+	FDCOnRoomPlacementRequested OnRoomPlacementRequested;
 
 private:
 	// ═══ Agent C owns everything below this line ═══

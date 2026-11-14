@@ -14,6 +14,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Components/WidgetComponent.h"
 #include "World/DCWorldLabel.h"
+#include "Core/DCSiteLayout.h"
 
 namespace
 {
@@ -447,6 +448,26 @@ void ADCRoomModule::EndPlay(const EEndPlayReason::Type Reason)
 FBox ADCRoomModule::GetWorldBounds() const
 {
 	return LocalBounds.TransformBy(GetActorTransform());
+}
+
+bool ADCRoomModule::ContainsPoint2D(const FVector& P, float Tolerance) const
+{
+	if (FloorQuad.Num() == 4)
+	{
+		const FVector2D Q[4] = { FloorQuad[0], FloorQuad[1], FloorQuad[2], FloorQuad[3] };
+		return DCSite::Grid::InsideQuad(Q, FVector2D(P.X, P.Y), Tolerance);
+	}
+	const FBox B = GetWorldBounds();
+	return P.X >= B.Min.X - Tolerance && P.X <= B.Max.X + Tolerance && P.Y >= B.Min.Y - Tolerance && P.Y <= B.Max.Y + Tolerance;
+}
+
+void ADCRoomModule::NotifyGeometryRebuilt()
+{
+	if (BuildLabel) { BuildLabel->DestroyComponent(); BuildLabel = nullptr; } // recreated over the new floor
+	if (bRevealing) { return; }
+	if (GroupHasContent(DCGroups::Building)) { ClearTempScaffold(); }
+	SetGroupVisible(DCGroups::Building, CurrentState == EDCRoomState::Building);
+	if (CurrentState == EDCRoomState::Building && !GroupHasContent(DCGroups::Building) && TempScaffold.Num() == 0) { SpawnFallbackScaffold(); }
 }
 
 FVector ADCRoomModule::GetFocusPoint() const

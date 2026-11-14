@@ -4,6 +4,7 @@
 #include "Sim/DCSimImpl.h"
 #include "Sim/DCSimData.h"
 #include "Sim/DCSaveGame.h"
+#include "Core/DCSiteLayout.h"
 #include "DirectorsCut.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
@@ -121,6 +122,8 @@ void UDCRunSubsystem::StartNewRunInSlot(int32 Slot, int32 InSeed)
 		R.Type = (EDCRoomType)i;
 		R.State = R.Type == EDCRoomType::Office ? EDCRoomState::Built : EDCRoomState::Locked;
 		R.Level = R.Type == EDCRoomType::Office ? 1 : 0;
+		R.bPlaced = R.Type == EDCRoomType::Office;
+		R.Cell = R.bPlaced ? DCSite::Grid::OfficeCell() : DCSite::Grid::NoCell();
 		Rooms.Add(R);
 	}
 
@@ -214,7 +217,16 @@ bool UDCRunSubsystem::ApplySave(const UDCSaveGame& SG)
 	{
 		FDCRoom R;
 		R.Type = Saved.Type; R.State = Saved.State; R.Level = Saved.Level; R.BuildStartedAt = Saved.BuildStartedAt; R.BuildEndsAt = Saved.BuildEndsAt;
+		R.Cell = Saved.Cell; R.bPlaced = Saved.bPlaced && DCSite::Grid::IsInGrid(Saved.Cell);
+		if (R.Type == EDCRoomType::Office) { R.bPlaced = true; R.Cell = DCSite::Grid::OfficeCell(); }
 		Rooms.Add(R);
+	}
+	// Saves from before the build grid: put existing wings on default cells.
+	for (FDCRoom& R : Rooms)
+	{
+		if (R.bPlaced || (R.Level < 1 && R.State != EDCRoomState::Building)) { continue; }
+		const FIntPoint C = DCSite::Grid::AutoPick(GetOccupiedCells());
+		if (DCSite::Grid::IsInGrid(C)) { R.Cell = C; R.bPlaced = true; }
 	}
 	for (FName Id : SG.PerkOffer) { if (const FDCPerkDef* P = Data->Perks.Find(Id)) { PerkOffer.Add(P->Perk); } }
 	for (FName Id : SG.PerksTaken) { if (const FDCPerkDef* P = Data->Perks.Find(Id)) { PerksTaken.Add(P->Perk); } }
@@ -967,6 +979,7 @@ FDCRoom UDCRunSubsystem::GetRoom(EDCRoomType Type) const
 	if (const FDCRoom* St = Rooms.FindByPredicate([Type](const FDCRoom& X) { return X.Type == Type; }))
 	{
 		R.State = St->State; R.Level = St->Level; R.BuildStartedAt = St->BuildStartedAt; R.BuildEndsAt = St->BuildEndsAt;
+		R.Cell = St->Cell; R.bPlaced = St->bPlaced;
 	}
 	R.DisplayName = DC::RoomName(Type);
 	R.Icon = DC::RoomIcon(Type);
@@ -997,13 +1010,41 @@ bool UDCRunSubsystem::IsRoomBuilt(EDCRoomType Type) const
 	return St && St->Level >= 1;
 }
 
-bool UDCRunSubsystem::BuildRoom(EDCRoomType Type, EDCPlanBlock* OutBlock)
+TArray<FIntPoint> UDCRunSubsystem::GetOccupiedCells() const
+{
+	TArray<FIntPoint> Out;
+	for (const FDCRoom& R : Rooms) { if (R.bPlaced) { Out.AddUnique(R.Cell); } }
+	if (!Out.Contains(DCSite::Grid::OfficeCell())) { Out.Add(DCSite::Grid::OfficeCell()); }
+	return Out;
+}
+
+bool UDCRunSubsystem::GetRoomCell(EDCRoomType Type, FIntPoint& OutCell) const
+{
+	const FDCRoom* St = Rooms.FindByPredicate([Type](const FDCRoom& X) { return X.Type == Type; });
+	if (St && St->bPlaced) { OutCell = St->Cell; return true; }
+	if (Type == EDCRoomType::Office) { OutCell = DCSite::Grid::OfficeCell(); return true; }
+	return false;
+}
+
+bool UDCRunSubsystem::BuildRoom(EDCRoomType Type, EDCPlanBlock* OutBlock, const FIntPoint* Cell)
 {
 	const FDCRoom V = GetRoom(Type);
 	if (OutBlock) { *OutBlock = (V.Block == EDCPlanBlock::None && IsAnyRoomBuilding()) ? EDCPlanBlock::NoCapacity : V.Block; }
 	if (!V.bCanAct) { return false; }
 	FDCRoom* R = Rooms.FindByPredicate([Type](const FDCRoom& X) { return X.Type == Type; });
 	if (!R) { return false; }
+	if (!R->bPlaced)
+	{
+		const TArray<FIntPoint> Occupied = GetOccupiedCells();
+		const FIntPoint Want = Cell ? *Cell : DCSite::Grid::AutoPick(Occupied);
+		if (!DCSite::Grid::CanPlace(Want, Occupied))
+		{
+			if (OutBlock) { *OutBlock = EDCPlanBlock::NoCapacity; }
+			return false;
+		}
+		R->Cell = Want;
+		R->bPlaced = true;
+	}
 	Cash -= V.NextCost;
 	R->State = EDCRoomState::Building;
 	R->BuildStartedAt = RunTime;

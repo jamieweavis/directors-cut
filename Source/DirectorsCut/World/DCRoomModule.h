@@ -54,6 +54,18 @@ public:
 	/** True if pawns can be in here (built, or upgrading). */
 	bool IsUsable() const { return CurrentLevel >= 1 && CurrentState != EDCRoomState::Locked; }
 
+	// ── Build grid (Scene builder sets these when the room is placed / moved) ────────────────────────────────
+	/** True once the room stands on a grid cell. Unplaced rooms are parked off-site and hidden. */
+	bool bPlaced = false;
+	FIntPoint GridCell = FIntPoint(-999, -999);
+	/** Floor outline in world XY, counter-clockwise (DCSite::Grid::Corners order). Empty = use LocalBounds. */
+	TArray<FVector2D> FloorQuad;
+	/** Point inside the floor outline (2D). */
+	bool ContainsPoint2D(const FVector& P, float Tolerance = 1.f) const;
+	/** The builder regenerated this room's geometry: drop the fallback scaffold if real scaffolding exists, fix the
+	 *  Building group's visibility and move the build label. Never interrupts a reveal. */
+	void NotifyGeometryRebuilt();
+
 protected:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Root;
 	virtual void Tick(float DeltaSeconds) override;

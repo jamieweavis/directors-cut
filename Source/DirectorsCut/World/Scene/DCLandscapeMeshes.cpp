@@ -295,4 +295,33 @@ namespace DCLandMesh
 		for (int32 s = 0; s < Sides; ++s) { B.Tri(C, Rim[s], Rim[(s + 1) % Sides]); }
 		return B.Build(Outer, *FString::Printf(TEXT("DCDisc_%d_%d"), Sides, Seed));
 	}
+
+	UStaticMesh* Prism(UObject* Outer, const TArray<FVector2D>& Poly, float Z0, float Z1)
+	{
+		FBuilder B;
+		const FLinearColor Col(1.f, 0.f, 0.f, 1.f);
+		const int32 N = Poly.Num();
+		if (N < 3) { return nullptr; }
+		FVector2D Mid = FVector2D::ZeroVector;
+		for (const FVector2D& P : Poly) { Mid += P; }
+		Mid /= N;
+		// top fan
+		const int32 C = B.V(FVector3f(Mid.X, Mid.Y, Z1), FVector3f::UpVector, Col);
+		TArray<int32> Top;
+		for (const FVector2D& P : Poly) { Top.Add(B.V(FVector3f(P.X, P.Y, Z1), FVector3f::UpVector, Col)); }
+		for (int32 k = 0; k < N; ++k) { B.Tri(C, Top[k], Top[(k + 1) % N]); }
+		// sides (flat shaded)
+		for (int32 k = 0; k < N; ++k)
+		{
+			const FVector2D A = Poly[k], D = Poly[(k + 1) % N];
+			const FVector2D E = (D - A).GetSafeNormal();
+			const FVector3f Nrm(E.Y, -E.X, 0.f); // outward for a counter-clockwise outline
+			const int32 a0 = B.V(FVector3f(A.X, A.Y, Z0), Nrm, Col), a1 = B.V(FVector3f(A.X, A.Y, Z1), Nrm, Col);
+			const int32 d0 = B.V(FVector3f(D.X, D.Y, Z0), Nrm, Col), d1 = B.V(FVector3f(D.X, D.Y, Z1), Nrm, Col);
+			B.Tri(a0, d0, d1);
+			B.Tri(a0, d1, a1);
+		}
+		static int32 Counter = 0;
+		return B.Build(Outer, *MakeUniqueObjectName(Outer, UStaticMesh::StaticClass(), FName(*FString::Printf(TEXT("DCPrism_%d"), ++Counter))).ToString());
+	}
 }

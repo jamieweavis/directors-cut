@@ -3,6 +3,10 @@
 #include "World/DCCameraRig.h"
 #include "World/DCStation.h"
 #include "World/DCWorldDirector.h"
+#include "World/DCBuildPlacer.h"
+#include "Misc/Parse.h"
+#include "Misc/CommandLine.h"
+#include "Core/DCRunSubsystem.h"
 #include "Core/DCUISubsystem.h"
 #include "Engine/World.h"
 #include "Engine/LocalPlayer.h"
@@ -115,8 +119,13 @@ void ADCPlayerController::BeginPlay()
 	WorldDirector = GetWorld()->SpawnActor<ADCWorldDirector>(ADCWorldDirector::StaticClass(), FTransform::Identity, SP);
 	if (WorldDirector) { WorldDirector->Initialize(this); }
 
+	FActorSpawnParameters PSP;
+	PSP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	Placer = GetWorld()->SpawnActor<ADCBuildPlacer>(ADCBuildPlacer::StaticClass(), FTransform::Identity, PSP);
+
 	if (UDCUISubsystem* UI = UDCUISubsystem::Get(this))
 	{
+		PlaceHandle = UI->OnRoomPlacementRequested.AddUObject(this, &ADCPlayerController::OnPlacementRequested);
 		PanelHandle = UI->OnPanelChanged.AddUObject(this, &ADCPlayerController::OnPanelChanged);
 		bPanelBound = true;
 		UI->InitializeUI(this);
@@ -127,7 +136,7 @@ void ADCPlayerController::EndPlay(const EEndPlayReason::Type Reason)
 {
 	if (bPanelBound)
 	{
-		if (UDCUISubsystem* UI = UDCUISubsystem::Get(this)) { UI->OnPanelChanged.Remove(PanelHandle); }
+		if (UDCUISubsystem* UI = UDCUISubsystem::Get(this)) { UI->OnPanelChanged.Remove(PanelHandle); UI->OnRoomPlacementRequested.Remove(PlaceHandle); }
 		bPanelBound = false;
 	}
 	Super::EndPlay(Reason);
@@ -145,10 +154,22 @@ void ADCPlayerController::NotifyStationFocused(ADCStation* Station)
 	bFocusFromStation = Station != nullptr;
 }
 
+bool ADCPlayerController::IsPlacing() const { return Placer && Placer->IsActive(); }
+
+void ADCPlayerController::OnPlacementRequested(EDCRoomType Room)
+{
+	if (!Placer) { return; }
+	if (HoveredStation.IsValid()) { HoveredStation->OnHoverEnd(); HoveredStation = nullptr; }
+	CurrentMouseCursor = EMouseCursor::Crosshairs;
+	if (CameraRig && bFocusFromStation) { bFocusFromStation = false; CameraRig->ResetFocus(); }
+	Placer->Begin(Room);
+}
+
 void ADCPlayerController::OnPanelChanged(EDCPanel Panel)
 {
 	const EDCPanel Prev = LastPanel;
 	LastPanel = Panel;
+	if (Panel != EDCPanel::None && IsPlacing()) { Placer->Cancel(true); }
 	if (Panel == EDCPanel::None && Prev != EDCPanel::None && bFocusFromStation)
 	{
 		bFocusFromStation = false;
@@ -159,6 +180,7 @@ void ADCPlayerController::OnPanelChanged(EDCPanel Panel)
 void ADCPlayerController::OnClickAction(const FInputActionValue& Value)
 {
 	if (IsWorldBlocked()) { return; }
+	if (IsPlacing()) { Placer->Click(); return; }
 	if (ADCStation* S = HoveredStation.Get())
 	{
 		if (S->IsStationEnabled()) { S->OnClicked(); }
@@ -173,6 +195,7 @@ void ADCPlayerController::OnZoomAction(const FInputActionValue& Value)
 void ADCPlayerController::OnBackAction(const FInputActionValue& Value)
 {
 	if (IsTextInputFocused()) { return; } // the text box gets Esc
+	if (IsPlacing()) { Placer->Cancel(); return; }
 	// The UI decides: close the open panel, or open Pause when nothing is open.
 	if (UDCUISubsystem* UI = UDCUISubsystem::Get(this)) { UI->HandleBack(); }
 }
@@ -195,7 +218,22 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 
 	// Hover
 	ADCStation* NewHover = nullptr;
-	if (!bBlocked && !bRmbDragging)
+	{
+		// dev: -DCPlaceRoom=<EDCRoomType> enters placement mode once that room can be built (screenshots)
+		static FString DevPlace = TEXT("?");
+		static float DevPlaceT = 0.f;
+		if (DevPlace == TEXT("?")) { DevPlace.Reset(); FParse::Value(FCommandLine::Get(), TEXT("DCPlaceRoom="), DevPlace); }
+		const UDCRunSubsystem* DevRun = UDCRunSubsystem::Get(this);
+		if (!DevPlace.IsEmpty() && DevRun && DevRun->HasActiveRun() && (DevPlaceT += DeltaTime) > 3.f)
+		{
+			const int64 V = StaticEnum<EDCRoomType>()->GetValueByNameString(DevPlace);
+			if (V == INDEX_NONE) { DevPlace.Reset(); }
+			else if (DevRun->GetRoom((EDCRoomType)V).bCanAct) { DevPlace.Reset(); OnPlacementRequested((EDCRoomType)V); }
+		}
+	}
+	const bool bPlacing = IsPlacing();
+	if (bPlacing) { Placer->UpdateCursor(this, DeltaTime); }
+	if (!bBlocked && !bRmbDragging && !bPlacing)
 	{
 		FHitResult Hit;
 		if (GetHitResultUnderCursor(ECC_Visibility, false, Hit))
@@ -211,6 +249,8 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 		if (NewHover) { NewHover->OnHoverBegin(); }
 		CurrentMouseCursor = NewHover ? EMouseCursor::Hand : EMouseCursor::Default;
 	}
+	if (bPlacing) { CurrentMouseCursor = EMouseCursor::Crosshairs; }
+	else if (CurrentMouseCursor == EMouseCursor::Crosshairs) { CurrentMouseCursor = EMouseCursor::Default; }
 
 	if (!bEnhancedInputBound)
 	{

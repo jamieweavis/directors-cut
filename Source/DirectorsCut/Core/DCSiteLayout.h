@@ -1,15 +1,16 @@
-// Director's Cut — rural site layout. LEAD-OWNED, FROZEN CONTRACT shared by House (Scene builder), Landscape
-// (Scene landscape + day/night) and World (pawns, vehicles, camera). Request changes, don't edit.
+// Director's Cut — rural site layout. Shared contract between House (Scene builder), Landscape (Scene landscape +
+// day/night), World (pawns, vehicles, camera, build placement) and Sim (room placement rules).
 //
-// The scene: a small abandoned farmhouse in the middle of a rural landscape. Camera looks from -X-Y towards +X+Y
-// (yaw 45, isometric), so the -X and -Y walls of every building face the camera: those are COLLAPSED (knee-high
-// broken stubs + rubble) so you see inside. The +X/+Y walls are the tall back walls.
+// The scene: a small abandoned farmhouse in a rural landscape. Camera looks from -X-Y towards +X+Y (yaw 45,
+// isometric), so the -X and -Y walls of every room face the camera: those are COLLAPSED (knee-high broken stubs +
+// rubble) so you see inside. The +X/+Y walls are the tall back walls.
 //
-// The Office is the original house (always built). Every other room is a WING that does not exist until built:
-// Locked = empty overgrown plot (stakes + string line), Building = timber frame + scaffold, Level1+ = finished wing
-// attached to the house. So the building visibly expands as you build.
+// v3 (Nov 14): the house grows on an irregular BUILD GRID (DCSite::Grid). Every room is one cell. The Office (the
+// original house) sits in the front row at cell (0,0), facing the lane (-Y). New rooms go on any free cell that
+// touches an existing room: left (-X), right (+X) or behind (+Y), never in front of the front row. Grid corners are
+// jittered so walls run slightly off-square and the building outline is irregular.
 //
-// Outside: a gravel yard (front-right on screen) where one car per available mission slot is parked; a dirt
+// Outside: a gravel yard in front of the house where one car per available mission slot is parked; a dirt
 // driveway joins a country lane that runs along X and leaves the screen at both ends. Crew walk from the house to
 // a car, get in, and it drives off along the lane; on return the car comes back the same way and parks.
 // All units cm, world space. Ground (and every floor top) is Z = 0.
@@ -22,8 +23,8 @@ namespace DCSite
 {
 	constexpr float GroundZ = 0.f;
 
-	/** Room / wing footprints (world XY). The Office is the original house. Wings butt against it or each other.
-	 *  v2 (Nov 14): everything is 0.65x the old warehouse grid — a SMALL house (office 6.5 x 5.2 m). */
+	/** LEGACY fixed footprints (v2, before the build grid). Only the unused authored room dressing still reads these;
+	 *  live rooms are placed on DCSite::Grid. */
 	constexpr float RoomScale = 0.65f;
 	inline FBox2D RoomRect(EDCRoomType T)
 	{
@@ -41,11 +42,116 @@ namespace DCSite
 		default:                        return R(-500,  500,  -400,  400);
 		}
 	}
-	/** Union of every room footprint (the fully expanded building). */
-	inline FBox2D CompoundRect() { return FBox2D(FVector2D(-845, -910), FVector2D(845, 1040)); }
+	// ── Build grid ──────────────────────────────────────────────────────────────────────────────────────────────
+	namespace Grid
+	{
+		constexpr float CellSize = 580.f;     // nominal cell (the Office is roughly 5.8 x 5.8 m)
+		constexpr float Jitter = 62.f;        // max corner offset (cm) per axis
+		constexpr int32 MinCol = -2, MaxCol = 2;
+		constexpr int32 MinRow = 0, MaxRow = 3; // row 0 = the front row (the Office's row); rows grow behind (+Y)
+		inline FIntPoint OfficeCell() { return FIntPoint(0, 0); }
+		/** Sentinel for "not placed". */
+		inline FIntPoint NoCell() { return FIntPoint(-999, -999); }
+
+		inline bool IsInGrid(const FIntPoint& C) { return C.X >= MinCol && C.X <= MaxCol && C.Y >= MinRow && C.Y <= MaxRow; }
+
+		inline float Hash01(int32 A, int32 B, int32 Salt)
+		{
+			uint32 H = ((uint32)A * 73856093u) ^ ((uint32)B * 19349663u) ^ ((uint32)Salt * 83492791u);
+			H ^= H >> 13; H *= 0x5bd1e995u; H ^= H >> 15;
+			return (float)(H & 0xFFFFFF) / (float)0xFFFFFF;
+		}
+		/** Lattice corner (I, J) = the -X-Y corner of cell (I, J). Corners are jittered (deterministic). */
+		inline FVector2D Vertex(int32 I, int32 J)
+		{
+			const FVector2D Base((I - 0.5f) * CellSize, (J - 0.5f) * CellSize);
+			return Base + FVector2D((Hash01(I, J, 1) * 2.f - 1.f) * Jitter, (Hash01(I, J, 2) * 2.f - 1.f) * Jitter);
+		}
+		/** Cell corners, counter-clockwise: 0 (-X-Y), 1 (+X-Y), 2 (+X+Y), 3 (-X+Y).
+		 *  Edge e runs Corner[e] -> Corner[(e+1)%4]: 0 = -Y (front), 1 = +X, 2 = +Y (back), 3 = -X. */
+		inline void Corners(const FIntPoint& C, FVector2D Out[4])
+		{
+			Out[0] = Vertex(C.X, C.Y); Out[1] = Vertex(C.X + 1, C.Y); Out[2] = Vertex(C.X + 1, C.Y + 1); Out[3] = Vertex(C.X, C.Y + 1);
+		}
+		inline FVector2D Centre(const FIntPoint& C)
+		{
+			FVector2D Q[4]; Corners(C, Q);
+			return (Q[0] + Q[1] + Q[2] + Q[3]) * 0.25f;
+		}
+		/** Neighbour across edge e (see Corners). */
+		inline FIntPoint Neighbour(const FIntPoint& C, int32 Edge)
+		{
+			static const FIntPoint D[4] = { FIntPoint(0, -1), FIntPoint(1, 0), FIntPoint(0, 1), FIntPoint(-1, 0) };
+			return C + D[Edge & 3];
+		}
+		/** Edges facing the camera (-Y, -X) are the collapsed open fronts. */
+		inline bool IsFrontEdge(int32 Edge) { return Edge == 0 || Edge == 3; }
+		/** Per-cell wall height (cm): a little different everywhere so the roofline is uneven. */
+		inline float WallHeight(const FIntPoint& C) { return (C == OfficeCell() ? 285.f : 248.f) + Hash01(C.X, C.Y, 7) * 34.f; }
+
+		inline bool InsideQuad(const FVector2D Q[4], const FVector2D& P, float Tolerance = 0.f)
+		{
+			for (int32 e = 0; e < 4; ++e)
+			{
+				const FVector2D A = Q[e], B = Q[(e + 1) & 3];
+				const FVector2D D = (B - A).GetSafeNormal();
+				if (FVector2D::CrossProduct(D, P - A) < -Tolerance) { return false; }
+			}
+			return true;
+		}
+		/** Grid cell containing P (false if outside the grid). */
+		inline bool CellAt(const FVector2D& P, FIntPoint& Out)
+		{
+			const int32 CI = FMath::RoundToInt(P.X / CellSize), CJ = FMath::RoundToInt(P.Y / CellSize);
+			for (int32 dy = -1; dy <= 1; ++dy)
+			{
+				for (int32 dx = -1; dx <= 1; ++dx)
+				{
+					const FIntPoint C(CI + dx, CJ + dy);
+					if (!IsInGrid(C)) { continue; }
+					FVector2D Q[4]; Corners(C, Q);
+					if (InsideQuad(Q, P)) { Out = C; return true; }
+				}
+			}
+			return false;
+		}
+		/** A new room may go on a free in-grid cell that shares an edge with an existing room. */
+		inline bool CanPlace(const FIntPoint& C, const TArray<FIntPoint>& Occupied)
+		{
+			if (!IsInGrid(C) || Occupied.Contains(C)) { return false; }
+			for (int32 e = 0; e < 4; ++e) { if (Occupied.Contains(Neighbour(C, e))) { return true; } }
+			return false;
+		}
+		inline void ValidCells(const TArray<FIntPoint>& Occupied, TArray<FIntPoint>& Out)
+		{
+			Out.Reset();
+			for (int32 Y = MinRow; Y <= MaxRow; ++Y) { for (int32 X = MinCol; X <= MaxCol; ++X) { if (CanPlace(FIntPoint(X, Y), Occupied)) { Out.Add(FIntPoint(X, Y)); } } }
+		}
+		/** Deterministic default spot (dev flags, saves from before the grid, tests): nearest the house, alternating sides. */
+		inline FIntPoint AutoPick(const TArray<FIntPoint>& Occupied)
+		{
+			TArray<FIntPoint> V; ValidCells(Occupied, V);
+			FIntPoint Best = NoCell(); float BestScore = 1e9f;
+			for (const FIntPoint& C : V)
+			{
+				const float S = FMath::Abs(C.X) * 1.1f + C.Y * 1.0f + (C.X < 0 ? 0.05f : 0.f) + Hash01(C.X, C.Y, 11) * 0.3f;
+				if (S < BestScore) { BestScore = S; Best = C; }
+			}
+			return Best;
+		}
+		/** World AABB of the whole grid (incl. jitter). */
+		inline FBox2D Bounds()
+		{
+			return FBox2D(FVector2D((MinCol - 0.5f) * CellSize - Jitter, (MinRow - 0.5f) * CellSize - Jitter),
+				FVector2D((MaxCol + 0.5f) * CellSize + Jitter, (MaxRow + 0.5f) * CellSize + Jitter));
+		}
+	}
+
+	/** Where the fully expanded building can reach (the whole build grid). */
+	inline FBox2D CompoundRect() { return Grid::Bounds(); }
 
 	/** Keep-clear zone around the compound: Landscape places no trees/fences/rocks inside it (grass/flowers ok). */
-	inline FBox2D BuildingClearRect() { return FBox2D(FVector2D(-1150, -1200), FVector2D(1150, 1350)); }
+	inline FBox2D BuildingClearRect() { const FBox2D C = CompoundRect(); return FBox2D(FVector2D(C.Min.X - 300.f, -1200.f), C.Max + FVector2D(300.f, 300.f)); }
 
 	/** Gravel yard where cars park (Landscape draws it; nothing tall inside it). */
 	inline FBox2D YardRect() { return FBox2D(FVector2D(-950, -2050), FVector2D(900, -1200)); }
@@ -91,8 +197,8 @@ namespace DCSite
 	}
 
 	/** Walkable outdoor area pawns may use outside the building (yard + a margin around the compound). */
-	inline FBox2D OutdoorWalkRect() { return FBox2D(FVector2D(-1250, -2100), FVector2D(1250, 1400)); }
+	inline FBox2D OutdoorWalkRect() { const FBox2D C = CompoundRect(); return FBox2D(FVector2D(FMath::Min(-1250.f, C.Min.X - 400.f), -2100.f), C.Max + FVector2D(400.f, 400.f)); }
 
 	/** Default camera bounds: compound + yard + a strip of lane, with room to see the landscape. */
-	inline FBox CameraBounds() { return FBox(FVector(-2600, -3400, 0), FVector(2600, 2600, 400)); }
+	inline FBox CameraBounds() { return FBox(FVector(-2900, -3400, 0), FVector(2900, 3200, 400)); }
 }

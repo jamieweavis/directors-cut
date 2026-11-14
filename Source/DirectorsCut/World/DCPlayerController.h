@@ -1,4 +1,4 @@
-// Director's Cut — player controller: mouse cursor, hover/click on stations, camera input. Agent E owns.
+// Director's Cut — player controller: mouse cursor, hover/click on stations, camera input, build placement mode.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -9,6 +9,7 @@
 class ADCCameraRig;
 class ADCStation;
 class ADCWorldDirector;
+class ADCBuildPlacer;
 class UInputAction;
 class UInputMappingContext;
 struct FInputActionValue;
@@ -29,6 +30,9 @@ public:
 	ADCStation* GetHoveredStation() const { return HoveredStation.Get(); }
 	/** A station click focused the camera: when its panel later closes, the camera eases back to the overview. */
 	void NotifyStationFocused(ADCStation* Station);
+	/** Build placement mode (picking a grid cell for a new room). */
+	ADCBuildPlacer* GetBuildPlacer() const { return Placer; }
+	bool IsPlacing() const;
 
 protected:
 	UPROPERTY() TObjectPtr<ADCCameraRig> CameraRig;
@@ -38,6 +42,9 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 
 	UPROPERTY() TObjectPtr<ADCWorldDirector> WorldDirector;
+	UPROPERTY() TObjectPtr<ADCBuildPlacer> Placer;
+	FDelegateHandle PlaceHandle;
+	void OnPlacementRequested(EDCRoomType Room);
 	UPROPERTY() TObjectPtr<UInputMappingContext> MappingContext;
 	UPROPERTY() TObjectPtr<UInputAction> ActClick;
 	UPROPERTY() TObjectPtr<UInputAction> ActZoom;

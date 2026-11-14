@@ -427,6 +427,9 @@ struct FDCRoom
 	UPROPERTY(BlueprintReadOnly) double BuildStartedAt = 0.0; // valid while Building
 	UPROPERTY(BlueprintReadOnly) double BuildEndsAt = 0.0;
 	UPROPERTY(BlueprintReadOnly) int32 UpkeepPerDay = 0;
+	/** Build-grid cell (DCSite::Grid). Set when the first build starts; the Office is always at (0,0). */
+	UPROPERTY(BlueprintReadOnly) FIntPoint Cell = FIntPoint(-999, -999);
+	UPROPERTY(BlueprintReadOnly) bool bPlaced = false;
 };
 
 USTRUCT(BlueprintType)

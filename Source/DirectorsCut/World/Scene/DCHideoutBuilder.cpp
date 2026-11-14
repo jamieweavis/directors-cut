@@ -838,44 +838,9 @@ void ADCHideoutBuilder::BuildHideout()
 	FParse::Value(FCommandLine::Get(), TEXT("DCLightScale="), LightScale);
 	InitAssets();
 
-	auto RD = [](EDCRoomType T, FName Floor, FName Outer, FName Skin, FName Front) { return FRoomDef{ T, Floor, Outer, Skin, Front, DCSite::RoomRect(T) }; };
-	Defs = {
-		RD(EDCRoomType::Office,       "Floorboard",  "Stone",    "Plaster",      "Stone"),
-		RD(EDCRoomType::Workshop,     "Cement",      "BrickOld", "BrickOld",     "BrickOld"),
-		RD(EDCRoomType::Garage,       "SlabDark",    "TinRustV", "Board",        "StoneDark"),
-		RD(EDCRoomType::OpsRoom,      "Floorboard",  "Board",    "Board",        "Stone"),
-		RD(EDCRoomType::Lounge,       "Floorboard",  "Stone",    "PlasterGreen", "Stone"),
-		RD(EDCRoomType::ServerRoom,   "RaisedFloor", "BrickOld", "Plaster",      "BrickOld"),
-		RD(EDCRoomType::LawyerOffice, "CarpetTile",  "Stone",    "PlasterRose",  "Stone"),
-		RD(EDCRoomType::Clinic,       "TileOld",     "BrickOld", "PlasterWhite", "BrickOld"),
-	};
-	// Openings in room-local coordinates along the side. side: 0 +X, 1 +Y, 2 -X, 3 -Y
-	auto Op = [this](EDCRoomType T, int32 Side, float C, float W, float B, float Tp) { RoomOpenings.FindOrAdd((uint8)T).Add(TPair<int32, FOpening>(Side, FOpening{ C, W, B, Tp })); };
-	auto KeepWall = [this](EDCRoomType T, int32 Side, float A, float B) { KeepSolid.FindOrAdd((uint8)T).Add(TPair<int32, FVector2D>(Side, FVector2D(A, B))); };
-	// (room-local, real scaled rooms)
-	Op(EDCRoomType::Office, 0, -150.f, 130.f, 0.f, 210.f);    // old back door through to the garage plot
-	Op(EDCRoomType::Office, 1, 250.f, 130.f, 0.f, 210.f);     // kitchen door through to the ops-room plot
-	Op(EDCRoomType::Garage, 3, 20.f, 330.f, 0.f, 290.f);      // roller-door bay facing the yard
-	KeepWall(EDCRoomType::Office, 1, -280.f, 185.f);          // mission board
-	KeepWall(EDCRoomType::Office, 0, 10.f, 135.f);            // chimney breast
-	KeepWall(EDCRoomType::OpsRoom, 1, -230.f, 230.f);         // CCTV wall
-	KeepWall(EDCRoomType::LawyerOffice, 1, -100.f, 70.f);     // filing cabinets
-	KeepWall(EDCRoomType::Clinic, 1, -210.f, -70.f);          // medical cabinet
-
-	for (const FRoomDef& D : Defs) { SpawnRoom(D); }
-	for (const FRoomDef& D : Defs) { BuildShell(D); }
-	BuildHouseRoof();
-
-	bFit = true;   // room dressing is authored on the original grid; MapP fits it into the real rooms
-	BuildOffice();
-	BuildLounge();
-	BuildWorkshop();
-	BuildGarage();
-	BuildOpsRoom();
-	BuildClinic();
-	BuildServerRoom();
-	BuildLawyer();
-	bFit = false;
+	// v3: rooms live on the build grid (DCHideoutGrid.cpp) and are empty for now; the authored room dressing
+	// (DCHideoutRooms.cpp, legacy fixed footprints) is not built.
+	SpawnGridRooms();
 	if (FParse::Param(FCommandLine::Get(), TEXT("DCHouseGround")))
 	{
 		CurRoom = GetRoom(EDCRoomType::Office);
@@ -892,7 +857,7 @@ void ADCHideoutBuilder::BuildHideout()
 		const bool bOffice = Room->RoomType == EDCRoomType::Office;
 		Room->ApplyState(bOffice ? EDCRoomState::Built : EDCRoomState::Locked, bOffice ? 1 : 0);
 	}
-	UpdateSharedWalls();
+	SyncGrid(true);
 
 	// scene review camera
 	FParse::Value(FCommandLine::Get(), TEXT("DCRoomStates="), ForcedStates, false);
@@ -912,7 +877,7 @@ void ADCHideoutBuilder::BuildHideout()
 	}
 	int32 NumComps = 0;
 	for (ADCRoomModule* Room : RoomPtrs) { NumComps += Room->GetComponents().Num(); }
-	UE_LOG(LogDC, Display, TEXT("[Scene] BuildHideout: %d rooms, %d components, %d shared walls, %.1f ms"), RoomPtrs.Num(), NumComps, SharedWalls.Num(), (FPlatformTime::Seconds() - T0) * 1000.0);
+	UE_LOG(LogDC, Display, TEXT("[Scene] BuildHideout: %d rooms, %d components, %.1f ms"), RoomPtrs.Num(), NumComps, (FPlatformTime::Seconds() - T0) * 1000.0);
 }
 
 // =====================================================================================================================
@@ -923,7 +888,7 @@ void ADCHideoutBuilder::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	Time += DeltaSeconds;
-	UpdateSharedWalls();
+	if (bBuilt) { SyncGrid(false); }
 	for (const FFlicker& F : Flickers)
 	{
 		ULightComponent* L = F.Light.Get();
@@ -955,7 +920,7 @@ void ADCHideoutBuilder::ApplyForcedStates()
 		else if (Val.StartsWith(TEXT("B"))) { R->ApplyState(EDCRoomState::Building, FCString::Atoi(*Val.Mid(1))); }
 		else { R->ApplyState(EDCRoomState::Built, FMath::Clamp(FCString::Atoi(*Val), 1, 3)); }
 	}
-	UpdateSharedWalls();
+	SyncGrid(false);
 }
 
 void ADCHideoutBuilder::FrameReview(const FString& Focus)

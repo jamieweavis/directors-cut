@@ -23,4 +23,6 @@ namespace DCLandMesh
 	UStaticMesh* Skirt(UObject* Outer, int32 Sides, int32 Seed);
 	/** Flat irregular disc of radius ~50 at z=0 (top face only), wobble 0..0.3. */
 	UStaticMesh* Disc(UObject* Outer, int32 Sides, float Wobble, int32 Seed);
+	/** Extruded polygon (counter-clockwise outline, cm): top face at Z1 + side walls down to Z0. No bottom. */
+	UStaticMesh* Prism(UObject* Outer, const TArray<FVector2D>& Poly, float Z0, float Z1);
 }
