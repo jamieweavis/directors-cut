@@ -80,6 +80,31 @@ protected:
 	void Neon(FName Key, const FLinearColor& Color, float Strength, float Flicker, float Seed);
 	void Special(FName Key, const TCHAR* Path, TFunctionRef<void(UMaterialInstanceDynamic*)> Setup);
 
+	// ---------------------------------------------------------------- dressing fit
+	// Room dressing (DCHideoutRooms.cpp) is authored on the original, larger grid. While bFit is on, room-local
+	// positions are scaled to the real (DCSite::RoomScale) rooms: XY by FitXY, Z by FitZ; sizes by FitS. Composite
+	// props (kit pieces, station props) keep their proportions around an anchor so they stay in one piece.
+	bool bFit = false;
+	float FitXY = 0.64f, FitZ = 0.85f, FitS = 0.82f;
+	bool bAnchored = false;
+	FVector FitAnchor = FVector::ZeroVector;
+	FVector MapP(const FVector& P) const;
+	FVector MapSize(const FVector& S) const { return bFit ? S * FitS : S; }
+	float MapLen(float L) const { return bFit ? L * FitS : L; }
+	struct FAnchorScope
+	{
+		ADCHideoutBuilder* B; bool bSet;
+		FAnchorScope(ADCHideoutBuilder* InB, const FVector& At) : B(InB), bSet(InB->bFit && !InB->bAnchored) { if (bSet) { B->bAnchored = true; B->FitAnchor = At; } }
+		~FAnchorScope() { if (bSet) { B->bAnchored = false; } }
+	};
+	struct FNoFit
+	{
+		ADCHideoutBuilder* B; bool bWas;
+		explicit FNoFit(ADCHideoutBuilder* InB) : B(InB), bWas(InB->bFit) { B->bFit = false; }
+		~FNoFit() { B->bFit = bWas; }
+	};
+	FVector StationAnchor = FVector::ZeroVector; // CurStation floor in authored coordinates
+
 	// ---------------------------------------------------------------- build context
 	ADCRoomModule* CurRoom = nullptr; // decor goes into this room...
 	FName CurGroup;                   // ...in this group
@@ -128,7 +153,7 @@ protected:
 	void Lantern(const FVector& C, bool bLight);
 
 	// lights (attached to CurRoom, put in CurGroup)
-	float LightScale = 1.f;
+	float LightScale = 1.35f;
 	void FinishLight(ULightComponent* L, bool bRoomLight);
 	UPointLightComponent* Point(const FVector& Loc, const FLinearColor& Col, float Cd, float Radius, bool bShadows, bool bRoomLight, float SourceRadius = 3.f);
 	USpotLightComponent* Spot(const FVector& Loc, const FVector& Target, const FLinearColor& Col, float Cd, float Radius, float Inner, float Outer, bool bShadows, bool bRoomLight);

@@ -1,4 +1,4 @@
-// Director's Cut — reusable prop kit for the warehouse hideout (cars, monitors, chairs, racking, lamps...).
+// Director's Cut — reusable prop kit (cars, monitors, chairs, racking, lamps) + the ruin kit (walls, rubble, roofs, growth).
 // All positions are CurRoom-local. With bKitOnStation the parts become CurStation props (hover highlight, clickable).
 #include "World/Scene/DCHideoutBuilder.h"
 #include "World/DCRoomModule.h"
@@ -19,15 +19,19 @@ void ADCHideoutBuilder::K(EDCShape Shape, const FVector& Loc, const FVector& Siz
 {
 	if (bKitOnStation && CurStation)
 	{
-		const FVector StationFloor = CurRoom->GetActorTransform().InverseTransformPosition(CurStation->GetActorLocation()) - FVector(0, 0, CurStationHalfZ);
-		SP(Shape, Loc - StationFloor, Size, Mat, Rot, bShadow);
+		SP(Shape, Loc - StationAnchor, Size, Mat, Rot, bShadow);
 		return;
 	}
 	Deco(Shape, Loc, Size, Mat, Rot, bShadow);
 }
 
-void ADCHideoutBuilder::KTube(const FVector& A, const FVector& B, float Dia, FName Mat)
+void ADCHideoutBuilder::KTube(const FVector& InA, const FVector& InB, float InDia, FName Mat)
 {
+	const bool bMap = !(bKitOnStation && CurStation);
+	const FVector A = bMap ? MapP(InA) : InA, B = bMap ? MapP(InB) : InB;
+	const float Dia = bMap ? MapLen(InDia) : InDia;
+	FNoFit NF(this);
+	if (!bMap) { bFit = NF.bWas; }
 	const FVector D = B - A;
 	const float Len = D.Size();
 	if (Len < KINDA_SMALL_NUMBER) { return; }
@@ -36,6 +40,7 @@ void ADCHideoutBuilder::KTube(const FVector& A, const FVector& B, float Dia, FNa
 
 void ADCHideoutBuilder::Monitor(const FVector& C, float W, float H, float Yaw, FName ScreenMat, float Pitch)
 {
+	FAnchorScope AS(this, C);
 	const FRotator R(Pitch, Yaw, 0);
 	K(EDCShape::Cube, C, FVector(3.5f, W + 3.f, H + 3.f), "PlasticBlack", R);
 	K(EDCShape::Cube, C + R.RotateVector(FVector(-1.9f, 0, 0)), FVector(0.4f, W, H), ScreenMat, R, false);
@@ -43,6 +48,7 @@ void ADCHideoutBuilder::Monitor(const FVector& C, float W, float H, float Yaw, F
 
 void ADCHideoutBuilder::Car(const FVector& C, float Yaw, FName Paint, bool bVan)
 {
+	FAnchorScope AS(this, C);
 	const FRotator YR(0, Yaw, 0);
 	auto P = [&](EDCShape S, const FVector& L, const FVector& Sz, FName M, const FRotator& R = FRotator::ZeroRotator, bool bSh = true)
 	{
@@ -109,6 +115,7 @@ void ADCHideoutBuilder::Car(const FVector& C, float Yaw, FName Paint, bool bVan)
 
 void ADCHideoutBuilder::OfficeChair(const FVector& C, float Yaw)
 {
+	FAnchorScope AS(this, C);
 	const FRotator YR(0, Yaw, 0);
 	auto P = [&](EDCShape S, const FVector& L, const FVector& Sz, FName M, const FRotator& R = FRotator::ZeroRotator)
 	{
@@ -128,12 +135,14 @@ void ADCHideoutBuilder::OfficeChair(const FVector& C, float Yaw)
 
 void ADCHideoutBuilder::Crate(const FVector& C, const FVector& S, float Yaw, FName Mat)
 {
+	FAnchorScope AS(this, C);
 	K(EDCShape::Cube, C + FVector(0, 0, S.Z * 0.5f), S, Mat, FRotator(0, Yaw, 0));
 	if (Mat == FName("Cardboard")) { K(EDCShape::Cube, C + FVector(0, 0, S.Z * 0.5f), FVector(S.X + 0.4f, 5.f, S.Z + 0.4f), "Paper", FRotator(0, Yaw, 0)); } // tape band
 }
 
 void ADCHideoutBuilder::ShelfUnit(const FVector& C, float Yaw, float Len, int32 Seed)
 {
+	FAnchorScope AS(this, C);
 	const FRotator YR(0, Yaw, 0);
 	auto At = [&](float X, float Y, float Z) { return C + YR.RotateVector(FVector(X, Y, Z)); };
 	for (int32 i = 0; i < 4; ++i) { K(EDCShape::Cube, At((i % 2) ? 22.f : -22.f, (i / 2) ? Len * 0.5f : -Len * 0.5f, 100), FVector(4, 4, 200), "Galv", YR); }
@@ -157,6 +166,7 @@ void ADCHideoutBuilder::ShelfUnit(const FVector& C, float Yaw, float Len, int32 
 
 void ADCHideoutBuilder::PalletRack(const FVector& C, float Yaw, int32 Bays, int32 Seed)
 {
+	FAnchorScope AS(this, C);
 	const FRotator YR(0, Yaw, 0);
 	auto At = [&](float X, float Y, float Z) { return C + YR.RotateVector(FVector(X, Y, Z)); };
 	const float BayW = 140.f, D = 90.f, H = 330.f;
@@ -220,6 +230,7 @@ void ADCHideoutBuilder::LedBatten(const FVector& C, float Len, float Yaw, bool b
 
 void ADCHideoutBuilder::Duffel(const FVector& C, float Yaw, FName Mat)
 {
+	FAnchorScope AS(this, C);
 	K(EDCShape::Cylinder, C + FVector(0, 0, 15), FVector(32, 30, 68), Mat, FRotator(0, Yaw, 90));
 	K(EDCShape::Cube, C + FVector(0, 0, 30), FVector(26, 6, 3), "PlasticBlack", FRotator(0, Yaw + 90.f, 0));
 }
@@ -231,8 +242,8 @@ void ADCHideoutBuilder::Duffel(const FVector& C, float Yaw, FName Mat)
 namespace
 {
 	constexpr float RWallT = 24.f;
-	constexpr float RHouseH = 340.f;
-	constexpr float RWingH = 300.f;
+	constexpr float RHouseH = 290.f;
+	constexpr float RWingH = 255.f;
 	float KA(int32 I, float Amp) { return FMath::Abs(KJ(I, Amp)); }
 }
 
@@ -284,6 +295,7 @@ void ADCHideoutBuilder::RuinStub(bool bAlongX, float Fixed, float A, float B, in
 
 void ADCHideoutBuilder::RubblePile(const FVector& C, float Radius, int32 Count, int32 Seed, FName Mat)
 {
+	FAnchorScope AS(this, C);
 	for (int32 i = 0; i < Count; ++i)
 	{
 		const int32 k = Seed * 13 + i * 7;
@@ -327,6 +339,7 @@ void ADCHideoutBuilder::RubbleRun(bool bAlongX, float Fixed, float A, float B, f
 
 void ADCHideoutBuilder::Weeds(const FVector& C, float Radius, int32 Count, int32 Seed, float MaxH)
 {
+	FAnchorScope AS(this, C);
 	for (int32 i = 0; i < Count; ++i)
 	{
 		const int32 k = Seed * 17 + i * 5;
@@ -350,6 +363,7 @@ void ADCHideoutBuilder::Weeds(const FVector& C, float Radius, int32 Count, int32
 
 void ADCHideoutBuilder::Ivy(const FVector& Base, const FVector& Normal, float W, float H, int32 Seed)
 {
+	FAnchorScope AS(this, Base);
 	const bool bX = FMath::Abs(Normal.X) > 0.5f;
 	const FVector Tan = bX ? FVector(0, 1, 0) : FVector(1, 0, 0);
 	const int32 N = FMath::Clamp(FMath::RoundToInt(W * H / 700.f), 6, 70);
@@ -449,85 +463,84 @@ void ADCHideoutBuilder::TallWall(bool bAlongX, float Fixed, float Inward, float 
 
 void ADCHideoutBuilder::BuildHouseRoof()
 {
-	// Office local == world. Ridge along X at Y=0; only the back (+Y) slope survives, mostly as rafters with a few
-	// courses of tiles near the eave (the slope is steep enough that the iso camera looks under it).
+	// Office local == world. Ridge along X at Y=0, carried by the +X gable and the chimney stack on the collapsed -X
+	// end. Only the back (+Y) slope survives, mostly as rafters with a few courses of tiles near the eave (the slope is
+	// steep enough that the iso camera looks under it).
 	CurRoom = GetRoom(EDCRoomType::Office);
 	CurGroup = DCGroups::Shell;
+	const FBox2D OR = DCSite::RoomRect(EDCRoomType::Office);
+	const float HX = OR.GetSize().X * 0.5f, HY = OR.GetSize().Y * 0.5f;
 	const float Ze = RHouseH + 12.f, Tan = 0.7f;   // ~35 degree pitch
-	const float Zr = Ze + 400.f * Tan;
-	const float GX = 500.f - RWallT * 0.5f;
+	const float Zr = Ze + HY * Tan;
+	const float GX = HX - RWallT * 0.5f;
+	const float CX = HX - RWallT - 40.f, CY = 70.f; // chimney breast against the +X gable, hearth facing the room
+	const float X0 = -HX + 30.f;                    // where the roof skeleton gives out over the fallen -X end
+	const float YE = HY + 30.f;                    // eave overhang
 	// +X gable (stone courses, crumbling on the front edge)
-	for (int32 i = 0; Ze + i * 28.f < Zr - 10.f; ++i)
+	for (int32 i = 0; Ze + i * 26.f < Zr - 8.f; ++i)
 	{
-		const float Z = Ze + i * 28.f + 14.f;
-		const float HW = 412.f * (1.f - (Z - Ze) / (Zr - Ze));
-		const float Bite = (i > 2) ? KA(i * 3 + 1, 50.f) : 0.f;
-		Deco(EDCShape::Cube, FVector(GX, Bite * 0.5f, Z), FVector(RWallT, 2.f * HW - Bite, 28.f), "Stone");
+		const float Z = Ze + i * 26.f + 13.f;
+		const float HW = (HY + 12.f) * (1.f - (Z - Ze) / (Zr - Ze));
+		const float Bite = (i > 1) ? KA(i * 3 + 1, 35.f) : 0.f;
+		Deco(EDCShape::Cube, FVector(GX, Bite * 0.5f, Z), FVector(RWallT, 2.f * HW - Bite, 26.f), "Stone");
 	}
-	Ivy(FVector(GX - RWallT * 0.5f - 1.f, 250.f, Ze - 40.f), FVector(-1, 0, 0), 160.f, 200.f, 77);
-	// chimney stack in the back-left corner (with a dead hearth)
-	Deco(EDCShape::Cube, FVector(-440.f, 350.f, 380.f), FVector(110.f, 76.f, 760.f), "StoneDark");
-	Deco(EDCShape::Cube, FVector(-440.f, 350.f, 765.f), FVector(122.f, 88.f, 14.f), "Stone");
-	Deco(EDCShape::Cylinder, FVector(-455.f, 350.f, 790.f), FVector(22.f, 22.f, 40.f), "BrickOld");
-	Deco(EDCShape::Cube, FVector(-384.f, 350.f, 55.f), FVector(4.f, 60.f, 90.f), "Black", FRotator::ZeroRotator, false);
-	Deco(EDCShape::Cube, FVector(-380.f, 350.f, 104.f), FVector(16.f, 110.f, 10.f), "TimberDark");
-	RubblePile(FVector(-370.f, 350.f, 0.f), 30.f, 5, 41, "BrickOld");
-	// ridge beam: rests on the gable, snapped where the front gable fell, the broken end down in the rubble
-	Bar(FVector(GX + 6.f, 0, Zr - 8.f), FVector(-160.f, 0, Zr - 22.f), 18.f, 22.f, "TimberDark");
-	Bar(FVector(-160.f, 0, Zr - 22.f), FVector(-215.f, -12.f, Zr - 70.f), 16.f, 20.f, "TimberDark");
-	// back slope rafters (full where the ridge holds, dangling stubs beyond)
+	Ivy(FVector(GX - RWallT * 0.5f - 1.f, HY * 0.55f, Ze - 40.f), FVector(-1, 0, 0), 120.f, 160.f, 77);
+	// chimney breast + stack on the gable wall, with a dead hearth facing into the room
+	const float ChH = Zr + 70.f;
+	Deco(EDCShape::Cube, FVector(CX, CY, ChH * 0.5f), FVector(80.f, 100.f, ChH), "StoneDark");
+	Deco(EDCShape::Cube, FVector(CX, CY, ChH + 6.f), FVector(92.f, 112.f, 12.f), "Stone");
+	Deco(EDCShape::Cylinder, FVector(CX + 10.f, CY - 18.f, ChH + 30.f), FVector(20.f, 20.f, 36.f), "BrickOld");
+	Deco(EDCShape::Cube, FVector(CX - 40.5f, CY, 42.f), FVector(2.f, 60.f, 74.f), "Black", FRotator::ZeroRotator, false);
+	Deco(EDCShape::Cube, FVector(CX - 46.f, CY, 84.f), FVector(16.f, 108.f, 10.f), "TimberDark");
+	Deco(EDCShape::Cube, FVector(CX - 55.f, CY, 2.f), FVector(30.f, 110.f, 4.f), "StoneDark");
+	Ivy(FVector(CX - 41.f, CY + 40.f, 90.f), FVector(-1, 0, 0), 50.f, ChH * 0.5f, 93);
+	// ridge beam: rests on the gable, snapped where the -X gable fell
+	Bar(FVector(GX + 6.f, 0, Zr - 8.f), FVector(-HX * 0.45f, 0, Zr - 16.f), 16.f, 20.f, "TimberDark");
+	Bar(FVector(-HX * 0.45f, 2.f, Zr - 18.f), FVector(-HX * 0.62f, -12.f, Zr - 70.f), 14.f, 18.f, "TimberDark");
+	// back slope rafters (a few missing), battens, surviving tiles
 	auto Slope = [&](float Y) { return Zr - Y * Tan; };
-	for (float X = 470.f; X > -470.f; X -= 62.f)
+	int32 n = 0;
+	for (float X = HX - 25.f; X > X0; X -= 55.f, ++n)
 	{
-		const int32 k = (int32)(X + 600.f);
-		if (X > -150.f) { Bar(FVector(X, -6.f, Slope(-6.f)), FVector(X, 440.f, Slope(440.f)), 7.f, 14.f, "TimberDark"); }
-		else if (KJ(k, 1.f) > -0.4f)
-		{
-			const float Y0 = 120.f + KA(k + 1, 160.f);
-			Bar(FVector(X, Y0, Slope(Y0) - 30.f - KA(k + 2, 40.f)), FVector(X, 440.f, Slope(440.f)), 7.f, 14.f, "TimberDark");
-		}
+		if (n % 5 == 3) { continue; }
+		if (X > -HX * 0.45f) { Bar(FVector(X, -6.f, Slope(-6.f)), FVector(X, YE, Slope(YE)), 7.f, 13.f, "TimberDark"); }
+		else { const float Y0 = 70.f + KA(n * 7 + 1, 90.f); Bar(FVector(X, Y0, Slope(Y0) - 25.f), FVector(X, YE, Slope(YE)), 7.f, 13.f, "TimberDark"); }
 	}
-	// battens + surviving tiles (more towards the eave)
-	for (float T = 0.12f; T < 0.98f; T += 0.085f)
+	for (float T = 0.12f; T < 0.98f; T += 0.09f)
 	{
-		const float Y = 440.f * T;
-		Bar(FVector(-150.f, Y, Slope(Y) + 9.f), FVector(GX, Y, Slope(Y) + 9.f), 4.f, 3.f, "Timber");
+		const float Y = YE * T;
+		const float BX = (T < 0.4f) ? -HX * 0.3f : X0;
+		Bar(FVector(BX, Y, Slope(Y) + 8.f), FVector(GX, Y, Slope(Y) + 8.f), 4.f, 3.f, "Timber");
 	}
-	for (int32 c = 0; c < 6; ++c)
+	const int32 NC = FMath::Max(3, FMath::RoundToInt((GX - X0) / 95.f));
+	const float CW = (GX - X0) / NC;
+	for (int32 c = 0; c < NC; ++c)
 	{
-		for (int32 r = 0; r < 7; ++r)
+		for (int32 r = 0; r < 6; ++r)
 		{
-			const float X0 = -140.f + c * 104.f;
-			const float T0 = 0.08f + r * 0.13f, T1 = T0 + 0.13f;
+			const float TX = X0 + c * CW;
+			const float T0 = 0.08f + r * 0.15f, T1 = T0 + 0.15f;
 			const float Keep = T0 > 0.6f ? 0.85f : T0 > 0.35f ? 0.4f : 0.1f;
 			if ((KJ(c * 31 + r * 7 + 3, 1.f) * 0.5f + 0.5f) > Keep) { continue; }
-			const float Y0 = 440.f * T0, Y1 = 440.f * T1;
-			Bar(FVector(X0 + 52.f, Y0, Slope(Y0) + 13.f), FVector(X0 + 52.f, Y1, Slope(Y1) + 13.f), 102.f, 4.f, "RoofTile");
-			if (KJ(c * 13 + r, 1.f) > 0.5f) { Deco(EDCShape::Cube, FVector(X0 + 52.f + KJ(c + r, 30.f), (Y0 + Y1) * 0.5f, Slope((Y0 + Y1) * 0.5f) + 16.f), FVector(50.f, 30.f, 1.5f), "Moss", FRotator(0, 0, -35.f), false); }
+			const float Y0 = YE * T0, Y1 = YE * T1;
+			Bar(FVector(TX + CW * 0.5f, Y0, Slope(Y0) + 12.f), FVector(TX + CW * 0.5f, Y1, Slope(Y1) + 12.f), CW - 2.f, 4.f, "RoofTile");
+			if (KJ(c * 13 + r, 1.f) > 0.5f) { Deco(EDCShape::Cube, FVector(TX + CW * 0.5f + KJ(c + r, 20.f), (Y0 + Y1) * 0.5f, Slope((Y0 + Y1) * 0.5f) + 15.f), FVector(CW * 0.5f, 25.f, 1.5f), "Moss", FRotator(0, 0, -35.f), false); }
 		}
 	}
-	// a few front rafters: bare ribs over the open front, some snapped
-	for (float X : { 440.f })
-	{
-		const int32 k = (int32)X + 900;
-		if (KJ(k, 1.f) > -0.1f || X > 400.f) { Bar(FVector(X, 6.f, Slope(6.f)), FVector(X, -430.f, Zr - 430.f * Tan), 7.f, 14.f, "TimberDark"); }
-		else
-		{
-			Bar(FVector(X, 6.f, Slope(6.f)), FVector(X, -180.f, Zr - 180.f * Tan), 7.f, 14.f, "TimberDark");
-			Bar(FVector(X, -180.f, Zr - 180.f * Tan), FVector(X + 30.f, -240.f, Zr - 180.f * Tan - 170.f), 7.f, 14.f, "TimberDark");
-		}
-	}
+	// one front rafter left by the gable
+	Bar(FVector(HX - 25.f, 6.f, Slope(6.f)), FVector(HX - 25.f, -YE, Zr - YE * Tan), 7.f, 13.f, "TimberDark");
 	// loft joists: from the back wall plate out over the room, broken where the front wall gave way
-	for (float X : { 330.f, 40.f, -250.f })
+	for (float F : { 0.66f, 0.06f })
 	{
-		const float YEnd = (X > 300.f) ? -412.f : -150.f - KA((int32)X + 70, 60.f);
-		Bar(FVector(X, 412.f, Ze), FVector(X, YEnd, Ze), 14.f, 18.f, "TimberDark");
-		if (X < 300.f) { Bar(FVector(X, YEnd, Ze - 4.f), FVector(X + 18.f, YEnd - 60.f, Ze - 110.f), 12.f, 16.f, "TimberDark"); }
+		const float X = HX * F;
+		const float YEnd = (F > 0.5f) ? -HY - 12.f : -HY * 0.4f - KA((int32)X + 70, 30.f);
+		Bar(FVector(X, HY + 12.f, Ze), FVector(X, YEnd, Ze), 13.f, 16.f, "TimberDark");
+		if (F < 0.5f) { Bar(FVector(X, YEnd, Ze - 4.f), FVector(X + 14.f, YEnd - 45.f, Ze - 85.f), 11.f, 14.f, "TimberDark"); }
 	}
-	// the corner pier where the front walls met, and a fallen roof slab of tiles in the front-left
-	Deco(EDCShape::Cube, FVector(-500.f, -400.f, 105.f), FVector(RWallT + 10.f, RWallT + 10.f, 210.f), "Stone");
-	Deco(EDCShape::Cube, FVector(-505.f, -395.f, 222.f), FVector(20.f, 22.f, 24.f), "Stone", FRotator(10, 20, 5));
-	Ivy(FVector(-500.f, -418.f, 0.f), FVector(0, -1, 0), 50.f, 190.f, 91);
+	// the corner pier where the front walls met
+	Deco(EDCShape::Cube, FVector(-HX, -HY, 90.f), FVector(RWallT + 10.f, RWallT + 10.f, 180.f), "Stone");
+	Deco(EDCShape::Cube, FVector(-HX - 5.f, -HY + 5.f, 192.f), FVector(20.f, 22.f, 24.f), "Stone", FRotator(10, 20, 5));
+	Ivy(FVector(-HX, -HY - 18.f, 0.f), FVector(0, -1, 0), 40.f, 160.f, 91);
 }
 
 void ADCHideoutBuilder::BuildWingRoof(const FRoomDef& Def)
@@ -545,7 +558,7 @@ void ADCHideoutBuilder::BuildWingRoof(const FRoomDef& Def)
 		const bool bAlongX = Side == 1;
 		const float Line = Side == 0 ? Half.X - RWallT : Half.Y - RWallT;
 		const float L0 = bAlongX ? -Half.X + 30.f : -Half.Y + 30.f, L1 = -L0;
-		const float Depth = bGarage ? 230.f : 170.f;
+		const float Depth = bGarage ? 170.f : 120.f;
 		auto P = [&](float Al, float In, float Zz) { return bAlongX ? FVector(Al, Line - In, Zz) : FVector(Line - In, Al, Zz); };
 		int32 i = 0;
 		for (float Al = L0; Al <= L1 + 1.f; Al += 110.f, ++i)
@@ -570,6 +583,7 @@ void ADCHideoutBuilder::BuildWingRoof(const FRoomDef& Def)
 
 void ADCHideoutBuilder::HangingBulb(const FVector& C, float TopZ, const FLinearColor& Col, float Cd, float Radius, bool bShadow)
 {
+	FAnchorScope AS(this, C);
 	Tube(FVector(C.X, C.Y, TopZ), C + FVector(0, 0, 9), 0.8f, "Black", false);
 	Deco(EDCShape::Cylinder, C + FVector(0, 0, 8), FVector(4, 4, 6), "Black", FRotator::ZeroRotator, false);
 	Deco(EDCShape::Sphere, C, FVector(7, 7, 9), "Tungsten", FRotator::ZeroRotator, false);
@@ -591,6 +605,7 @@ void ADCHideoutBuilder::StringLights(const FVector& A, const FVector& B, float S
 
 void ADCHideoutBuilder::WorkLight(const FVector& B, float Yaw, bool bLight, float Cd, bool bRoomLight)
 {
+	FAnchorScope AS(this, B);
 	const FRotator YR(0, Yaw, 0);
 	Tube(B + YR.RotateVector(FVector(-25, -22, 0)), B + FVector(0, 0, 165), 3, "SteelBlack");
 	Tube(B + YR.RotateVector(FVector(-25, 22, 0)), B + FVector(0, 0, 165), 3, "SteelBlack");
@@ -606,6 +621,7 @@ void ADCHideoutBuilder::WorkLight(const FVector& B, float Yaw, bool bLight, floa
 
 void ADCHideoutBuilder::CampChair(const FVector& C, float Yaw, FName Fabric)
 {
+	FAnchorScope AS(this, C);
 	const FRotator YR(0, Yaw, 0);
 	auto At = [&](float X, float Y, float Z) { return C + YR.RotateVector(FVector(X, Y, Z)); };
 	for (float S : { -1.f, 1.f })
@@ -621,6 +637,7 @@ void ADCHideoutBuilder::CampChair(const FVector& C, float Yaw, FName Fabric)
 
 void ADCHideoutBuilder::Generator(const FVector& C, float Yaw)
 {
+	FAnchorScope AS(this, C);
 	const FRotator YR(0, Yaw, 0);
 	auto At = [&](float X, float Y, float Z) { return C + YR.RotateVector(FVector(X, Y, Z)); };
 	for (float SX : { -1.f, 1.f }) { for (float SY : { -1.f, 1.f }) { KTube(At(SX * 38, SY * 26, 0), At(SX * 38, SY * 26, 62), 3.f, "SteelBlack"); } }
@@ -637,6 +654,7 @@ void ADCHideoutBuilder::Generator(const FVector& C, float Yaw)
 
 void ADCHideoutBuilder::Lantern(const FVector& C, bool bLight)
 {
+	FAnchorScope AS(this, C);
 	K(EDCShape::Cylinder, C + FVector(0, 0, 2), FVector(14, 14, 4), "Rust");
 	K(EDCShape::Cylinder, C + FVector(0, 0, 14), FVector(11, 11, 20), "Glass", FRotator::ZeroRotator, false);
 	K(EDCShape::Sphere, C + FVector(0, 0, 12), FVector(3.5f, 3.5f, 6.f), "Candle", FRotator::ZeroRotator, false);
@@ -653,10 +671,13 @@ void ADCHideoutBuilder::Lantern(const FVector& C, bool bLight)
 // Plot (Locked) and construction (Building) dressing
 // =====================================================================================================================
 
-void ADCHideoutBuilder::LockedDressing(const FBox2D& R, const TArray<FDCQuad>& Piles)
+void ADCHideoutBuilder::LockedDressing(const FBox2D& InR, const TArray<FDCQuad>& Piles)
 {
 	// An empty, overgrown plot: survey stakes and a string line outlining the footprint, a few stacked materials.
 	CurGroup = DCGroups::Locked;
+	FNoFit NF(this);
+	const float RS = NF.bWas ? DCSite::RoomScale : 1.f, PS = NF.bWas ? FitXY : 1.f;
+	const FBox2D R(InR.Min * RS, InR.Max * RS);
 	const FVector2D C = R.GetCenter(), S = R.GetSize();
 	const int32 Seed = (int32)(C.X * 0.37f + C.Y * 0.11f + S.X) & 0xffff;
 	Deco(EDCShape::Cube, FVector(C.X + KJ(Seed, 40.f), C.Y + KJ(Seed + 1, 40.f), -2.4f), FVector(S.X * 0.72f, S.Y * 0.66f, 1.f), "Dirt", FRotator(0, KJ(Seed + 2, 6.f), 0), false);
@@ -683,7 +704,7 @@ void ADCHideoutBuilder::LockedDressing(const FBox2D& R, const TArray<FDCQuad>& P
 	// materials waiting for the builders
 	for (int32 j = 0; j < Piles.Num(); ++j)
 	{
-		const FVector P(Piles[j].X, Piles[j].Y, 0);
+		const FVector P(Piles[j].X * PS, Piles[j].Y * PS, 0);
 		const int32 k = Seed + j * 17;
 		switch (j % 3)
 		{
@@ -704,10 +725,13 @@ void ADCHideoutBuilder::LockedDressing(const FBox2D& R, const TArray<FDCQuad>& P
 	}
 }
 
-void ADCHideoutBuilder::BuildingDressing(const FBox2D& R)
+void ADCHideoutBuilder::BuildingDressing(const FBox2D& InR)
 {
 	// Construction in progress: poured slab, timber stud frame, scaffold, mixer, warm work lights.
 	CurGroup = DCGroups::Building;
+	FNoFit NF(this);
+	const float RS = NF.bWas ? DCSite::RoomScale : 1.f;
+	const FBox2D R(InR.Min * RS, InR.Max * RS);
 	const FVector2D C = R.GetCenter(), S = R.GetSize();
 	const FVector Up(0, 0, 1);
 	Deco(EDCShape::Cube, FVector(C.X, C.Y, -4.6f), FVector(S.X - 12.f, S.Y - 12.f, 7.f), "Cement");   // just under the finished floor
