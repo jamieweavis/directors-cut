@@ -554,7 +554,7 @@ void ADCLandscape::BuildGarden()
 	if (DayNight)
 	{
 		const FVector Aim(YardRect().GetCenter().X - 200.f, YardRect().GetCenter().Y, 0.f);
-		DayNight->AddStreetLight(Lamp + FVector(-20.f, -20.f, -10.f), Aim, FLinearColor(1.f, 0.82f, 0.62f), 1100.f, 2600.f, 58.f, false);
+		DayNight->AddStreetLight(Lamp + FVector(-20.f, -20.f, -10.f), Aim, FLinearColor(1.f, 0.82f, 0.62f), 550.f, 2600.f, 58.f, false);
 	}
 }
 
