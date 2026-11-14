@@ -49,7 +49,7 @@ void UDCRunSubsystem::Deinitialize()
 }
 
 TStatId UDCRunSubsystem::GetStatId() const { RETURN_QUICK_DECLARE_CYCLE_STAT(UDCRunSubsystem, STATGROUP_Tickables); }
-bool UDCRunSubsystem::IsTickable() const { return bActive && !bPaused && Phase == EDCGamePhase::Playing && !IsTemplate(); }
+bool UDCRunSubsystem::IsTickable() const { return bActive && !bPaused && !bSpeedPaused && Phase == EDCGamePhase::Playing && !IsTemplate(); }
 
 // ─── private helpers ────────────────────────────────────────────────────────
 
@@ -65,6 +65,7 @@ void UDCRunSubsystem::EnsureData()
 void UDCRunSubsystem::ResetRunState()
 {
 	bActive = false; bPaused = false; Phase = EDCGamePhase::Title;
+	GameSpeed = 0; bSpeedPaused = false; // speed is per session, never saved: new run / load = 1x, running
 	Seed = 0; RunTime = 0.0; Cash = 0; NextId = 1;
 	Roster.Reset(); Fallen.Reset(); Recruits.Reset(); Missions.Reset(); Reports.Reset(); Stash.Reset(); Rooms.Reset();
 	PerkOffer.Reset(); PerksTaken.Reset();
@@ -506,9 +507,34 @@ bool UDCRunSubsystem::IsPaused() const { return bPaused; }
 void UDCRunSubsystem::SetTimeScale(float Scale) { TimeScale = FMath::Max(0.f, Scale); }
 float UDCRunSubsystem::GetTimeScale() const { return TimeScale; }
 
+float UDCRunSubsystem::GameSpeedMultiplier(int32 SpeedIndex)
+{
+	static constexpr float Mults[NumGameSpeeds] = { 1.f, 2.f, 4.f };
+	return Mults[FMath::Clamp(SpeedIndex, 0, NumGameSpeeds - 1)];
+}
+void UDCRunSubsystem::SetGameSpeed(int32 SpeedIndex)
+{
+	const int32 NewSpeed = FMath::Clamp(SpeedIndex, 0, NumGameSpeeds - 1);
+	if (NewSpeed == GameSpeed && !bSpeedPaused) { return; }
+	GameSpeed = NewSpeed;
+	bSpeedPaused = false;
+	OnGameSpeedChanged.Broadcast(GameSpeed, bSpeedPaused);
+}
+int32 UDCRunSubsystem::GetGameSpeed() const { return GameSpeed; }
+float UDCRunSubsystem::GetGameSpeedMultiplier() const { return GameSpeedMultiplier(GameSpeed); }
+void UDCRunSubsystem::SetSpeedPaused(bool bInPaused)
+{
+	if (bSpeedPaused == bInPaused) { return; }
+	bSpeedPaused = bInPaused;
+	OnGameSpeedChanged.Broadcast(GameSpeed, bSpeedPaused);
+}
+void UDCRunSubsystem::ToggleSpeedPaused() { SetSpeedPaused(!bSpeedPaused); }
+bool UDCRunSubsystem::IsSpeedPaused() const { return bSpeedPaused; }
+float UDCRunSubsystem::GetEffectiveTimeScale() const { return (bPaused || bSpeedPaused) ? 0.f : TimeScale * GetGameSpeedMultiplier(); }
+
 // ─── time ───────────────────────────────────────────────────────────────────
 
-void UDCRunSubsystem::Tick(float DeltaTime) { AdvanceTime((double)DeltaTime * TimeScale); }
+void UDCRunSubsystem::Tick(float DeltaTime) { AdvanceTime((double)DeltaTime * TimeScale * GetGameSpeedMultiplier()); }
 
 void UDCRunSubsystem::AdvanceTime(double Seconds)
 {

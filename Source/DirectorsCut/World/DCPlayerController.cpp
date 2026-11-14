@@ -63,14 +63,12 @@ void ADCPlayerController::SetupInputComponent()
 		ActZoom->ValueType = EInputActionValueType::Axis1D;
 		ActBack = NewObject<UInputAction>(this, TEXT("IA_DC_Back"));
 		ActBack->ValueType = EInputActionValueType::Boolean;
-		ActRoll = NewObject<UInputAction>(this, TEXT("IA_DC_Roll"));
-		ActRoll->ValueType = EInputActionValueType::Boolean;
 
 		MappingContext = NewObject<UInputMappingContext>(this, TEXT("IMC_DC_World"));
 		MappingContext->MapKey(ActClick, EKeys::LeftMouseButton);
 		MappingContext->MapKey(ActZoom, EKeys::MouseWheelAxis);
 		MappingContext->MapKey(ActBack, EKeys::Escape);
-		MappingContext->MapKey(ActRoll, EKeys::SpaceBar);
+		// Space / 1 / 2 / 3 (game speed) and the panel letters are UI hotkeys: SDCRoot::HandleHotkey.
 	}
 
 	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InputComponent))
@@ -78,7 +76,6 @@ void ADCPlayerController::SetupInputComponent()
 		EIC->BindAction(ActClick, ETriggerEvent::Started, this, &ADCPlayerController::OnClickAction);
 		EIC->BindAction(ActZoom, ETriggerEvent::Triggered, this, &ADCPlayerController::OnZoomAction);
 		EIC->BindAction(ActBack, ETriggerEvent::Started, this, &ADCPlayerController::OnBackAction);
-		EIC->BindAction(ActRoll, ETriggerEvent::Started, this, &ADCPlayerController::OnRollAction);
 		bEnhancedInputBound = true;
 	}
 	else
@@ -200,16 +197,6 @@ void ADCPlayerController::OnBackAction(const FInputActionValue& Value)
 	if (UDCUISubsystem* UI = UDCUISubsystem::Get(this)) { UI->HandleBack(); }
 }
 
-void ADCPlayerController::OnRollAction(const FInputActionValue& Value)
-{
-	// Space toggles the mission board (not while typing, not over modal flows like title / pause / perk draft).
-	if (IsTextInputFocused()) { return; }
-	UDCUISubsystem* UI = UDCUISubsystem::Get(this);
-	if (!UI || UI->IsWorldInputBlocked()) { return; }
-	if (UI->GetOpenPanel() == EDCPanel::Missions) { UI->ClosePanel(); }
-	else if (!CameraRig || !CameraRig->IsInCinematic()) { UI->OpenPanel(EDCPanel::Missions); }
-}
-
 void ADCPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
@@ -257,7 +244,6 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 		// Fallback key polling.
 		if (WasInputKeyJustPressed(EKeys::LeftMouseButton)) { OnClickAction(FInputActionValue(true)); }
 		if (WasInputKeyJustPressed(EKeys::Escape)) { OnBackAction(FInputActionValue(true)); }
-		if (WasInputKeyJustPressed(EKeys::SpaceBar)) { OnRollAction(FInputActionValue(true)); }
 		if (WasInputKeyJustPressed(EKeys::MouseScrollUp)) { ZoomAccum += 1.f; }
 		if (WasInputKeyJustPressed(EKeys::MouseScrollDown)) { ZoomAccum -= 1.f; }
 	}

@@ -1076,7 +1076,8 @@ void ADCWorldDirector::TickCars(float Dt)
 
 		case ECarPhase::Away:
 		{
-			// Leave so the car parks about when the job finishes.
+			// Leave so the car parks about when the job finishes. The car runs at game speed (CustomTimeDilation),
+			// so its own clock needs the run time left over the dev time scale only.
 			const double RealLeft = bRunning ? Run->GetMissionTimeRemaining(S.MissionId) / FMath::Max(0.01f, Run->GetTimeScale()) : 0.0;
 			if (!bRunning || RealLeft <= ADCVehicle::EstimateDriveInSeconds())
 			{
@@ -1413,8 +1414,21 @@ void ADCWorldDirector::Tick(float DeltaSeconds)
 		if (!P) { Pawns.RemoveAt(i); continue; }
 		if (P->WantsDestroy()) { P->Destroy(); Pawns.RemoveAt(i); continue; }
 	}
-	UpdateDoors(DeltaSeconds);
-	TickCars(DeltaSeconds);
+	// Game speed (1x / 2x / 4x): crew, cars and garage doors play at the sim's pace so the choreography keeps up
+	// with faster missions. The camera, UI and ambient scene stay on real time. A pause leaves them idling at 1x.
+	float WorldSpeed = 1.f;
+	if (const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this))
+	{
+		if (Run->HasActiveRun() && Run->GetPhase() == EDCGamePhase::Playing && !Run->IsPaused() && !Run->IsSpeedPaused())
+		{
+			WorldSpeed = Run->GetGameSpeedMultiplier();
+		}
+	}
+	for (ADCCriminalPawn* P : Pawns) { if (P) { P->CustomTimeDilation = WorldSpeed; } }
+	for (const FCarSlot& S : Slots) { if (ADCVehicle* Car = S.Car.Get()) { Car->CustomTimeDilation = WorldSpeed; } }
+	for (const TWeakObjectPtr<ADCGarageDoor>& D : Doors) { if (ADCGarageDoor* Door = D.Get()) { Door->CustomTimeDilation = WorldSpeed; } }
+	UpdateDoors(DeltaSeconds * WorldSpeed);
+	TickCars(DeltaSeconds * WorldSpeed);
 
 	SlowTick += DeltaSeconds;
 	if (SlowTick >= 0.25f)

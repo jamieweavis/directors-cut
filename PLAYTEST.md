@@ -15,10 +15,10 @@
 
 ## Controls
 - **Left click:** stations and UI. **Right-drag / WASD:** pan (screen-edge pan is off by default; Options → Gameplay). **Scroll:** zoom.
-- **Space:** missions. **Esc:** back / pause (pausing stops the clock). **C / G / R / B:** crew / gear / recruits / build.
+- **Space:** pause / resume the clock. **1 / 2 / 3:** game speed 1× / 2× / 4× (also on the clock bar). **M:** missions. **Esc:** back / pause menu. **C / G / R / B:** crew / gear / recruits / build.
 
 ## Loop
-1. Missions (Space) → pick a card → fill the crew slots (or use Auto-fill) → set your cut → **Start**.
+1. Missions (M) → pick a card → fill the crew slots (or use Auto-fill) → set your cut → **Start**.
 2. Crew walk out to a car in the yard and drive off along the lane; the car comes back as the job ends. One car per mission slot.
 3. Check results from the bell (Reports).
 4. Spend cash on new wings (Expand). The house physically grows: overgrown plot → timber frame → finished wing.

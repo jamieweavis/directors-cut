@@ -49,12 +49,10 @@ protected:
 	UPROPERTY() TObjectPtr<UInputAction> ActClick;
 	UPROPERTY() TObjectPtr<UInputAction> ActZoom;
 	UPROPERTY() TObjectPtr<UInputAction> ActBack;
-	UPROPERTY() TObjectPtr<UInputAction> ActRoll;
 
 	void OnClickAction(const FInputActionValue& Value);
 	void OnZoomAction(const FInputActionValue& Value);
 	void OnBackAction(const FInputActionValue& Value);
-	void OnRollAction(const FInputActionValue& Value);
 	void OnPanelChanged(EDCPanel Panel);
 	bool IsWorldBlocked() const;
 

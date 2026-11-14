@@ -5,7 +5,7 @@
 //
 // Realtime model (PLAN.md §R):
 //  - The subsystem ticks itself (FTickableGameObject). While a run is Playing and not paused, RunTime advances by
-//    DeltaTime * DevTimeScale. Every timer (missions, builds, injuries, board expiry, recruit refresh) is in run seconds.
+//    DeltaTime * DevTimeScale * GameSpeed (1x / 2x / 4x). Every timer (missions, builds, injuries, board expiry, recruit refresh) is in run seconds.
 //  - Clock: hour = StartHour + RunTime * GameMinutesPerSecond / 60 (default 1 game minute per real second, so a day is
 //    24 real minutes). Payday (upkeep) is charged at every dawn (DawnHour).
 //  - Saving: autosave every AutosaveInterval s, on every mission start/complete/build, and on Deinitialize.
@@ -21,6 +21,7 @@
 DECLARE_MULTICAST_DELEGATE(FDCOnRunStateChanged);                                    // anything changed (cash, roster, board, rooms...)
 DECLARE_MULTICAST_DELEGATE_OneParam(FDCOnPhaseChanged, EDCGamePhase);
 DECLARE_MULTICAST_DELEGATE_OneParam(FDCOnPauseChanged, bool /*bPaused*/);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FDCOnGameSpeedChanged, int32 /*SpeedIndex*/, bool /*bSpeedPaused*/);
 DECLARE_MULTICAST_DELEGATE_OneParam(FDCOnMissionStarted, const FDCMission&);        // crew leaves (bInProgress = true)
 DECLARE_MULTICAST_DELEGATE_OneParam(FDCOnMissionCompleted, const FDCMissionReport&); // crew returns; state already applied
 DECLARE_MULTICAST_DELEGATE_OneParam(FDCOnMissionAdded, const FDCMission&);          // new mission posted on the board
@@ -90,6 +91,25 @@ public:
 	/** The Esc menu pauses the clock. Broadcasts OnPauseChanged. */
 	void SetPaused(bool bInPaused);
 	bool IsPaused() const;
+	// ── Game speed (player controls) ─────────────────────────────────────────
+	// Scales how fast run time follows real time: 1x / 2x / 4x, plus a player pause that is separate from the
+	// Esc-menu pause above (closing the menu never resumes a player pause). Not saved: every new run and every
+	// load starts at 1x, running. AdvanceTime() (tests, bots) is unaffected.
+	static constexpr int32 NumGameSpeeds = 3;
+	/** Multiplier for a speed index: 0 = 1x, 1 = 2x, 2 = 4x. */
+	static float GameSpeedMultiplier(int32 SpeedIndex);
+	/** Sets the speed and resumes from a player pause. Broadcasts OnGameSpeedChanged. */
+	void SetGameSpeed(int32 SpeedIndex);
+	int32 GetGameSpeed() const;
+	float GetGameSpeedMultiplier() const;
+	/** Player pause: run time stops, the speed is kept for when it resumes. */
+	void SetSpeedPaused(bool bInPaused);
+	void ToggleSpeedPaused();
+	bool IsSpeedPaused() const;
+	/** Run seconds per real second right now: dev time scale x game speed, 0 while either pause holds. */
+	float GetEffectiveTimeScale() const;
+	FDCOnGameSpeedChanged OnGameSpeedChanged;
+
 	/** Dev/testing only (-DCTimeScale=N); 1 = real time. */
 	void SetTimeScale(float Scale);
 	float GetTimeScale() const;
@@ -224,6 +244,8 @@ private:
 	bool bActive = false;
 	bool bPaused = false;
 	float TimeScale = 1.f;
+	int32 GameSpeed = 0;                  // index into GameSpeedMultiplier
+	bool bSpeedPaused = false;            // player pause (Space / HUD), separate from the Esc-menu pause
 	EDCGamePhase Phase = EDCGamePhase::Title;
 	int32 Seed = 0;
 	FRandomStream Rng;

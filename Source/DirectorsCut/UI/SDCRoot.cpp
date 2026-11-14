@@ -57,7 +57,7 @@ TSharedRef<SWidget> SDCRoot::BuildRootContent()
 			SNew(SBox).Visibility_Lambda(HudVis)[SAssignNew(ChipBox, SVerticalBox)]
 		]
 
-		// ── HUD: clock + payday + stats bar (top-right) ──
+		// ── HUD: game speed + clock + payday + stats bar (top-right) ──
 		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(FMargin(0.f, 20.f, 20.f, 0.f))
 		[
 			SNew(SBox).Visibility_Lambda(HudVis)[BuildHudStats()]
@@ -436,7 +436,8 @@ bool SDCRoot::IsWorldBlocked() const
 
 bool SDCRoot::HandleHotkey(const FKey& Key)
 {
-	if (!IsPlaying() || (bModalShown && Current != EDCPanel::None) || Confirm.IsValid()) { return false; }
+	if (!IsPlaying() || (bModalShown && Current != EDCPanel::None) || Confirm.IsValid() || IsTextInputFocused()) { return false; }
+	if (HandleSpeedKey(Key)) { return true; }
 	EDCPanel P = EDCPanel::None;
 	if (Key == EKeys::C) { P = EDCPanel::Crew; }
 	else if (Key == EKeys::G) { P = EDCPanel::Workbench; }
@@ -747,9 +748,22 @@ TSharedRef<SWidget> SDCRoot::BuildHudClock()
 			[
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
-				[TxtA(TAttribute<FText>::CreateLambda([R]() { const UDCRunSubsystem* X = R(); return FText::FromString(X ? HourMin(X->GetHourOfDay()) : TEXT("--:--")); }), Mono(17.f), FSlateColor(Text))]
+				[TxtA(TAttribute<FText>::CreateLambda([R]() { const UDCRunSubsystem* X = R(); return FText::FromString(X ? HourMin(X->GetHourOfDay()) : TEXT("--:--")); }), Mono(17.f),
+					TAttribute<FSlateColor>::CreateLambda([this]() { return FSlateColor(IsSpeedPausedNow() ? TextDim : Text); }))]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(8.f, 0.f, 0.f, 2.f)
-				[TxtA(TAttribute<FText>::CreateLambda([R]() { const UDCRunSubsystem* X = R(); return FText::FromString(FString::Printf(TEXT("DAY %d"), X ? X->GetDay() : 1)); }), Caps(9.f), FSlateColor(TextDim))]
+				[
+					// Player pause: the day label reads PAUSED (gently pulsing) until time runs again.
+					SNew(SBorder).BorderImage(NoBrush()).Padding(0.f)
+					.ColorAndOpacity_Lambda([this]() { return FLinearColor(1, 1, 1, IsSpeedPausedNow() ? 0.6f + 0.4f * Pulse(0.8f) : 1.f); })
+					[
+						TxtA(TAttribute<FText>::CreateLambda([this, R]()
+						{
+							if (IsSpeedPausedNow()) { return FText::FromString(TEXT("PAUSED")); }
+							const UDCRunSubsystem* X = R();
+							return FText::FromString(FString::Printf(TEXT("DAY %d"), X ? X->GetDay() : 1));
+						}), Caps(9.f), TAttribute<FSlateColor>::CreateLambda([this]() { return FSlateColor(IsSpeedPausedNow() ? Accent : TextDim); }))
+					]
+				]
 			]
 		];
 
@@ -836,6 +850,8 @@ TSharedRef<SWidget> SDCRoot::BuildHudStats()
 		.Padding(FMargin(8.f, 6.f, 6.f, 6.f))
 		[
 			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[BuildHudSpeed()]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Sep()]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[BuildHudClock()]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Sep()]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Cash]
@@ -926,7 +942,7 @@ TSharedRef<SWidget> SDCRoot::BuildDock()
 		.Padding(FMargin(6.f))
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("map"), TEXT("Missions"), TEXT("SPACE"), EDCPanel::Missions, TAttribute<int32>::CreateLambda([this]() { return NewPostingCount(); }), true, [this]() { return SoonestLeadExpiry(); })]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("map"), TEXT("Missions"), TEXT("M"), EDCPanel::Missions, TAttribute<int32>::CreateLambda([this]() { return NewPostingCount(); }), true, [this]() { return SoonestLeadExpiry(); })]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("users"), TEXT("Crew"), TEXT("C"), EDCPanel::Crew, Zero)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("wrench"), TEXT("Gear"), TEXT("G"), EDCPanel::Workbench, Zero)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("user-plus"), TEXT("Recruits"), TEXT("R"), EDCPanel::Recruits, Zero, true, [this]() { return RecruitExpiry(); })]

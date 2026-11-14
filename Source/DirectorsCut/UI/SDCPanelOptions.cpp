@@ -174,6 +174,17 @@ namespace
 	{
 		return SNew(SBox).HAlign(HAlign_Right)[Switch(Get, Set)];
 	}
+	/** Read-only key caps, right-aligned (control listings). */
+	TSharedRef<SWidget> Keys(const TArray<FString>& KeyCaps)
+	{
+		TSharedRef<SHorizontalBox> H = SNew(SHorizontalBox);
+		for (int32 i = 0; i < KeyCaps.Num(); ++i)
+		{
+			H->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(i ? 4.f : 0.f, 0.f, 0.f, 0.f)
+			[Pill(Txt(KeyCaps[i], Mono(9.5f), Text), A(FLinearColor::White, 0.06f), FMargin(8.f, 2.f), Line)];
+		}
+		return SNew(SBox).HAlign(HAlign_Right)[H];
+	}
 	auto BoolKey(const TCHAR* Key, bool bDefault) { return [Key, bDefault]() { return DCSettings::GetBool(Key, bDefault); }; }
 }
 
@@ -638,7 +649,10 @@ TSharedRef<SWidget> SDCRoot::OptGameplay()
 		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("move"), TEXT("Edge scrolling"), TEXT("Pan when the mouse touches the edge of the screen"),
 			SwitchRight([]() { return DCSettings::EdgeScroll(); }, [](bool b) { DCSettings::SetBool(TEXT("EdgeScroll"), b); }))]
 		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("move-horizontal"), TEXT("Pan speed"), TEXT("Keyboard and edge panning"), Speed(TEXT("CameraPanSpeed")))]
-		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("zoom-in"), TEXT("Zoom speed"), TEXT("Mouse wheel"), Speed(TEXT("CameraZoomSpeed")))];
+		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("zoom-in"), TEXT("Zoom speed"), TEXT("Mouse wheel"), Speed(TEXT("CameraZoomSpeed")))]
+		+ SVerticalBox::Slot().AutoHeight()[Section(TEXT("Time"))]
+		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("pause"), TEXT("Pause / resume"), TEXT("Stops the clock; resumes at the speed you had"), Keys({ TEXT("SPACE") }))]
+		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("fast-forward"), TEXT("Game speed"), TEXT("1×, 2× or 4×. Also on the clock bar. Every run starts at 1×"), Keys({ TEXT("1"), TEXT("2"), TEXT("3") }))];
 }
 
 // ── Save slots ───────────────────────────────────────────────────────────────

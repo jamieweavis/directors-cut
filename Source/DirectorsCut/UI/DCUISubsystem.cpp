@@ -16,7 +16,7 @@
 #include "Misc/Parse.h"
 #include "DirectorsCut.h"
 
-/** Panel hotkeys (C, G, R, B, N, M). Observes only: never consumes, so the game still sees every key. */
+/** Panel hotkeys (C, G, R, B, N, M) and game speed (Space, 1, 2, 3). Observes only: never consumes, so the game still sees every key. */
 class FDCHotkeyProcessor : public IInputProcessor
 {
 public:

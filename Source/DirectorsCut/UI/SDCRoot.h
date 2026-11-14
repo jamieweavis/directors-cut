@@ -155,6 +155,15 @@ private:
 	int32 GearSel = INDEX_NONE;
 	int32 DismissArmed = INDEX_NONE;
 
+	// Game speed controls + hotkeys (SDCHudSpeed.cpp)
+	TSharedRef<SWidget> BuildHudSpeed();
+	bool HandleSpeedKey(const FKey& Key);
+	void SetSpeed(int32 SpeedIndex);
+	void ToggleSpeedPause();
+	bool IsSpeedPausedNow() const;
+	/** A text box has keyboard focus: hotkeys must not fire. */
+	static bool IsTextInputFocused();
+
 	// HUD crew list, bottom-left (SDCHudCrew.cpp)
 	TSharedPtr<SVerticalBox> HudCrewBox;
 	uint32 LastHudCrewSig = 0;
