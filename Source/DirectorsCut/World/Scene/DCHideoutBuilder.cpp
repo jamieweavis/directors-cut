@@ -1,4 +1,4 @@
-// Director's Cut — hideout diorama builder: kit, shell, windows, roof, lighting, post, runtime FX.
+// Director's Cut — hideout builder: materials, kit plumbing, room shells, shared walls, review camera, runtime FX.
 // Room dressing is in DCHideoutRooms.cpp, the shared prop kit in DCHideoutKit.cpp, the day/night rig in DCDayNight.cpp.
 #include "World/Scene/DCHideoutBuilder.h"
 #include "World/Scene/DCDayNight.h"
@@ -9,6 +9,7 @@
 #include "Core/DCAssetPaths.h"
 #include "Core/DCWorldTags.h"
 #include "Core/DCDevTools.h"
+#include "Core/DCSiteLayout.h"
 #include "DirectorsCut.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -37,11 +38,12 @@
 
 namespace DCScene
 {
-	constexpr float TallH = 380.f;   // exterior back walls / office-ops wall
-	constexpr float PartH = 55.f;    // interior partitions: knee height so no room hides its neighbour
-	constexpr float KneeH = 45.f;    // camera-facing exterior walls (cutaway)
-	constexpr float WallT = 20.f;
-	constexpr float WinBottom = 125.f, WinTop = 342.f;
+	constexpr float TallH = 380.f;   // room bounds height
+	constexpr float HouseH = 290.f;  // farmhouse eaves (tall back walls)
+	constexpr float WingH = 255.f;   // annex back walls
+	constexpr float WallT = 24.f;
+	constexpr float DoorW = 140.f;   // doorways in shared walls (nav traces them)
+	inline float SJ(int32 I, float Amp) { return (FMath::Frac(FMath::Sin(I * 12.9898f + 4.1f) * 43758.5453f) * 2.f - 1.f) * Amp; }
 }
 using namespace DCScene;
 
@@ -132,7 +134,45 @@ void ADCHideoutBuilder::InitAssets()
 	Proc("CarGrey",     7, C(0.10f, 0.105f, 0.11f), C(0.06f, 0.06f, 0.065f), 0.22f, 0.7f, 0.3f, 0.2f);
 	Proc("CarWhite",    7, C(0.30f, 0.31f, 0.31f), C(0.2f, 0.2f, 0.2f), 0.35f, 0.2f, 0.3f, 0.6f);
 	Proc("Tire",        0, C(0.015f, 0.015f, 0.015f), C(0.025f, 0.025f, 0.025f), 0.9f);
+	// --- rural ruin: masonry, plaster, timber, roofing, growth
+	Proc("Stone",       2, C(0.30f, 0.27f, 0.22f), C(0.40f, 0.38f, 0.34f), 0.92f, 0.f, 0.5f, 0.85f);
+	Proc("StoneDark",   2, C(0.17f, 0.16f, 0.14f), C(0.24f, 0.23f, 0.21f), 0.92f, 0.f, 0.7f, 0.9f);
+	Proc("BrickOld",    2, C(0.32f, 0.13f, 0.075f), C(0.36f, 0.33f, 0.29f), 0.9f, 0.f, 1.f, 0.85f);
+	Proc("Plaster",    11, C(0.55f, 0.48f, 0.37f), C(0.30f, 0.26f, 0.20f), 0.93f, 0.f, 1.f, 0.9f);
+	Proc("PlasterGreen",11, C(0.27f, 0.36f, 0.30f), C(0.16f, 0.18f, 0.14f), 0.9f, 0.f, 1.f, 0.9f);
+	Proc("PlasterRose",11, C(0.50f, 0.33f, 0.28f), C(0.26f, 0.18f, 0.15f), 0.9f, 0.f, 1.f, 0.9f);
+	Proc("PlasterWhite",11, C(0.60f, 0.60f, 0.56f), C(0.24f, 0.31f, 0.29f), 0.85f, 0.f, 1.f, 0.8f);
+	Proc("Timber",      1, C(0.24f, 0.18f, 0.12f), C(0.12f, 0.09f, 0.06f), 0.85f, 0.f, 1.f, 0.6f);
+	Proc("TimberDark",  1, C(0.11f, 0.075f, 0.045f), C(0.05f, 0.035f, 0.02f), 0.8f, 0.f, 1.f, 0.5f);
+	Proc("TimberGrey",  1, C(0.27f, 0.26f, 0.24f), C(0.14f, 0.13f, 0.12f), 0.9f, 0.f, 1.f, 0.7f);
+	Proc("Board",       1, C(0.22f, 0.17f, 0.12f), C(0.10f, 0.08f, 0.06f), 0.88f, 0.f, 1.f, 0.7f, 1.f);
+	Proc("FreshTimber", 1, C(0.58f, 0.44f, 0.27f), C(0.42f, 0.30f, 0.16f), 0.7f, 0.f, 1.f, 0.1f);
+	Proc("Floorboard",  1, C(0.21f, 0.14f, 0.085f), C(0.09f, 0.06f, 0.035f), 0.75f, 0.f, 1.f, 0.8f);
+	Proc("Lath",        1, C(0.36f, 0.29f, 0.19f), C(0.20f, 0.15f, 0.09f), 0.9f);
+	Proc("RoofTile",   10, C(0.40f, 0.15f, 0.08f), C(0.12f, 0.11f, 0.07f), 0.85f, 0.f, 1.3f, 0.6f, 0.f);
+	Proc("TinRust",    10, C(0.10f, 0.105f, 0.10f), C(0.20f, 0.075f, 0.025f), 0.7f, 0.4f, 1.f, 0.7f, 0.f);
+	Proc("TinRustV",   10, C(0.10f, 0.11f, 0.105f), C(0.20f, 0.075f, 0.025f), 0.7f, 0.4f, 1.f, 0.7f, 1.f);
+	Proc("Rust",        7, C(0.26f, 0.10f, 0.04f), C(0.12f, 0.05f, 0.02f), 0.8f, 0.3f);
+	Proc("Moss",        0, C(0.07f, 0.11f, 0.03f), C(0.03f, 0.05f, 0.015f), 0.95f, 0.f, 2.f, 0.5f);
+	Proc("Ivy",         5, C(0.03f, 0.075f, 0.022f), C(0.06f, 0.12f, 0.035f), 0.8f, 0.f, 3.f);
+	Proc("Weed",        5, C(0.09f, 0.16f, 0.04f), C(0.05f, 0.10f, 0.02f), 0.9f, 0.f, 2.f);
+	Proc("WeedDry",     5, C(0.30f, 0.26f, 0.11f), C(0.16f, 0.13f, 0.05f), 0.95f, 0.f, 2.f);
+	Proc("Dirt",        3, C(0.13f, 0.10f, 0.065f), C(0.07f, 0.055f, 0.04f), 0.95f, 0.f, 1.f, 0.5f);
+	Proc("Rubble",      3, C(0.30f, 0.28f, 0.24f), C(0.15f, 0.14f, 0.12f), 0.95f, 0.f, 2.f, 0.8f);
+	Proc("Cement",      3, C(0.38f, 0.37f, 0.35f), C(0.25f, 0.245f, 0.23f), 0.9f, 0.f, 1.f, 0.3f);
+	Proc("TileOld",     8, C(0.42f, 0.40f, 0.36f), C(0.12f, 0.20f, 0.18f), 0.5f, 0.f, 1.f, 0.6f);
+	Proc("Rope",        0, C(0.62f, 0.56f, 0.40f), C(0.5f, 0.45f, 0.3f), 0.9f);
+	Proc("Canvas",     12, C(0.22f, 0.20f, 0.13f), C(0.14f, 0.12f, 0.08f), 0.95f, 0.f, 1.f, 0.3f);
+	Proc("Sand",        3, C(0.46f, 0.39f, 0.26f), C(0.34f, 0.28f, 0.18f), 0.95f);
+	Proc("PaintGreen",  7, C(0.05f, 0.13f, 0.07f), C(0.03f, 0.05f, 0.03f), 0.5f, 0.f);
+	Proc("PaintYellow", 7, C(0.55f, 0.38f, 0.03f), C(0.25f, 0.15f, 0.02f), 0.5f, 0.f);
 	// --- emissive (M_DC_Neon, no flicker unless asked)
+	Emis("Tungsten",    FLinearColor(1.f, 0.55f, 0.22f), 45.f);
+	Emis("StringBulb",  FLinearColor(1.f, 0.52f, 0.14f), 28.f);
+	Neon("Candle",      FLinearColor(1.f, 0.45f, 0.1f), 30.f, 0.6f, 3.f);
+	Emis("LedMagenta",  FLinearColor(1.f, 0.08f, 0.75f), 22.f);
+	Emis("Teal",        FLinearColor(0.08f, 0.9f, 1.f), 14.f);
+	Emis("CrossGreen",  FLinearColor(0.1f, 1.f, 0.4f), 10.f);
 	Emis("LedCool",     FLinearColor(0.82f, 0.9f, 1.f), 30.f);
 	Emis("LedWarm",     FLinearColor(1.f, 0.78f, 0.55f), 22.f);
 	Emis("Accent",      FLinearColor(0.05f, 0.65f, 1.f), 14.f);
@@ -248,9 +288,19 @@ static FTransform ShapeXform(const FVector& Loc, const FVector& Size, const FRot
 	return FTransform(Rot, Loc, Size / 100.f);
 }
 
-void ADCHideoutBuilder::Deco(EDCShape Shape, const FVector& Loc, const FVector& Size, FName MatKey, const FRotator& Rot, bool bShadow)
+FVector ADCHideoutBuilder::MapP(const FVector& P) const
+{
+	if (!bFit) { return P; }
+	auto Plain = [this](const FVector& V) { return FVector(V.X * FitXY, V.Y * FitXY, V.Z * FitZ); };
+	if (bKitOnStation && CurStation) { return Plain(StationAnchor) + (P - StationAnchor) * FitS; }
+	if (bAnchored) { return Plain(FitAnchor) + (P - FitAnchor) * FitS; }
+	return Plain(P);
+}
+
+void ADCHideoutBuilder::Deco(EDCShape Shape, const FVector& InLoc, const FVector& InSize, FName MatKey, const FRotator& Rot, bool bShadow)
 {
 	check(CurRoom);
+	const FVector Loc = MapP(InLoc), Size = MapSize(InSize);
 	UStaticMesh* Mesh = Meshes[(int32)Shape];
 	UMaterialInterface* Mat = M(MatKey);
 	const FString Key = FString::Printf(TEXT("%p|%s|%p|%p|%d"), CurRoom, *CurGroup.ToString(), Mesh, Mat, bShadow ? 1 : 0);
@@ -263,8 +313,11 @@ void ADCHideoutBuilder::Deco(EDCShape Shape, const FVector& Loc, const FVector& 
 	Batches[*Idx].Xforms.Add(ShapeXform(Loc, Size, Rot));
 }
 
-void ADCHideoutBuilder::Tube(const FVector& A, const FVector& B, float Dia, FName Mat, bool bShadow)
+void ADCHideoutBuilder::Tube(const FVector& InA, const FVector& InB, float InDia, FName Mat, bool bShadow)
 {
+	const FVector A = MapP(InA), B = MapP(InB);
+	const float Dia = MapLen(InDia);
+	FNoFit NF(this);
 	const FVector D = B - A;
 	const float Len = D.Size();
 	if (Len < KINDA_SMALL_NUMBER) { return; }
@@ -272,8 +325,11 @@ void ADCHideoutBuilder::Tube(const FVector& A, const FVector& B, float Dia, FNam
 	Deco(EDCShape::Cylinder, (A + B) * 0.5f, FVector(Dia, Dia, Len), Mat, Rot, bShadow);
 }
 
-void ADCHideoutBuilder::Bar(const FVector& A, const FVector& B, float W, float H, FName Mat, bool bShadow)
+void ADCHideoutBuilder::Bar(const FVector& InA, const FVector& InB, float InW, float InH, FName Mat, bool bShadow)
 {
+	const FVector A = MapP(InA), B = MapP(InB);
+	const float W = MapLen(InW), H = MapLen(InH);
+	FNoFit NF(this);
 	const FVector D = B - A;
 	const float Len = D.Size();
 	if (Len < KINDA_SMALL_NUMBER) { return; }
@@ -298,7 +354,8 @@ void ADCHideoutBuilder::FlushBatches()
 		C->RegisterComponent();
 		C->AddInstances(B.Xforms, false, false, false);
 		B.Room->AddInstanceComponent(C);
-		B.Room->AddToGroup(C, B.Group);
+		if (TrackedGroups.Contains(B.Group)) { TrackComponent(C, B.Group); }
+		else { B.Room->AddToGroup(C, B.Group); }
 	}
 	Batches.Reset();
 	BatchIndex.Reset();
@@ -336,34 +393,18 @@ UStaticMeshComponent* ADCHideoutBuilder::Solid(const FVector& Loc, const FVector
 	}
 	C->RegisterComponent();
 	CurRoom->AddInstanceComponent(C);
-	CurRoom->AddToGroup(C, DCGroups::Shell);
+	if (TrackedGroups.Contains(CurGroup)) { TrackComponent(C, CurGroup); }
+	else { CurRoom->AddToGroup(C, CurGroup); }
 	return C;
 }
 
-void ADCHideoutBuilder::ShadowCaster(const FVector& WorldLoc, const FVector& Size)
+void ADCHideoutBuilder::TrackComponent(UPrimitiveComponent* C, FName Group)
 {
-	static const FName CasterName("ShadowCasters");
-	UInstancedStaticMeshComponent* ISM = nullptr;
-	TArray<UInstancedStaticMeshComponent*> Existing; GetComponents<UInstancedStaticMeshComponent>(Existing);
-	for (UInstancedStaticMeshComponent* E : Existing) { if (E->ComponentHasTag(CasterName)) { ISM = E; break; } }
-	if (!ISM)
-	{
-		ISM = NewObject<UInstancedStaticMeshComponent>(this);
-		ISM->ComponentTags.Add(CasterName);
-		ISM->SetStaticMesh(Meshes[(int32)EDCShape::Cube]);
-		ISM->SetMaterial(0, M("Plinth"));
-		ISM->SetMobility(EComponentMobility::Movable);
-		ISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		ISM->bDisableCollision = true;
-		ISM->SetCastShadow(true);
-		ISM->bCastHiddenShadow = true;
-		ISM->SetHiddenInGame(true);
-		ISM->bAffectDistanceFieldLighting = false;
-		ISM->SetupAttachment(GetRootComponent());
-		ISM->RegisterComponent();
-		AddInstanceComponent(ISM);
-	}
-	ISM->AddInstance(FTransform(FRotator::ZeroRotator, WorldLoc, Size / 100.f), true);
+	const FIntPoint* W = TrackedGroups.Find(Group);
+	if (!C || !W || !SharedWalls.IsValidIndex(W->X)) { return; }
+	FSharedWall& SW = SharedWalls[W->X];
+	SW.Comps[W->Y].Add(C);
+	SW.Coll[W->Y].Add(C->GetCollisionEnabled());
 }
 
 void ADCHideoutBuilder::WallRun(bool bAlongX, float Fixed, float A, float B, float Z0, float Z1, float Thick, const TArray<FOpening>& InOps, FName Mat, bool bSolid)
@@ -392,36 +433,6 @@ void ADCHideoutBuilder::WallRun(bool bAlongX, float Fixed, float A, float B, flo
 	Piece(Cursor, B, Z0, Z1);
 }
 
-void ADCHideoutBuilder::FactoryWindow(bool bAlongX, float Fixed, float Inward, const FOpening& O)
-{
-	auto P = [&](float Along, float Across, float Z) { return bAlongX ? FVector(Along, Fixed + Across, Z) : FVector(Fixed + Across, Along, Z); };
-	auto S = [&](float Along, float Across, float H) { return bAlongX ? FVector(Along, Across, H) : FVector(Across, Along, H); };
-	const float W = O.Width, H = O.Top - O.Bottom, A0 = O.Center - W * 0.5f, Z0 = O.Bottom;
-	const int32 NX = FMath::Max(2, FMath::RoundToInt(W / 48.f)), NZ = FMath::Max(2, FMath::RoundToInt(H / 40.f));
-	const float CW = W / NX, CH = H / NZ;
-	// glass: one pane per cell, in the wall plane, never casts shadows (sun passes, mullions don't)
-	for (int32 ix = 0; ix < NX; ++ix)
-	{
-		for (int32 iz = 0; iz < NZ; ++iz)
-		{
-			Deco(EDCShape::Cube, P(A0 + (ix + 0.5f) * CW, Inward * 2.f, Z0 + (iz + 0.5f) * CH), S(CW, 1.f, CH), "Window", FRotator::ZeroRotator, false);
-		}
-	}
-	// mullion grid (casts the pane pattern), heavier outer frame
-	for (int32 ix = 0; ix <= NX; ++ix)
-	{
-		const bool bEdge = ix == 0 || ix == NX;
-		Deco(EDCShape::Cube, P(A0 + ix * CW, Inward * 4.f, Z0 + H * 0.5f), S(bEdge ? 7.f : 3.f, bEdge ? 14.f : 7.f, H), "SteelBlack");
-	}
-	for (int32 iz = 0; iz <= NZ; ++iz)
-	{
-		const bool bEdge = iz == 0 || iz == NZ;
-		Deco(EDCShape::Cube, P(O.Center, Inward * 4.f, Z0 + iz * CH), S(W, bEdge ? 14.f : 7.f, bEdge ? 7.f : 3.f), "SteelBlack");
-	}
-	// a transom bar + concrete sill on the room side
-	Deco(EDCShape::Cube, P(O.Center, Inward * (WallT * 0.5f + 8.f), Z0 - 4.f), S(W + 16.f, 18.f, 8.f), "Concrete");
-}
-
 void ADCHideoutBuilder::FinishLight(ULightComponent* L, bool bRoomLight)
 {
 	L->SetMobility(EComponentMobility::Movable);
@@ -435,7 +446,8 @@ void ADCHideoutBuilder::FinishLight(ULightComponent* L, bool bRoomLight)
 UPointLightComponent* ADCHideoutBuilder::Point(const FVector& Loc, const FLinearColor& Col, float Cd, float Radius, bool bShadows, bool bRoomLight, float SourceRadius)
 {
 	UPointLightComponent* L = NewObject<UPointLightComponent>(CurRoom);
-	L->SetRelativeLocation(Loc);
+	L->SetRelativeLocation(MapP(Loc));
+	Radius = MapLen(Radius);
 	L->IntensityUnits = ELightUnits::Candelas;
 	L->Intensity = Cd * LightScale;
 	L->SetLightColor(Col);
@@ -451,8 +463,9 @@ UPointLightComponent* ADCHideoutBuilder::Point(const FVector& Loc, const FLinear
 USpotLightComponent* ADCHideoutBuilder::Spot(const FVector& Loc, const FVector& Target, const FLinearColor& Col, float Cd, float Radius, float Inner, float Outer, bool bShadows, bool bRoomLight)
 {
 	USpotLightComponent* L = NewObject<USpotLightComponent>(CurRoom);
-	L->SetRelativeLocation(Loc);
-	L->SetRelativeRotation((Target - Loc).Rotation());
+	L->SetRelativeLocation(MapP(Loc));
+	L->SetRelativeRotation((MapP(Target) - MapP(Loc)).Rotation());
+	Radius = MapLen(Radius);
 	L->IntensityUnits = ELightUnits::Candelas;
 	L->Intensity = Cd * LightScale;
 	L->SetLightColor(Col);
@@ -469,8 +482,9 @@ USpotLightComponent* ADCHideoutBuilder::Spot(const FVector& Loc, const FVector& 
 URectLightComponent* ADCHideoutBuilder::Rect(const FVector& Loc, const FVector& Target, const FLinearColor& Col, float Cd, float W, float H, float Radius, bool bShadows, bool bRoomLight)
 {
 	URectLightComponent* L = NewObject<URectLightComponent>(CurRoom);
-	L->SetRelativeLocation(Loc);
-	L->SetRelativeRotation((Target - Loc).Rotation());
+	L->SetRelativeLocation(MapP(Loc));
+	L->SetRelativeRotation((MapP(Target) - MapP(Loc)).Rotation());
+	Radius = MapLen(Radius); W = MapLen(W); H = MapLen(H);
 	L->IntensityUnits = ELightUnits::Candelas;
 	L->Intensity = Cd * LightScale;
 	L->SetLightColor(Col);
@@ -488,21 +502,23 @@ URectLightComponent* ADCHideoutBuilder::Rect(const FVector& Loc, const FVector& 
 ADCStation* ADCHideoutBuilder::BeginStation(EDCStationType Type, const FString& Name, const FVector& LocalFloorPos, const FVector& HalfExtent, float Yaw)
 {
 	const FTransform RoomX = CurRoom->GetActorTransform();
-	const FVector World = RoomX.TransformPosition(LocalFloorPos + FVector(0, 0, HalfExtent.Z));
+	StationAnchor = LocalFloorPos;
+	const FVector World = RoomX.TransformPosition(MapP(LocalFloorPos) + FVector(0, 0, MapLen(HalfExtent.Z)));
 	ADCStation* S = GetWorld()->SpawnActor<ADCStation>(ADCStation::StaticClass(), FTransform(FRotator(0, Yaw, 0), World));
 	S->StationType = Type;
 	S->DisplayName = Name;
 	S->OwningRoom = CurRoom->RoomType;
-	S->SetClickExtent(HalfExtent);
+	S->SetClickExtent(MapSize(HalfExtent));
 	S->AttachToActor(CurRoom, FAttachmentTransformRules::KeepWorldTransform);
 	CurRoom->RegisterStation(S);
 	CurStation = S;
-	CurStationHalfZ = HalfExtent.Z;
+	CurStationHalfZ = MapLen(HalfExtent.Z);
 	return S;
 }
 
-UStaticMeshComponent* ADCHideoutBuilder::SP(EDCShape Shape, const FVector& Loc, const FVector& Size, FName MatKey, const FRotator& Rot, bool bShadow)
+UStaticMeshComponent* ADCHideoutBuilder::SP(EDCShape Shape, const FVector& InLoc, const FVector& InSize, FName MatKey, const FRotator& Rot, bool bShadow)
 {
+	const FVector Loc = bFit ? InLoc * FitS : InLoc, Size = MapSize(InSize);
 	check(CurStation);
 	UStaticMeshComponent* C = CurStation->AddPropMesh(Meshes[(int32)Shape], M(MatKey), ShapeXform(Loc - FVector(0, 0, CurStationHalfZ), Size, Rot));
 	// Props can be hovered (QueryOnly) but never block pawns or the camera.
@@ -572,65 +588,6 @@ void ADCHideoutBuilder::Scaffold(const FVector& From, const FVector& To, float H
 	}
 }
 
-void ADCHideoutBuilder::LockedDressing(const FBox2D& R, const TArray<FDCQuad>& Sheets)
-{
-	CurGroup = DCGroups::Locked;
-	for (const FDCQuad& S : Sheets) { Sheet(FVector(S.X, S.Y, 0), FVector(S.Z, S.Z * 0.8f, S.W), S.X * 0.1f); }
-	// plastic curtain walls hung from a cable along the two camera-facing sides
-	const float Fx = R.Min.X + 40.f, Fy = R.Min.Y + 40.f;
-	Deco(EDCShape::Cube, FVector(Fx, R.GetCenter().Y, 150), FVector(1.5f, R.GetSize().Y - 60.f, 300), "Plastic", FRotator::ZeroRotator, false);
-	Deco(EDCShape::Cube, FVector(R.GetCenter().X, Fy, 150), FVector(R.GetSize().X - 60.f, 1.5f, 300), "Plastic", FRotator::ZeroRotator, false);
-	Tube(FVector(Fx, R.Min.Y + 30, 302), FVector(Fx, R.Max.Y - 30, 302), 1.2f, "SteelBlack");
-	Tube(FVector(R.Min.X + 30, Fy, 302), FVector(R.Max.X - 30, Fy, 302), 1.2f, "SteelBlack");
-	// barriers + caution tape at knee height
-	for (float T : { 0.25f, 0.75f })
-	{
-		const FVector B1(Fx - 18.f, FMath::Lerp(R.Min.Y, R.Max.Y, T), 0);
-		Deco(EDCShape::Cube, B1 + FVector(0, 0, 45), FVector(8, 110, 18), "Hazard");
-		Tube(B1 + FVector(-15, -45, 0), B1 + FVector(0, -45, 50), 4, "PaintOrange");
-		Tube(B1 + FVector(15, -45, 0), B1 + FVector(0, -45, 50), 4, "PaintOrange");
-		Tube(B1 + FVector(-15, 45, 0), B1 + FVector(0, 45, 50), 4, "PaintOrange");
-		Tube(B1 + FVector(15, 45, 0), B1 + FVector(0, 45, 50), 4, "PaintOrange");
-	}
-	Tape(FVector(Fx - 20, R.Min.Y + 60, 95), FVector(Fx - 20, R.Max.Y - 60, 85));
-	Tape(FVector(R.Min.X + 60, Fy - 20, 80), FVector(R.Max.X - 60, Fy - 20, 92));
-	Tape(FVector(R.Min.X + 80, Fy - 18, 60), FVector(Fx - 18, R.Min.Y + 80, 70));
-	// cold rim light from the back corner so the sheets read as silhouettes
-	const FVector2D C = R.GetCenter();
-	Spot(FVector(R.Max.X - 40, R.Max.Y - 40, TallH + 60), FVector(C.X - 60, C.Y - 60, 0), FLinearColor(0.45f, 0.6f, 1.f), 120.f, 2400.f, 25.f, 60.f, false, false);
-}
-
-void ADCHideoutBuilder::BuildingDressing(const FBox2D& R)
-{
-	CurGroup = DCGroups::Building;
-	Scaffold(FVector(R.Max.X - 50, R.Min.Y + 60, 0), FVector(R.Max.X - 50, R.Max.Y - 60, 0), 300.f);
-	Scaffold(FVector(R.Min.X + 60, R.Max.Y - 50, 0), FVector(R.Max.X - 120, R.Max.Y - 50, 0), 300.f);
-	// LED work lights on tripods
-	const FVector2D C = R.GetCenter();
-	for (const FVector2D& P : { FVector2D(R.Min.X + 90, R.Min.Y + 90), FVector2D(C.X + 60, C.Y - 30) })
-	{
-		const FVector B(P.X, P.Y, 0);
-		Tube(B + FVector(-25, -25, 0), B + FVector(0, 0, 170), 3, "SteelBlack");
-		Tube(B + FVector(25, -25, 0), B + FVector(0, 0, 170), 3, "SteelBlack");
-		Tube(B + FVector(0, 30, 0), B + FVector(0, 0, 170), 3, "SteelBlack");
-		Deco(EDCShape::Cube, B + FVector(0, 0, 182), FVector(30, 10, 24), "PaintOrange", FRotator(0, 45, 0));
-		Deco(EDCShape::Cube, B + FVector(4, 4, 182), FVector(24, 2, 18), "WorkLed", FRotator(0, 45, 0), false);
-		Point(B + FVector(25, 25, 185), FLinearColor(0.9f, 0.95f, 1.f), 160.f, 900.f, false, false, 8.f);
-	}
-	// paint buckets, plywood stack, cement bags
-	Deco(EDCShape::Cylinder, FVector(C.X - 120, C.Y + 120, 18), FVector(30, 30, 36), "PlasticWhite");
-	Deco(EDCShape::Cylinder, FVector(C.X - 88, C.Y + 150, 18), FVector(30, 30, 36), "PaintOrange");
-	for (int32 i = 0; i < 6; ++i) { Deco(EDCShape::Cube, FVector(C.X + 120, C.Y + 140, 2 + i * 3.5f), FVector(244, 122, 3), "Plywood", FRotator(0, 10.f + i * 1.5f, 0)); }
-	for (int32 i = 0; i < 4; ++i) { Deco(EDCShape::Cube, FVector(C.X - 140 + (i % 2) * 50.f, C.Y - 120, 8 + (i / 2) * 14.f), FVector(45, 30, 13), "Paper", FRotator(0, i * 7.f, 0)); }
-	// step ladder
-	const FVector L0(R.Max.X - 140, R.Min.Y + 140, 0);
-	Tube(L0, L0 + FVector(30, 0, 200), 5, "Alu");
-	Tube(L0 + FVector(0, 45, 0), L0 + FVector(30, 45, 200), 5, "Alu");
-	Tube(L0 + FVector(70, 0, 0), L0 + FVector(32, 0, 200), 5, "Alu");
-	Tube(L0 + FVector(70, 45, 0), L0 + FVector(32, 45, 200), 5, "Alu");
-	for (int32 i = 1; i < 6; ++i) { Deco(EDCShape::Cube, L0 + FVector(30.f * i / 6.f, 22, 200.f * i / 6.f), FVector(10, 45, 2), "Alu"); }
-}
-
 void ADCHideoutBuilder::SunDust(const FVector& A, const FVector& B, int32 Count, float Spread)
 {
 	for (int32 i = 0; i < Count; ++i)
@@ -686,35 +643,33 @@ ADCRoomModule* ADCHideoutBuilder::SpawnRoom(const FRoomDef& Def)
 void ADCHideoutBuilder::BuildShell(const FRoomDef& Def)
 {
 	CurRoom = GetRoom(Def.Type);
-	CurGroup = DCGroups::Shell;
+	const bool bOffice = Def.Type == EDCRoomType::Office;
+	const FName Main = bOffice ? DCGroups::Shell : DCGroups::Level1;
+	CurGroup = Main;
 	const FVector2D C = Def.Rect.GetCenter();
 	const FVector2D Half = Def.Rect.GetSize() * 0.5f;
-	const float X0 = -Half.X, X1 = Half.X, Y0 = -Half.Y, Y1 = Half.Y;
+	const int32 RSeed = (int32)Def.Type * 101 + 7;
 
-	// floor slab (walkable), dark foundation, a lighter concrete lip so the silhouette reads in the void
-	Solid(FVector(0, 0, -15), FVector(Half.X * 2, Half.Y * 2, 30), Def.FloorMat, true);
-	Deco(EDCShape::Cube, FVector(0, 0, -80), FVector(Half.X * 2 - 30, Half.Y * 2 - 30, 100), "Plinth");
-	Deco(EDCShape::Cube, FVector(X0 - 2, 0, -14), FVector(5, Half.Y * 2 + 6, 28), "Concrete");
-	Deco(EDCShape::Cube, FVector(0, Y0 - 2, -14), FVector(Half.X * 2 + 6, 5, 28), "Concrete");
-	Deco(EDCShape::Cube, FVector(X0 - 4, 0, -1), FVector(3, Half.Y * 2 + 8, 3), "SteelBlack");
-	Deco(EDCShape::Cube, FVector(0, Y0 - 4, -1), FVector(Half.X * 2 + 8, 3, 3), "SteelBlack");
+	// floor (walkable, top at z=0) + a stone foundation course along the open fronts
+	Solid(FVector(0, 0, -10), FVector(Half.X * 2, Half.Y * 2, 20), Def.FloorMat, true);
+	Deco(EDCShape::Cube, FVector(-Half.X + 8, 0, -4.2f), FVector(18, Half.Y * 2, 9), "StoneDark");
+	Deco(EDCShape::Cube, FVector(0, -Half.Y + 8, -4.2f), FVector(Half.X * 2, 18, 9), "StoneDark");
 
 	const TArray<TPair<int32, FOpening>>* Extra = RoomOpenings.Find((uint8)Def.Type);
 	auto OpsFor = [&](int32 Side) { TArray<FOpening> O; if (Extra) { for (const auto& P : *Extra) { if (P.Key == Side) { O.Add(P.Value); } } } return O; };
+	const TArray<TPair<int32, FVector2D>>* Keep = KeepSolid.Find((uint8)Def.Type);
 
-	// sides: 0 +X, 1 +Y, 2 -X, 3 -Y
 	for (int32 Side = 0; Side < 4; ++Side)
 	{
-		const bool bAlongX = (Side == 1 || Side == 3);          // wall runs along X for the Y sides
+		const bool bAlongX = (Side == 1 || Side == 3);
 		const bool bBack = Side < 2;
 		const float LineW = (Side == 0) ? Def.Rect.Max.X : (Side == 1) ? Def.Rect.Max.Y : (Side == 2) ? Def.Rect.Min.X : Def.Rect.Min.Y;
 		const float RA = bAlongX ? Def.Rect.Min.X : Def.Rect.Min.Y, RB = bAlongX ? Def.Rect.Max.X : Def.Rect.Max.Y;
-		const float Base = bAlongX ? C.X : C.Y; // world -> local along the run
-		const float Inward = bBack ? -1.f : 1.f;
+		const float Base = bAlongX ? C.X : C.Y;
 		const float LocalLine = LineW - (bAlongX ? C.Y : C.X);
 
-		// interior intervals (shared with a neighbour)
-		TArray<TPair<float, float>> Shared; TArray<EDCRoomType> SharedWith;
+		struct FShared { float A, B; const FRoomDef* N; };
+		TArray<FShared> Shared;
 		for (const FRoomDef& N : Defs)
 		{
 			if (N.Type == Def.Type) { continue; }
@@ -722,122 +677,124 @@ void ADCHideoutBuilder::BuildShell(const FRoomDef& Def)
 			if (!FMath::IsNearlyEqual(NL, LineW, 1.f)) { continue; }
 			const float NA = bAlongX ? N.Rect.Min.X : N.Rect.Min.Y, NB = bAlongX ? N.Rect.Max.X : N.Rect.Max.Y;
 			const float A = FMath::Max(RA, NA), B = FMath::Min(RB, NB);
-			if (B - A > 1.f) { Shared.Add({ A, B }); SharedWith.Add(N.Type); }
+			if (B - A > 1.f) { Shared.Add({ A, B, &N }); }
 		}
-		Shared.Sort([](const TPair<float, float>& L, const TPair<float, float>& R) { return L.Key < R.Key; });
+		Shared.Sort([](const FShared& L, const FShared& R) { return L.A < R.A; });
 		TArray<TPair<float, float>> Ext;
 		float Cur = RA;
-		for (const auto& S : Shared) { if (S.Key > Cur + 1.f) { Ext.Add({ Cur, S.Key }); } Cur = FMath::Max(Cur, S.Value); }
+		for (const FShared& S : Shared) { if (S.A > Cur + 1.f) { Ext.Add({ Cur, S.A }); } Cur = FMath::Max(Cur, S.B); }
 		if (RB > Cur + 1.f) { Ext.Add({ Cur, RB }); }
 
 		const TArray<FOpening> SideOps = OpsFor(Side);
-		auto LocalOps = [&](float A, float B) { TArray<FOpening> O; for (const FOpening& Op : SideOps) { if (Op.Center >= A - Base && Op.Center <= B - Base) { O.Add(Op); } } return O; };
-
-		// exterior runs
-		for (const auto& E : Ext)
+		auto LocalOps = [&](float A, float B) { TArray<FOpening> O; for (const FOpening& Op : SideOps) { if (Op.Center >= A && Op.Center <= B) { O.Add(Op); } } return O; };
+		auto WindowsFor = [&](float A, float B, const TArray<FOpening>& Doors, float Bottom, float Top)
 		{
-			const float A = E.Key - Base, B = E.Value - Base;
-			const float Fix = LocalLine + Inward * WallT * 0.5f;
-			TArray<FOpening> Ops = LocalOps(E.Key, E.Value);
+			TArray<TPair<float, float>> Blocked;
+			for (const FOpening& O : Doors) { Blocked.Add({ O.Center - O.Width * 0.5f - 45.f, O.Center + O.Width * 0.5f + 45.f }); }
+			if (Keep) { for (const auto& K : *Keep) { if (K.Key == Side) { Blocked.Add({ K.Value.X, K.Value.Y }); } } }
+			Blocked.Sort([](const TPair<float, float>& L, const TPair<float, float>& R) { return L.Key < R.Key; });
+			TArray<FOpening> W;
+			auto Fill = [&](float F0, float F1)
+			{
+				const float L = F1 - F0;
+				if (L < 190.f) { return; }
+				const int32 N = FMath::Max(1, FMath::FloorToInt(L / 380.f));
+				const float Wd = FMath::Min(130.f, L / N - 70.f);
+				for (int32 i = 0; i < N; ++i) { W.Add({ F0 + L * (i + 0.5f) / N, Wd, Bottom, Top }); }
+			};
+			float FreeA = A + 60.f;
+			for (const auto& Bk : Blocked) { if (Bk.Value < FreeA) { continue; } Fill(FreeA, FMath::Min(Bk.Key, B - 60.f)); FreeA = FMath::Max(FreeA, Bk.Value); }
+			Fill(FreeA, B - 60.f);
+			return W;
+		};
+
+		// ---- exterior runs
+		for (int32 e = 0; e < Ext.Num(); ++e)
+		{
+			const float A = Ext[e].Key - Base, B = Ext[e].Value - Base;
+			const int32 Seed = RSeed + Side * 13 + e;
+			const TArray<FOpening> Ops = LocalOps(A, B);
 			if (bBack)
 			{
-				// big factory windows in the free stretches between doors
-				TArray<FOpening> Windows;
-				{
-					TArray<FOpening> Sorted = Ops;
-					Sorted.Sort([](const FOpening& L, const FOpening& R) { return L.Center < R.Center; });
-					float FreeA = A + 50.f;
-					auto Fill = [&](float F0, float F1)
-					{
-						const float L = F1 - F0;
-						if (L < 200.f) { return; }
-						const int32 N = FMath::Max(1, FMath::FloorToInt(L / 360.f));
-						const float Wd = FMath::Min(270.f, L / N - 90.f);
-						for (int32 i = 0; i < N; ++i) { Windows.Add({ F0 + L * (i + 0.5f) / N, Wd, WinBottom, WinTop }); }
-					};
-					for (const FOpening& O : Sorted) { Fill(FreeA, O.Center - O.Width * 0.5f - 40.f); FreeA = O.Center + O.Width * 0.5f + 40.f; }
-					Fill(FreeA, B - 50.f);
-				}
-				TArray<FOpening> All = Ops; All.Append(Windows);
-				WallRun(bAlongX, Fix, A, B, 0.f, TallH, WallT, All, "Brick", true);
-				// interior skin + exposed steel ledger at the top + concrete coping
-				const float Skin = Fix + Inward * (WallT * 0.5f + 1.f);
-				WallRun(bAlongX, Skin, A, B, 0.f, TallH - 26.f, 2.f, All, Def.WallMat, false);
-				const float Ledge = Fix + Inward * (WallT * 0.5f + 8.f);
-				auto LP = [&](float Along, float Across, float Z) { return bAlongX ? FVector(Along, Across, Z) : FVector(Across, Along, Z); };
-				auto LS = [&](float Along, float Across, float H) { return bAlongX ? FVector(Along, Across, H) : FVector(Across, Along, H); };
-				Deco(EDCShape::Cube, LP((A + B) * 0.5f, Ledge, TallH - 13.f), LS(B - A, 14.f, 26.f), "SteelBlack");
-				WallRun(bAlongX, Fix, A - 4, B + 4, TallH, TallH + 6.f, WallT + 8.f, {}, "Concrete", false);
-				// steel columns along the wall (every ~4 m), each with a safety-yellow base
-				const int32 NCol = FMath::Max(1, FMath::RoundToInt((B - A) / 400.f));
-				for (int32 i = 0; i <= NCol; ++i)
-				{
-					const float At = FMath::Lerp(A + 14.f, B - 14.f, (float)i / NCol);
-					bool bBlocked = false;
-					for (const FOpening& O : All) { if (FMath::Abs(At - O.Center) < O.Width * 0.5f + 16.f) { bBlocked = true; } }
-					if (bBlocked) { continue; }
-					Deco(EDCShape::Cube, LP(At, Fix + Inward * (WallT * 0.5f + 12.f), (TallH - 26.f) * 0.5f), LS(22.f, 22.f, TallH - 26.f), "SteelBlack");
-					Deco(EDCShape::Cube, LP(At, Fix + Inward * (WallT * 0.5f + 12.f), 30.f), LS(26.f, 26.f, 60.f), "Hazard");
-				}
-				for (const FOpening& W : Windows)
-				{
-					FactoryWindow(bAlongX, Fix, Inward, W);
-					const FVector LocalC = bAlongX ? FVector(W.Center, Fix, (W.Bottom + W.Top) * 0.5f) : FVector(Fix, W.Center, (W.Bottom + W.Top) * 0.5f);
-					ShaftSpecs.Add({ CurRoom->GetActorTransform().TransformPosition(LocalC), bAlongX ? FVector(1, 0, 0) : FVector(0, 1, 0), W.Width, W.Top - W.Bottom });
-				}
+				const float H = bOffice ? HouseH : WingH;
+				const TArray<FOpening> Win = WindowsFor(A, B, Ops, bOffice ? 100.f : 92.f, bOffice ? 225.f : 200.f);
+				TallWall(bAlongX, LocalLine - WallT * 0.5f, -1.f, A, B, H, Ops, Win, Def.OuterMat, Def.SkinMat, Seed);
 			}
 			else
 			{
-				WallRun(bAlongX, Fix, A, B, 0.f, KneeH, WallT, Ops, "Block", true);
-				WallRun(bAlongX, Fix, A - 3, B + 3, KneeH, KneeH + 5.f, WallT + 6.f, {}, "Concrete", false);
+				const float Fix = LocalLine + WallT * 0.5f;
+				RuinStub(bAlongX, Fix, A, B, Seed, Def.FrontMat, 70.f + FMath::Abs(SJ(Seed, 70.f)), 70.f + FMath::Abs(SJ(Seed + 1, 70.f)), Ops, false);
+				RubbleRun(bAlongX, Fix, A, B, -1.f, Seed, Def.FrontMat);
 			}
 		}
-		// interior partitions are built by the room on whose +X/+Y side they lie
-		if (bBack)
+
+		// ---- shared runs: built by the room on whose back (+X/+Y) side they lie
+		if (!bBack) { continue; }
+		for (int32 i = 0; i < Shared.Num(); ++i)
 		{
-			for (int32 i = 0; i < Shared.Num(); ++i)
+			const float A = Shared[i].A - Base, B = Shared[i].B - Base;
+			const FRoomDef& N = *Shared[i].N;
+			const int32 Seed = RSeed + Side * 29 + i * 5 + 300;
+			TArray<FOpening> Ops = LocalOps(A, B);
+			if (bOffice)
 			{
-				const float A = Shared[i].Key - Base, B = Shared[i].Value - Base;
-				const bool bTall = Def.Type == EDCRoomType::Office && (SharedWith[i] == EDCRoomType::OpsRoom || SharedWith[i] == EDCRoomType::Garage);
-				const float H = bTall ? TallH : PartH;
-				TArray<FOpening> Ops = LocalOps(Shared[i].Key, Shared[i].Value);
-				if (Ops.Num() == 0 && (B - A) > 300.f) { Ops.Add({ (A + B) * 0.5f, 130.f, 0.f, 230.f }); }
-				WallRun(bAlongX, LocalLine, A, B, 0.f, H, WallT, Ops, bTall ? FName("Brick") : FName("Block"), true);
-				WallRun(bAlongX, LocalLine, A, B, H, H + 4.f, WallT + 6.f, Ops, bTall ? FName("Concrete") : FName("SteelBlack"), false);
-				if (bTall)
+				// the farmhouse's own tall back walls (the wings behind them butt against the old house)
+				CurGroup = DCGroups::Shell;
+				const TArray<FOpening> Win = WindowsFor(A, B, Ops, 100.f, 225.f);
+				TallWall(bAlongX, LocalLine - WallT * 0.5f, -1.f, A, B, HouseH, Ops, Win, Def.OuterMat, Def.SkinMat, Seed);
+				continue;
+			}
+			if (Ops.Num() == 0) { Ops.Add({ (A + B) * 0.5f, DoorW, 0.f, 210.f }); }
+			const int32 Idx = SharedWalls.AddDefaulted();
+			SharedWalls[Idx].A = CurRoom;
+			SharedWalls[Idx].B = GetRoom(N.Type);
+			FName G[3];
+			for (int32 v = 0; v < 3; ++v)
+			{
+				G[v] = FName(*FString::Printf(TEXT("SW.%d.%d"), Idx, v));
+				TrackedGroups.Add(G[v], FIntPoint(Idx, v));
+			}
+			const bool bHouse = N.Type == EDCRoomType::Office;
+			const float EA = bHouse ? 120.f + FMath::Abs(SJ(Seed, 30.f)) : 60.f + FMath::Abs(SJ(Seed, 60.f));
+			const float EB = bHouse ? 140.f + FMath::Abs(SJ(Seed + 1, 30.f)) : 60.f + FMath::Abs(SJ(Seed + 1, 60.f));
+			// 0: collapsed front of the back room (no collision) + rubble spilling towards the front plot
+			CurGroup = G[0];
+			RuinStub(bAlongX, LocalLine, A, B, Seed, N.FrontMat, EA, EB, Ops, false);
+			RubbleRun(bAlongX, LocalLine, A, B, -1.f, Seed, N.FrontMat, 0.8f);
+			// 1: tall back wall of the front room (the plot behind it is still empty)
+			CurGroup = G[1];
+			TallWall(bAlongX, LocalLine - WallT * 0.5f, -1.f, A, B, WingH, Ops, {}, Def.OuterMat, Def.SkinMat, Seed);
+			// 2: both rooms exist: a rebuilt knee partition with a doorway
+			CurGroup = G[2];
+			RuinStub(bAlongX, LocalLine, A, B, Seed + 3, N.FrontMat, bHouse ? EA : 0.f, bHouse ? EB : 0.f, Ops, true);
+			CurGroup = Main;
+		}
+		CurGroup = Main;
+	}
+	if (!bOffice) { BuildWingRoof(Def); }
+}
+
+void ADCHideoutBuilder::UpdateSharedWalls()
+{
+	auto Exists = [](const ADCRoomModule* R) { return R && R->GetLevel() >= 1 && R->GetState() != EDCRoomState::Locked; };
+	for (FSharedWall& SW : SharedWalls)
+	{
+		const bool bA = Exists(SW.A.Get()), bB = Exists(SW.B.Get());
+		const int32 Want = (bA && bB) ? 2 : bA ? 1 : bB ? 0 : -1;
+		if (Want == SW.Cur) { continue; }
+		SW.Cur = Want;
+		for (int32 v = 0; v < 3; ++v)
+		{
+			const bool bOn = v == Want;
+			for (int32 i = 0; i < SW.Comps[v].Num(); ++i)
+			{
+				if (UPrimitiveComponent* P = SW.Comps[v][i].Get())
 				{
-					const float Skin = LocalLine - (WallT * 0.5f + 1.f);
-					WallRun(bAlongX, Skin, A, B, 0.f, TallH - 26.f, 2.f, Ops, Def.WallMat, false);
-					Deco(EDCShape::Cube, bAlongX ? FVector((A + B) * 0.5f, LocalLine - WallT * 0.5f - 8.f, TallH - 13.f) : FVector(LocalLine - WallT * 0.5f - 8.f, (A + B) * 0.5f, TallH - 13.f),
-						bAlongX ? FVector(B - A, 14.f, 26.f) : FVector(14.f, B - A, 26.f), "SteelBlack");
+					P->SetVisibility(bOn, true);
+					P->SetCollisionEnabled(bOn ? SW.Coll[v][i].GetValue() : ECollisionEnabled::NoCollision);
 				}
 			}
 		}
-	}
-}
-
-void ADCHideoutBuilder::BuildRoof()
-{
-	// Shadow-only roof over every room (not the yard). Rooms without exterior glazing get a skylight with a hidden
-	// mullion grid, so the sun still paints a moving pane pattern on their floors.
-	const float Z = TallH + 12.f, T = 20.f;
-	for (const FRoomDef& D : Defs)
-	{
-		const FVector2D C = D.Rect.GetCenter(), S = D.Rect.GetSize();
-		if (!D.bSkylight)
-		{
-			ShadowCaster(FVector(C.X, C.Y, Z), FVector(S.X + 4.f, S.Y + 4.f, T));
-			continue;
-		}
-		// skylight: a band towards the back of the room
-		const float SX0 = C.X - S.X * 0.12f, SX1 = C.X + S.X * 0.32f, SY0 = C.Y - S.Y * 0.18f, SY1 = C.Y + S.Y * 0.3f;
-		const float RX0 = D.Rect.Min.X - 2.f, RX1 = D.Rect.Max.X + 2.f, RY0 = D.Rect.Min.Y - 2.f, RY1 = D.Rect.Max.Y + 2.f;
-		ShadowCaster(FVector((RX0 + SX0) * 0.5f, C.Y, Z), FVector(SX0 - RX0, RY1 - RY0, T));
-		ShadowCaster(FVector((SX1 + RX1) * 0.5f, C.Y, Z), FVector(RX1 - SX1, RY1 - RY0, T));
-		ShadowCaster(FVector((SX0 + SX1) * 0.5f, (RY0 + SY0) * 0.5f, Z), FVector(SX1 - SX0, SY0 - RY0, T));
-		ShadowCaster(FVector((SX0 + SX1) * 0.5f, (SY1 + RY1) * 0.5f, Z), FVector(SX1 - SX0, RY1 - SY1, T));
-		for (float X = SX0 + 55.f; X < SX1 - 10.f; X += 55.f) { ShadowCaster(FVector(X, (SY0 + SY1) * 0.5f, Z), FVector(5.f, SY1 - SY0, 12.f)); }
-		for (float Y = SY0 + 60.f; Y < SY1 - 10.f; Y += 60.f) { ShadowCaster(FVector((SX0 + SX1) * 0.5f, Y, Z), FVector(SX1 - SX0, 5.f, 12.f)); }
 	}
 }
 
@@ -854,16 +811,13 @@ ADCRoomModule* ADCHideoutBuilder::GetRoom(EDCRoomType Type) const
 void ADCHideoutBuilder::BuildLightingAndPost()
 {
 	// Global lighting (sun/sky/fog/post/exposure/cvars) belongs to ADCLandscape (spawned first by the game mode).
-	// The house only registers its own day/night-driven materials and fake shafts with the rig.
+	// The house only registers its day/night-driven materials (window glass follows the sky, dust motes the sun).
 	{ TActorIterator<ADCDayNight> It(GetWorld()); if (It) { DayNight = *It; } }
 	if (DayNight)
 	{
 		if (UMaterialInstanceDynamic* W = Cast<UMaterialInstanceDynamic>(M("Window"))) { DayNight->WindowMats.Add(W); }
 		DayNight->DustMat = Cast<UMaterialInstanceDynamic>(M("Dust"));
-		DayNight->LampMat = Cast<UMaterialInstanceDynamic>(M("LampHead"));
 		for (ULocalFogVolumeComponent* LF : SunFogs) { DayNight->AddShaftFog(LF); }
-		for (const FShaftSpec& SS : ShaftSpecs) { DayNight->AddShaft(SS.Centre, SS.Along, SS.W, SS.H); }
-		for (const FStreetSpec& SS : StreetSpecs) { DayNight->AddStreetLight(SS.Pos, SS.Target, SS.Col, SS.Cd, SS.Radius, SS.Cone, SS.bShadow); }
 	}
 }
 
@@ -884,26 +838,35 @@ void ADCHideoutBuilder::BuildHideout()
 	FParse::Value(FCommandLine::Get(), TEXT("DCLightScale="), LightScale);
 	InitAssets();
 
-	auto R = [](float X0, float X1, float Y0, float Y1) { return FBox2D(FVector2D(X0, Y0), FVector2D(X1, Y1)); };
+	auto RD = [](EDCRoomType T, FName Floor, FName Outer, FName Skin, FName Front) { return FRoomDef{ T, Floor, Outer, Skin, Front, DCSite::RoomRect(T) }; };
 	Defs = {
-		{ EDCRoomType::Office,       R(-500,  500, -400,  400), "Slab",        "Brick",      true },
-		{ EDCRoomType::Workshop,     R(-500,  500, -1400, -400), "SlabDark",   "BrickGrey",  true },
-		{ EDCRoomType::Garage,       R( 500, 1300, -1400,  400), "SlabDark",   "CorrugatedV", false },
-		{ EDCRoomType::OpsRoom,      R(-500, 1300,  400, 1600), "Slab",        "Brick",      false },
-		{ EDCRoomType::Lounge,       R(-1300, -500, -1400, -400), "Slab",      "BrickPaint", true },
-		{ EDCRoomType::ServerRoom,   R(-1300, -500, -400,  400), "RaisedFloor", "BlockDark", true },
-		{ EDCRoomType::LawyerOffice, R(-1300, -500,  400, 1000), "CarpetTile", "Block",      true },
-		{ EDCRoomType::Clinic,       R(-1300, -500, 1000, 1600), "Epoxy",      "BlockGreen", false },
+		RD(EDCRoomType::Office,       "Floorboard",  "Stone",    "Plaster",      "Stone"),
+		RD(EDCRoomType::Workshop,     "Cement",      "BrickOld", "BrickOld",     "BrickOld"),
+		RD(EDCRoomType::Garage,       "SlabDark",    "TinRustV", "Board",        "StoneDark"),
+		RD(EDCRoomType::OpsRoom,      "Floorboard",  "Board",    "Board",        "Stone"),
+		RD(EDCRoomType::Lounge,       "Floorboard",  "Stone",    "PlasterGreen", "Stone"),
+		RD(EDCRoomType::ServerRoom,   "RaisedFloor", "BrickOld", "Plaster",      "BrickOld"),
+		RD(EDCRoomType::LawyerOffice, "CarpetTile",  "Stone",    "PlasterRose",  "Stone"),
+		RD(EDCRoomType::Clinic,       "TileOld",     "BrickOld", "PlasterWhite", "BrickOld"),
 	};
 	// Openings in room-local coordinates along the side. side: 0 +X, 1 +Y, 2 -X, 3 -Y
 	auto Op = [this](EDCRoomType T, int32 Side, float C, float W, float B, float Tp) { RoomOpenings.FindOrAdd((uint8)T).Add(TPair<int32, FOpening>(Side, FOpening{ C, W, B, Tp })); };
-	Op(EDCRoomType::Office, 0, -250.f, 120.f, 0.f, 225.f);    // street door through to the garage
-	Op(EDCRoomType::Office, 1, -430.f, 90.f, 0.f, 215.f);     // door through to the ops room
-	Op(EDCRoomType::Garage, 0, -400.f, 360.f, 0.f, 290.f);    // roller door
+	auto KeepWall = [this](EDCRoomType T, int32 Side, float A, float B) { KeepSolid.FindOrAdd((uint8)T).Add(TPair<int32, FVector2D>(Side, FVector2D(A, B))); };
+	// (room-local, real scaled rooms)
+	Op(EDCRoomType::Office, 0, -150.f, 130.f, 0.f, 210.f);    // old back door through to the garage plot
+	Op(EDCRoomType::Office, 1, 250.f, 130.f, 0.f, 210.f);     // kitchen door through to the ops-room plot
+	Op(EDCRoomType::Garage, 3, 20.f, 330.f, 0.f, 290.f);      // roller-door bay facing the yard
+	KeepWall(EDCRoomType::Office, 1, -280.f, 185.f);          // mission board
+	KeepWall(EDCRoomType::Office, 0, 10.f, 135.f);            // chimney breast
+	KeepWall(EDCRoomType::OpsRoom, 1, -230.f, 230.f);         // CCTV wall
+	KeepWall(EDCRoomType::LawyerOffice, 1, -100.f, 70.f);     // filing cabinets
+	KeepWall(EDCRoomType::Clinic, 1, -210.f, -70.f);          // medical cabinet
 
 	for (const FRoomDef& D : Defs) { SpawnRoom(D); }
 	for (const FRoomDef& D : Defs) { BuildShell(D); }
+	BuildHouseRoof();
 
+	bFit = true;   // room dressing is authored on the original grid; MapP fits it into the real rooms
 	BuildOffice();
 	BuildLounge();
 	BuildWorkshop();
@@ -912,9 +875,14 @@ void ADCHideoutBuilder::BuildHideout()
 	BuildClinic();
 	BuildServerRoom();
 	BuildLawyer();
-	BuildYard();
+	bFit = false;
+	if (FParse::Param(FCommandLine::Get(), TEXT("DCHouseGround")))
+	{
+		CurRoom = GetRoom(EDCRoomType::Office);
+		CurGroup = DCGroups::Shell;
+		Deco(EDCShape::Cube, FVector(0, -500, -53), FVector(9000, 9000, 100), "Dirt");
+	}
 	FlushBatches();
-	BuildRoof();
 	BuildLightingAndPost();
 
 	const bool bAll = UDCDevTools::IsBuildAll();
@@ -924,8 +892,10 @@ void ADCHideoutBuilder::BuildHideout()
 		const bool bOffice = Room->RoomType == EDCRoomType::Office;
 		Room->ApplyState(bOffice ? EDCRoomState::Built : EDCRoomState::Locked, bOffice ? 1 : 0);
 	}
+	UpdateSharedWalls();
 
 	// scene review camera
+	FParse::Value(FCommandLine::Get(), TEXT("DCRoomStates="), ForcedStates, false);
 	FString ShotsStr;
 	if (FParse::Value(FCommandLine::Get(), TEXT("DCSceneShots="), ShotsStr, false))
 	{
@@ -942,7 +912,7 @@ void ADCHideoutBuilder::BuildHideout()
 	}
 	int32 NumComps = 0;
 	for (ADCRoomModule* Room : RoomPtrs) { NumComps += Room->GetComponents().Num(); }
-	UE_LOG(LogDC, Display, TEXT("[Scene] BuildHideout: %d rooms, %d components, %.1f ms"), RoomPtrs.Num(), NumComps, (FPlatformTime::Seconds() - T0) * 1000.0);
+	UE_LOG(LogDC, Display, TEXT("[Scene] BuildHideout: %d rooms, %d components, %d shared walls, %.1f ms"), RoomPtrs.Num(), NumComps, SharedWalls.Num(), (FPlatformTime::Seconds() - T0) * 1000.0);
 }
 
 // =====================================================================================================================
@@ -953,6 +923,7 @@ void ADCHideoutBuilder::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	Time += DeltaSeconds;
+	UpdateSharedWalls();
 	for (const FFlicker& F : Flickers)
 	{
 		ULightComponent* L = F.Light.Get();
@@ -968,12 +939,34 @@ void ADCHideoutBuilder::Tick(float DeltaSeconds)
 	if (ReviewShots.Num()) { TickReview(); }
 }
 
+void ADCHideoutBuilder::ApplyForcedStates()
+{
+	// "Workshop:B,Garage:2,Lounge:B1" (L locked, B first build, B<n> upgrading over level n, <n> built level n)
+	TArray<FString> Items;
+	ForcedStates.ParseIntoArray(Items, TEXT(","));
+	for (const FString& It : Items)
+	{
+		FString Name, Val;
+		if (!It.Split(TEXT(":"), &Name, &Val)) { continue; }
+		const int64 V = StaticEnum<EDCRoomType>()->GetValueByNameString(Name);
+		ADCRoomModule* R = V == INDEX_NONE ? nullptr : GetRoom((EDCRoomType)V);
+		if (!R) { continue; }
+		if (Val.StartsWith(TEXT("L"))) { R->ApplyState(EDCRoomState::Locked, 0); }
+		else if (Val.StartsWith(TEXT("B"))) { R->ApplyState(EDCRoomState::Building, FCString::Atoi(*Val.Mid(1))); }
+		else { R->ApplyState(EDCRoomState::Built, FMath::Clamp(FCString::Atoi(*Val), 1, 3)); }
+	}
+	UpdateSharedWalls();
+}
+
 void ADCHideoutBuilder::FrameReview(const FString& Focus)
 {
+	if (!ForcedStates.IsEmpty()) { ApplyForcedStates(); }
 	FBox B(ForceInit);
 	if (Focus.Equals(TEXT("wide"), ESearchCase::IgnoreCase))
 	{
-		for (ADCRoomModule* R : RoomPtrs) { B += R->GetWorldBounds(); }
+		// the whole compound plus a margin of countryside and the front of the yard
+		const FBox2D C = DCSite::CompoundRect();
+		B = FBox(FVector(C.Min.X - 150.f, C.Min.Y - 350.f, 0.f), FVector(C.Max.X + 150.f, C.Max.Y + 150.f, TallH));
 	}
 	else
 	{
@@ -984,7 +977,7 @@ void ADCHideoutBuilder::FrameReview(const FString& Focus)
 	const FRotator Rot(-35.f, 45.f, 0.f);
 	const float Radius = B.GetExtent().Size2D();
 	const float Dist = Radius * 1.12f / FMath::Tan(FMath::DegreesToRadians(9.f));
-	const FVector Target(B.GetCenter().X, B.GetCenter().Y, -60.f);
+	const FVector Target(B.GetCenter().X, B.GetCenter().Y, 40.f);
 	ReviewCam->SetActorLocationAndRotation(Target - Rot.Vector() * Dist, Rot);
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController()) { PC->SetViewTarget(ReviewCam); }
 }
