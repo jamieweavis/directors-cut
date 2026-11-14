@@ -126,7 +126,7 @@ namespace
 			"chance", "chanceNight", "chanceDay", "chanceShort", "chanceLong", "chanceSolo", "chanceThreat", "chanceWithType",
 			"chanceTierMin", "chanceIfType", "durationMult", "payoutMult", "costMult", "xpMult", "injuryChanceMult", "injuryTimeMult",
 			"arrestMult", "fairCutAdd", "willMin", "loyaltyIdlePerDay", "rosterCap", "maxActive", "boardSize", "postIntervalMult",
-			"gearSlots", "gearTier", "gearPriceMult", "upkeepMult", "recruitLevelAdd", "recruitQualityAdd", "preventFirstArrest",
+			"gearSlots", "gearTier", "gearPriceMult", "upkeepMult", "recruitLevelAdd", "recruitQualityAdd", "recruitBoardAdd", "preventFirstArrest",
 			"patchUp", "bail", "unlockTier", "unlockFinal", "lootChanceAdd" };
 		TArray<FDCEffect> Out;
 		if (!A) { return Out; }
@@ -220,6 +220,9 @@ bool FDCSimData::Load(const FString& DirOverride)
 		B.TierWeights = NumArr2(Bo, TEXT("tierWeights"));
 		if (B.TierWeights.Num() == 0) { C.Warn(TEXT("missing board.tierWeights")); B.TierWeights = { { 1, 0, 0, 0 }, { 0.5f, 0.5f, 0, 0 }, { 0.3f, 0.4f, 0.3f, 0 }, { 0.2f, 0.3f, 0.3f, 0.2f } }; }
 		B.RareChance = Num(C, Bo, TEXT("rareChance"), B.RareChance);
+		B.RarePayoutMult = FMath::Max(0.f, Num(C, Bo, TEXT("rarePayoutMult"), B.RarePayoutMult, false));
+		B.RareLevelAdd = Int(C, Bo, TEXT("rareLevelAdd"), B.RareLevelAdd, false);
+		B.RareExtraThreats = FMath::Max(0, Int(C, Bo, TEXT("rareExtraThreats"), B.RareExtraThreats, false));
 		for (const FString& S : StrArr(Bo, TEXT("startingBoard"))) { B.StartingBoard.Add(FName(*S)); }
 
 		const FObj Ti = Obj(R, TEXT("tiers"));

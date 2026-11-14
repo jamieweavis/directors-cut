@@ -141,18 +141,7 @@ void UDCRunSubsystem::StartNewRunInSlot(int32 Slot, int32 InSeed)
 	}
 	DCImpl::GenerateStartingRoster(*this);
 	DCImpl::RegenerateRecruits(*this);
-	// No free crew: make sure the opening board offers at least two cheap Street hires, so the
-	// starting cash always buys a first crew (two Street, or one better recruit instead).
-	if (Roster.Num() == 0)
-	{
-		int32 Street = Recruits.FilterByPredicate([](const FDCCriminal& C) { return C.Quality == EDCQuality::Street; }).Num();
-		for (int32 i = 0; i < Recruits.Num() && Street < 2; ++i)
-		{
-			if (Recruits[i].Quality == EDCQuality::Street) { continue; }
-			Recruits[i] = DCImpl::MakeCriminal(*this, Recruits[i].Type, EDCQuality::Street, Recruits[i].Level);
-			++Street;
-		}
-	}
+	// (RegenerateRecruits keeps two cheap Street hires listed while the crew is under two.)
 
 	NextPostAt = DCImpl::PostInterval(*this);
 	LastDawnIndex = DCImpl::DawnIndexAt(*this, 0.0);

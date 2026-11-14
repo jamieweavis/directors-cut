@@ -1,5 +1,5 @@
 {
-  "startingCash": 3500,
+  "startingCash": 4500,
   "startingRoster": 0,
   "startingRosterLevels": [1, 2],
   "clock": {"startHour": 7.0, "dawnHour": 6.0, "duskHour": 20.0, "gameMinutesPerSecond": 1.0},
@@ -8,8 +8,11 @@
     "baseSize": 4,
     "postIntervalSec": 40,
     "expireSecRange": [300, 600],
-    "tierWeights": [[1, 0, 0, 0], [0.5, 0.5, 0, 0], [0.3, 0.4, 0.3, 0], [0.2, 0.3, 0.3, 0.2]],
-    "rareChance": 0.08,
+    "tierWeights": [[1, 0, 0, 0], [0.55, 0.45, 0, 0], [0.35, 0.4, 0.25, 0], [0.25, 0.35, 0.27, 0.13]],
+    "rareChance": 0.06,
+    "rarePayoutMult": 2.5,
+    "rareLevelAdd": 1,
+    "rareExtraThreats": 1,
     "startingBoard": ["corner_store", "car_boost", "pickpocket_run"]
   },
   "tiers": {"unlockSuccesses": [0, 9, 16, 24], "levelRange": [[1, 2], [2, 3], [4, 5], [6, 8]]},
@@ -35,9 +38,9 @@
   "injury": {"failChance": 0.35, "bustedChance": 0.6, "secondsRange": [90, 240]},
   "levels": {"max": 10, "xpBase": 100, "xpExp": 1.3},
   "loyalty": {"start": 60, "successFair": 5, "greedy": -8, "injury": -3, "min": 0, "max": 100, "quitBelow": 10},
-  "upkeep": {"perCriminalPerDay": 500},
+  "upkeep": {"perCriminalPerDay": 550},
   "recruits": {
-    "boardSize": 3,
+    "boardSize": 4,
     "refreshSec": 480,
     "refreshCost": 400,
     "costBase": 1200,

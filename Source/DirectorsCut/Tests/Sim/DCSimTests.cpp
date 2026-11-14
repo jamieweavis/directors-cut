@@ -532,6 +532,60 @@ bool FDCSimSaveLoad::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCSimRecruitBoard, "DirectorsCut.Sim.RecruitBoard", DCSimFlags)
+bool FDCSimRecruitBoard::RunTest(const FString&)
+{
+	TStrongObjectPtr<UDCRunSubsystem> S = DCSimTest::NewSim();
+	DCSimTest::FEndGuard G(S.Get());
+	S->StartNewRun(21);
+	FDCBalance& B = A::Data(*S).Balance;
+	// Roles are dealt from a bag: no repeats until every role is listed.
+	B.RecruitBoardSize = (int32)EDCCriminalType::MAX;
+	for (int32 Pass = 0; Pass < 20; ++Pass)
+	{
+		FDCSimImpl::RegenerateRecruits(*S);
+		TSet<EDCCriminalType> Types;
+		for (const FDCCriminal& C : S->GetRecruits()) { Types.Add(C.Type); }
+		TestEqual(TEXT("distinct roles"), Types.Num(), (int32)EDCCriminalType::MAX);
+	}
+	// A crew under two always sees enough cheap Street hires, on rerolls too.
+	A::Roster(*S).Reset();
+	B.RecruitBoardSize = 4;
+	B.QualityOdds = { { 0.f, 0.f, 1.f } };
+	for (int32 Pass = 0; Pass < 10; ++Pass)
+	{
+		FDCSimImpl::RegenerateRecruits(*S);
+		TestEqual(TEXT("board size"), S->GetRecruits().Num(), 4);
+		int32 Street = 0;
+		for (const FDCCriminal& C : S->GetRecruits()) { Street += C.Quality == EDCQuality::Street ? 1 : 0; }
+		TestTrue(TEXT(">=2 street while crewless"), Street >= 2);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCSimRareJobs, "DirectorsCut.Sim.RareJobs", DCSimFlags)
+bool FDCSimRareJobs::RunTest(const FString&)
+{
+	TStrongObjectPtr<UDCRunSubsystem> S = DCSimTest::NewSim();
+	DCSimTest::FEndGuard G(S.Get());
+	S->StartNewRun(5);
+	FDCSimData& D = A::Data(*S);
+	FDCBalance& B = D.Balance;
+	const FDCMissionTemplate* T = D.Missions.FindByPredicate([](const FDCMissionTemplate& X) { return !X.bFinal && X.Tier == 1; });
+	if (!TestNotNull(TEXT("template"), T)) { return false; }
+	B.RareChance = 1.f; B.RarePayoutMult = 3.f; B.RareLevelAdd = 2; B.RareExtraThreats = 1;
+	const int32 MaxFixed = T->FixedThreats.Num() + FMath::Max(T->Extra.X, T->Extra.Y);
+	for (int32 i = 0; i < 20; ++i)
+	{
+		const FDCMission M = FDCSimImpl::MakeMission(*S, *T);
+		TestTrue(TEXT("rare"), M.bRare);
+		TestTrue(TEXT("pays more"), M.Payout >= FMath::Min(T->Payout.X, T->Payout.Y) * 3 - 50);
+		TestTrue(TEXT("tougher"), M.Level >= B.LevelRange[0].X + 2);
+		TestTrue(TEXT("extra threat"), M.Threats.Num() >= T->FixedThreats.Num() + 1 && M.Threats.Num() <= MaxFixed + 1);
+	}
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCSimDeterminism, "DirectorsCut.Sim.Determinism", DCSimFlags)
 bool FDCSimDeterminism::RunTest(const FString&)
 {

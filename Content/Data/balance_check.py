@@ -18,16 +18,7 @@ board slot once unlocked and re-posts after a failure; recruits roll levels from
 negative traits are rolled as an extra trait; unlockTier = v lets tiers >= v post; loot/gadgets/patch-up/bail
 are not used by the bot.
 
-Last tuned result (200 runs x 120 min, seed 1):
-  Milestone             reached    p25  median    p75   target
-  First success          100.0%    1.2     1.4    1.6   <= 2.5 min
-  First room built       100.0%    3.8     4.3    5.3   <= 6 min
-  Tier 2 unlocked        100.0%    8.9     9.9   11.8   ~10-12 min
-  Tier 3 unlocked         99.5%   22.3    25.8   32.9   ~25-35 min
-  Tier 4 unlocked         96.5%   30.3    34.2   39.1
-  Big Score unlocked      84.5%   54.2    62.8   70.0   ~55-75 min
-  Big Score won           43.0%   88.3    97.9  108.5   30-60%
-  Game over               19.5%   47.0    47.0   47.0   10-25%
+Last tuned result: see BALANCE.md.
 """
 import argparse
 import json
@@ -239,16 +230,28 @@ class Sim:
         n_extra = rr.randint(*m["threats"]["extra"])
         th += rr.sample(m["threats"]["pool"], n_extra)
         exp_lo, exp_hi = self.b["board"]["expireSecRange"]
-        return {
+        bo = self.b["board"]
+        p = {
             "m": m, "tier": m["tier"], "level": rr.randint(lo, hi),
             "crew": rr.randint(*m["crewSize"]),
             "dur": 5 * round(rr.randint(*m["durationSec"]) / 5),
             "threats": th,
             "cost": rr.randint(*m["cost"]), "payout": rr.randint(*m["payout"]),
             "night": rr.random() < m["nightChance"],
-            "rare": rr.random() < self.b["board"]["rareChance"],
+            "rare": not m["final"] and rr.random() < bo["rareChance"],
             "expires": math.inf if m["final"] else self.t + rr.uniform(exp_lo, exp_hi),
         }
+        if p["rare"]:
+            # rare postings: richer, a level tougher, an extra threat (pool first, then any)
+            p["payout"] = int(p["payout"] * bo.get("rarePayoutMult", 1.0))
+            p["level"] = min(self.b["levels"]["max"], p["level"] + bo.get("rareLevelAdd", 0))
+            more = [t for t in m["threats"]["pool"] if t not in th]
+            all_threats = ["Guards", "Cameras", "Alarms", "Locks", "Vault", "Patrols", "Witnesses", "Pursuit"]
+            if len(more) < bo.get("rareExtraThreats", 0):
+                more += [t for t in all_threats if t not in th and t not in more]
+            rr.shuffle(more)
+            p["threats"] = th + more[:bo.get("rareExtraThreats", 0)]
+        return p
 
     def post_random(self):
         ut = self.unlocked_tier()
@@ -267,7 +270,12 @@ class Sim:
         shift = self.gsum("recruitQualityAdd")
         lo, hi = self.b["tiers"]["levelRange"][ut - 1]
         self.recruits = []
-        for _ in range(rc["boardSize"]):
+        size = max(1, rc["boardSize"] + int(round(self.gsum("recruitBoardAdd"))))
+        bag = []
+        for _ in range(size):
+            if not bag:
+                bag = list(TYPES)
+                self.rng.shuffle(bag)
             q = self.rng.choices([0, 1, 2], weights=odds)[0]
             s = shift
             while s > 0 and q < 2:
@@ -275,9 +283,22 @@ class Sim:
                     q += 1
                 s -= 1
             lvl = min(self.b["levels"]["max"], self.rng.randint(lo, hi) + int(self.gsum("recruitLevelAdd")))
-            c = self.make_crew(self.rng.choice(TYPES), q, lvl)
-            cost = int((rc["costBase"] + rc["costPerLevel"] * lvl) * rc["qualityCostMult"][q])
-            self.recruits.append((c, cost))
+            c = self.make_crew(bag.pop(), q, lvl)
+            self.recruits.append((c, self.hire_cost(lvl, q)))
+        # under two crew: keep enough cheap Street hires listed (matches RegenerateRecruits)
+        street = sum(1 for c, _ in self.recruits if c.quality == 0)
+        for i, (c, _) in enumerate(self.recruits):
+            if street >= 2 - len(self.crew):
+                break
+            if c.quality == 0:
+                continue
+            nc = self.make_crew(c.type, 0, c.level)
+            self.recruits[i] = (nc, self.hire_cost(c.level, 0))
+            street += 1
+
+    def hire_cost(self, lvl, q):
+        rc = self.b["recruits"]
+        return int(round((rc["costBase"] + rc["costPerLevel"] * (lvl - 1)) * rc["qualityCostMult"][q] / 50) * 50)
 
     # ---------------- success formula ----------------
     def counters_of(self, c):

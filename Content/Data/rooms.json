@@ -25,14 +25,15 @@
       "buildSec": [60, 150, 240],
       "requiredSuccesses": [3, 9, 18],
       "upkeepPerDay": [100, 200, 350],
-      "levelEffects": ["+2 roster, +2 loyalty/day", "+3 roster, +3 loyalty/day", "+5 roster, better recruits"],
+      "levelEffects": ["+2 roster, 5 recruits listed", "+3 roster, 6 recruits listed", "+5 roster, better recruits"],
       "levels": [
-        {"effects": [{"kind": "rosterCap", "value": 2}, {"kind": "loyaltyIdlePerDay", "value": 2}]},
-        {"effects": [{"kind": "rosterCap", "value": 3}, {"kind": "loyaltyIdlePerDay", "value": 3}]},
+        {"effects": [{"kind": "rosterCap", "value": 2}, {"kind": "loyaltyIdlePerDay", "value": 2}, {"kind": "recruitBoardAdd", "value": 1}]},
+        {"effects": [{"kind": "rosterCap", "value": 3}, {"kind": "loyaltyIdlePerDay", "value": 3}, {"kind": "recruitBoardAdd", "value": 2}]},
         {
           "effects": [
             {"kind": "rosterCap", "value": 5},
             {"kind": "loyaltyIdlePerDay", "value": 4},
+            {"kind": "recruitBoardAdd", "value": 2},
             {"kind": "recruitQualityAdd", "value": 0.5}
           ]
         }
@@ -43,7 +44,7 @@
       "displayName": "Garage",
       "description": "Car shed: more cars, more jobs at once",
       "icon": "warehouse",
-      "cost": [2000, 10000, 20000],
+      "cost": [1500, 10000, 20000],
       "buildSec": [60, 150, 270],
       "requiredSuccesses": [2, 12, 22],
       "upkeepPerDay": [150, 250, 400],
@@ -93,7 +94,7 @@
       "displayName": "Ops Room",
       "description": "Plan the big jobs",
       "icon": "map",
-      "cost": [3500, 6000, 20000],
+      "cost": [2500, 4500, 20000],
       "buildSec": [120, 210, 300],
       "requiredSuccesses": [8, 18, 26],
       "upkeepPerDay": [250, 400, 600],

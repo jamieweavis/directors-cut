@@ -86,6 +86,9 @@ struct FDCBalance
 	FVector2D ExpireSecRange = FVector2D(300, 600);
 	TArray<TArray<float>> TierWeights;
 	float RareChance = 0.08f;
+	float RarePayoutMult = 1.f;   // rare postings: bigger take ...
+	int32 RareLevelAdd = 0;       // ... a tougher crew to beat ...
+	int32 RareExtraThreats = 0;   // ... and more in the way
 	TArray<FName> StartingBoard;
 
 	TArray<int32> UnlockSuccesses = { 0, 3, 8, 15 };

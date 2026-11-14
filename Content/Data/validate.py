@@ -55,6 +55,7 @@ EFFECT_SCOPES = {
     "upkeepMult": {"perk"},
     "recruitLevelAdd": {"perk"},
     "recruitQualityAdd": {"room", "perk"},
+    "recruitBoardAdd": {"room", "perk"},
     "preventFirstArrest": {"perk"},
     "patchUp": {"room"},
     "bail": {"room"},
@@ -423,8 +424,8 @@ def main():
                     err(f"{c}: final needs 6-7 threats, has {nthreat}")
                 continue
             tiers_present[tier] = tiers_present.get(tier, 0) + 1
-            targets = {1: ((1, 1), (60, 120), (1, 2)), 2: ((2, 2), (180, 300), (2, 3)),
-                       3: ((3, 4), (480, 720), (3, 4)), 4: ((4, 5), (900, 1200), (4, 5))}
+            targets = {1: ((1, 1), (60, 120), (1, 2)), 2: ((2, 2), (150, 240), (2, 3)),
+                       3: ((3, 4), (270, 400), (3, 4)), 4: ((4, 5), (420, 600), (4, 5))}
             (cmin, cmax), (dmin, dmax), (tmin, tmax) = targets[tier]
             if isinstance(cs, list) and len(cs) == 2 and (cs[0] < cmin or cs[1] > cmax):
                 err(f"{c}: crewSize {cs} outside tier {tier} target {cmin}-{cmax}")

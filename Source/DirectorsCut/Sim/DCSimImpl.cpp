@@ -11,7 +11,7 @@ namespace
 		K_costMult(TEXT("costMult")), K_xpMult(TEXT("xpMult")), K_injuryChanceMult(TEXT("injuryChanceMult")), K_injuryTimeMult(TEXT("injuryTimeMult")),
 		K_arrestMult(TEXT("arrestMult")), K_fairCutAdd(TEXT("fairCutAdd")), K_willMin(TEXT("willMin")), K_loyaltyIdlePerDay(TEXT("loyaltyIdlePerDay")),
 		K_boardSize(TEXT("boardSize")), K_postIntervalMult(TEXT("postIntervalMult")), K_gearPriceMult(TEXT("gearPriceMult")),
-		K_recruitLevelAdd(TEXT("recruitLevelAdd")), K_recruitQualityAdd(TEXT("recruitQualityAdd")), K_preventFirstArrest(TEXT("preventFirstArrest")),
+		K_recruitLevelAdd(TEXT("recruitLevelAdd")), K_recruitQualityAdd(TEXT("recruitQualityAdd")), K_recruitBoardAdd(TEXT("recruitBoardAdd")), K_preventFirstArrest(TEXT("preventFirstArrest")),
 		K_unlockFinal(TEXT("unlockFinal")), K_lootChanceAdd(TEXT("lootChanceAdd"));
 
 	bool TypeMatches(const FString& Param, EDCCriminalType T) { return Param.Equals(DC::TypeName(T), ESearchCase::IgnoreCase); }
@@ -259,6 +259,17 @@ FDCMission FDCSimImpl::MakeMission(S& Sim, const FDCMissionTemplate& T)
 		TArray<FName> Loot;
 		for (FName G : D.GearOrder) { if (D.Gear[G].bLoot) { Loot.Add(G); } }
 		if (Loot.Num()) { M.LootGearId = Loot[R.RandRange(0, Loot.Num() - 1)]; }
+		// Rare jobs are the big scores of their tier: richer, but tougher and busier.
+		M.Payout = Round50(M.Payout * B.RarePayoutMult);
+		M.Level = FMath::Clamp(M.Level + B.RareLevelAdd, 1, B.MaxLevel);
+		TArray<EDCThreat> More;
+		for (EDCThreat Th : T.PoolThreats) { if (!M.Threats.Contains(Th)) { More.AddUnique(Th); } }
+		if (More.Num() < B.RareExtraThreats)
+		{
+			for (int32 t = 0; t < (int32)EDCThreat::MAX; ++t) { if (!M.Threats.Contains((EDCThreat)t)) { More.AddUnique((EDCThreat)t); } }
+		}
+		Shuffle(R, More);
+		for (int32 i = 0; i < B.RareExtraThreats && i < More.Num(); ++i) { M.Threats.Add(More[i]); }
 	}
 	M.ExpiresAt = T.bFinal ? -1.0 : Sim.RunTime + FMath::RoundToDouble(RandIn(R, B.ExpireSecRange));
 	return M;
@@ -324,9 +335,17 @@ void FDCSimImpl::RegenerateRecruits(S& Sim)
 	const float QAdd = SumGlobal(Sim, K_recruitQualityAdd);
 	const int32 LAdd = FMath::RoundToInt(SumGlobal(Sim, K_recruitLevelAdd));
 	const FIntPoint LR = B.LevelRange.IsValidIndex(Tier - 1) ? B.LevelRange[Tier - 1] : FIntPoint(1, 1);
-	for (int32 i = 0; i < B.RecruitBoardSize; ++i)
+	const int32 Size = FMath::Max(1, B.RecruitBoardSize + FMath::RoundToInt(SumGlobal(Sim, K_recruitBoardAdd)));
+	// Deal roles from a shuffled bag so a board never doubles up on a role until every role is shown.
+	TArray<EDCCriminalType> Bag;
+	for (int32 i = 0; i < Size; ++i)
 	{
-		const EDCCriminalType Type = (EDCCriminalType)R.RandRange(0, (int32)EDCCriminalType::MAX - 1);
+		if (Bag.Num() == 0)
+		{
+			for (int32 t = 0; t < (int32)EDCCriminalType::MAX; ++t) { Bag.Add((EDCCriminalType)t); }
+			Shuffle(R, Bag);
+		}
+		const EDCCriminalType Type = Bag.Pop();
 		float Sum = 0.f;
 		for (float O : Odds) { Sum += O; }
 		float Pick = R.FRand() * FMath::Max(Sum, KINDA_SMALL_NUMBER);
@@ -337,6 +356,15 @@ void FDCSimImpl::RegenerateRecruits(S& Sim)
 		Q = FMath::Clamp(Q + Steps, 0, 2);
 		const int32 Level = RandIn(R, LR) + LAdd;
 		Sim.Recruits.Add(MakeCriminal(Sim, Type, (EDCQuality)Q, Level));
+	}
+	// A crew of fewer than two can always afford to fill out: keep enough cheap Street hires listed.
+	int32 Street = Sim.Recruits.FilterByPredicate([](const FDCCriminal& C) { return C.Quality == EDCQuality::Street; }).Num();
+	for (int32 i = 0; i < Sim.Recruits.Num() && Street < 2 - Sim.Roster.Num(); ++i)
+	{
+		FDCCriminal& C = Sim.Recruits[i];
+		if (C.Quality == EDCQuality::Street) { continue; }
+		C = MakeCriminal(Sim, C.Type, EDCQuality::Street, C.Level);
+		++Street;
 	}
 	Sim.RecruitRefreshAt = Sim.RunTime + B.RecruitRefreshSec;
 	Sim.MarkChanged();

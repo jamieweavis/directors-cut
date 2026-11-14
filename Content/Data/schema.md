@@ -65,6 +65,7 @@ When an effect appears more than once, it **stacks**: chance effects add; `*Mult
 | `upkeepMult` | perk | multiplies the daily upkeep |
 | `recruitLevelAdd` | perk | recruits roll + value levels |
 | `recruitQualityAdd` | room, perk | shifts recruit quality odds up value steps (fractional = chance) |
+| `recruitBoardAdd` | room, perk | + recruits listed on the desk |
 | `preventFirstArrest` | perk | the first arrest of the run is prevented |
 | `patchUp` | room | enables paid instant heal; cost = value × remaining injury seconds |
 | `bail` | room | enables bail within `threshold` s of the arrest; cost = value × criminal level |
@@ -89,7 +90,10 @@ When an effect appears more than once, it **stacks**: chance effects add; `*Mult
     "postIntervalSec": 40,          // a new mission posts every N s while the board isn't full
     "expireSecRange": [300, 600],   // how long a posting stays up
     "tierWeights": [[1,0,0,0],[0.5,0.5,0,0],[0.3,0.4,0.3,0],[0.2,0.3,0.3,0.2]], // indexed by unlocked tier - 1
-    "rareChance": 0.08,
+    "rareChance": 0.06,
+    "rarePayoutMult": 2.5,  // optional: rare postings pay more ...
+    "rareLevelAdd": 1,      // optional: ... are a level harder ...
+    "rareExtraThreats": 1,  // optional: ... and add threats (pool first, then any)
     "startingBoard": ["corner_store", "car_boost", "pickpocket_run"]  // first missions (template ids); the rest random
   },
   "tiers": {
@@ -113,7 +117,7 @@ When an effect appears more than once, it **stacks**: chance effects add; `*Mult
   "levels": { "max": 10, "xpBase": 100, "xpExp": 1.4 },
   "loyalty": { "start": 60, "successFair": 5, "greedy": -8, "injury": -3, "min": 0, "max": 100, "quitBelow": 10 },
   "upkeep": { "perCriminalPerDay": 300 },
-  "recruits": { "boardSize": 3, "refreshSec": 480, "refreshCost": 400,
+  "recruits": { "boardSize": 4, "refreshSec": 480, "refreshCost": 400,
                 "costBase": 1200, "costPerLevel": 500, "qualityCostMult": [1.0, 1.8, 3.0],
                 "qualityOdds": [[0.8,0.18,0.02],[0.6,0.32,0.08],[0.45,0.4,0.15],[0.3,0.45,0.25]] },  // by unlocked tier
   "quality": { "abilities": [1, 1, 2], "traits": [1, 2, 3], "negativeTraitChance": [0.35, 0.2, 0.1] },
