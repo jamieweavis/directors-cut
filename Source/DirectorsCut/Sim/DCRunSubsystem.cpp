@@ -71,6 +71,7 @@ void UDCRunSubsystem::ResetRunState()
 	LastDawnIndex = 0; MissionsSucceeded = MissionsAttempted = TotalTake = BestMissionTake = RoomsBuilt = PendingPerkOffers = 0;
 	BestMissionName.Reset(); EndReason.Reset();
 	bArrestPreventUsed = false; ArrestedAt.Reset();
+	CurrentSlot = -1; RunId.Invalidate();
 	bSaveDirty = false;
 }
 
@@ -85,15 +86,29 @@ void UDCRunSubsystem::FlushChanged()
 	}
 }
 
-FString UDCRunSubsystem::GetSlotName() const { return SaveSlotOverride.IsEmpty() ? FString(TEXT("DCRun")) : SaveSlotOverride; }
-
 // ─── lifecycle ──────────────────────────────────────────────────────────────
 
 void UDCRunSubsystem::StartNewRun(int32 InSeed)
 {
+	// Legacy entry point: first empty slot, else the oldest-saved one.
+	const TArray<FDCSaveSlotInfo> Slots = GetSaveSlots();
+	int32 Slot = INDEX_NONE;
+	for (const FDCSaveSlotInfo& I : Slots) { if (!I.bUsed) { Slot = I.Slot; break; } }
+	if (Slot == INDEX_NONE)
+	{
+		Slot = 0;
+		for (const FDCSaveSlotInfo& I : Slots) { if (I.SavedAt < Slots[Slot].SavedAt) { Slot = I.Slot; } }
+	}
+	StartNewRunInSlot(Slot, InSeed);
+}
+
+void UDCRunSubsystem::StartNewRunInSlot(int32 Slot, int32 InSeed)
+{
 	EnsureData();
 	ResetRunState();
 	const FDCBalance& B = Data->Balance;
+	CurrentSlot = FMath::Clamp(Slot, 0, NumSaveSlots - 1);
+	RunId = FGuid::NewGuid();
 	Seed = InSeed != 0 ? InSeed : FMath::RandRange(1, 999999);
 	Rng.Initialize(Seed);
 	bActive = true;
@@ -134,15 +149,22 @@ void UDCRunSubsystem::StartNewRun(int32 InSeed)
 	OnRunStateChanged.Broadcast();
 }
 
-bool UDCRunSubsystem::HasSave() const { return UGameplayStatics::DoesSaveGameExist(GetSlotName(), 0); }
+bool UDCRunSubsystem::HasSave() const { return GetMostRecentSlot(true) >= 0; }
 
 void UDCRunSubsystem::SaveRun()
 {
 	if (Data.IsValid()) { NextAutosaveAt = RunTime + FMath::Max(1.f, Data->Balance.AutosaveSeconds); }
 	bSaveDirty = false;
-	if (!bActive || Phase != EDCGamePhase::Playing || !bSaveEnabled) { return; }
+	if (!bActive || Phase != EDCGamePhase::Playing || !bSaveEnabled || CurrentSlot < 0) { return; }
+	WriteSlot(CurrentSlot);
+}
+
+bool UDCRunSubsystem::WriteSlot(int32 Slot)
+{
+	if (!bActive || Slot < 0 || Slot >= NumSaveSlots || !bSaveEnabled) { return false; }
 	UDCSaveGame* SG = Cast<UDCSaveGame>(UGameplayStatics::CreateSaveGameObject(UDCSaveGame::StaticClass()));
-	if (!SG) { return; }
+	if (!SG) { return false; }
+	if (!RunId.IsValid()) { RunId = FGuid::NewGuid(); }
 	SG->Version = UDCSaveGame::CurrentVersion;
 	SG->Seed = Seed;
 	SG->RngState = Rng.GetCurrentSeed();
@@ -158,45 +180,107 @@ void UDCRunSubsystem::SaveRun()
 	SG->LastDawnIndex = LastDawnIndex; SG->MissionsSucceeded = MissionsSucceeded; SG->MissionsAttempted = MissionsAttempted;
 	SG->TotalTake = TotalTake; SG->BestMissionTake = BestMissionTake; SG->BestMissionName = BestMissionName; SG->RoomsBuilt = RoomsBuilt;
 	SG->PendingPerkOffers = PendingPerkOffers; SG->bArrestPreventUsed = bArrestPreventUsed; SG->ArrestedAt = ArrestedAt;
-	if (!UGameplayStatics::SaveGameToSlot(SG, GetSlotName(), 0)) { UE_LOG(LogDC, Warning, TEXT("[Sim] save to slot %s failed"), *GetSlotName()); }
-}
-
-bool UDCRunSubsystem::ContinueRun()
-{
-	if (!HasSave()) { return false; }
-	UDCSaveGame* SG = Cast<UDCSaveGame>(UGameplayStatics::LoadGameFromSlot(GetSlotName(), 0));
-	if (!SG || SG->Version != UDCSaveGame::CurrentVersion || SG->Rooms.Num() == 0)
+	SG->RunId = RunId;
+	SG->bFinished = IsFinished();
+	SG->bWon = Phase == EDCGamePhase::Won;
+	SG->EndReason = EndReason;
+	if (SG->bFinished) { SG->Summary = GetRunSummary(); }
+	const FDCSaveSlotInfo Info = MakeSlotInfo(Slot);
+	SG->SavedAt = Info.SavedAt;
+	const FString Name = GetSlotName(Slot);
+	if (!UGameplayStatics::SaveGameToSlot(SG, Name, 0))
 	{
-		UE_LOG(LogDC, Warning, TEXT("[Sim] save %s missing or corrupt"), *GetSlotName());
+		UE_LOG(LogDC, Warning, TEXT("[Sim] save to slot %s failed"), *Name);
 		return false;
 	}
+	EnsureSlotCache();
+	SlotCache[Slot] = Info;
+	return true;
+}
+
+bool UDCRunSubsystem::ApplySave(const UDCSaveGame& SG)
+{
+	if (SG.Version < UDCSaveGame::MinVersion || SG.Version > UDCSaveGame::CurrentVersion || SG.Rooms.Num() == 0) { return false; }
 	EnsureData();
 	ResetRunState();
-	Seed = SG->Seed;
-	Rng.Initialize(SG->RngState);
-	RunTime = SG->RunTime;
-	Cash = SG->Cash;
-	NextId = SG->NextId;
-	Roster = SG->Roster; Fallen = SG->Fallen; Recruits = SG->Recruits; Missions = SG->Missions; Reports = SG->Reports;
-	Stash = SG->Stash;
-	for (const FDCRoom& Saved : SG->Rooms)
+	Seed = SG.Seed;
+	Rng.Initialize(SG.RngState);
+	RunTime = SG.RunTime;
+	Cash = SG.Cash;
+	NextId = SG.NextId;
+	Roster = SG.Roster; Fallen = SG.Fallen; Recruits = SG.Recruits; Missions = SG.Missions; Reports = SG.Reports;
+	Stash = SG.Stash;
+	for (const FDCRoom& Saved : SG.Rooms)
 	{
 		FDCRoom R;
 		R.Type = Saved.Type; R.State = Saved.State; R.Level = Saved.Level; R.BuildStartedAt = Saved.BuildStartedAt; R.BuildEndsAt = Saved.BuildEndsAt;
 		Rooms.Add(R);
 	}
-	for (FName Id : SG->PerkOffer) { if (const FDCPerkDef* P = Data->Perks.Find(Id)) { PerkOffer.Add(P->Perk); } }
-	for (FName Id : SG->PerksTaken) { if (const FDCPerkDef* P = Data->Perks.Find(Id)) { PerksTaken.Add(P->Perk); } }
-	NextPostAt = SG->NextPostAt; RecruitRefreshAt = SG->RecruitRefreshAt; NextAutosaveAt = SG->NextAutosaveAt;
-	LastDawnIndex = SG->LastDawnIndex; MissionsSucceeded = SG->MissionsSucceeded; MissionsAttempted = SG->MissionsAttempted;
-	TotalTake = SG->TotalTake; BestMissionTake = SG->BestMissionTake; BestMissionName = SG->BestMissionName; RoomsBuilt = SG->RoomsBuilt;
-	PendingPerkOffers = SG->PendingPerkOffers; bArrestPreventUsed = SG->bArrestPreventUsed; ArrestedAt = SG->ArrestedAt;
+	for (FName Id : SG.PerkOffer) { if (const FDCPerkDef* P = Data->Perks.Find(Id)) { PerkOffer.Add(P->Perk); } }
+	for (FName Id : SG.PerksTaken) { if (const FDCPerkDef* P = Data->Perks.Find(Id)) { PerksTaken.Add(P->Perk); } }
+	NextPostAt = SG.NextPostAt; RecruitRefreshAt = SG.RecruitRefreshAt; NextAutosaveAt = SG.NextAutosaveAt;
+	LastDawnIndex = SG.LastDawnIndex; MissionsSucceeded = SG.MissionsSucceeded; MissionsAttempted = SG.MissionsAttempted;
+	TotalTake = SG.TotalTake; BestMissionTake = SG.BestMissionTake; BestMissionName = SG.BestMissionName; RoomsBuilt = SG.RoomsBuilt;
+	PendingPerkOffers = SG.PendingPerkOffers; bArrestPreventUsed = SG.bArrestPreventUsed; ArrestedAt = SG.ArrestedAt;
+	RunId = SG.RunId.IsValid() ? SG.RunId : FGuid::NewGuid();
+	EndReason = SG.EndReason;
 	bActive = true;
-	Phase = EDCGamePhase::Playing;
+	Phase = SG.bFinished ? (SG.bWon ? EDCGamePhase::Won : EDCGamePhase::GameOver) : EDCGamePhase::Playing;
 	bStateDirty = false;
-	OnPhaseChanged.Broadcast(Phase);
-	OnRunStateChanged.Broadcast();
 	return true;
+}
+
+bool UDCRunSubsystem::LoadSlot(int32 Slot)
+{
+	if (Slot < 0 || Slot >= NumSaveSlots) { return false; }
+	MigrateLegacySave();
+	const FString Name = GetSlotName(Slot);
+	if (!UGameplayStatics::DoesSaveGameExist(Name, 0)) { return false; }
+	const UDCSaveGame* SG = Cast<UDCSaveGame>(UGameplayStatics::LoadGameFromSlot(Name, 0));
+	if (!SG || !ApplySave(*SG))
+	{
+		UE_LOG(LogDC, Warning, TEXT("[Sim] save %s missing, corrupt or unsupported"), *Name);
+		return false;
+	}
+	CurrentSlot = Slot;
+	OnRunStateChanged.Broadcast();
+	if (IsFinished())
+	{
+		// Read-only end state: the clock doesn't tick (IsTickable needs Playing) and nothing is recorded again
+		// (the leaderboard is written only by EndRun). The end delegates fire so the end screen shows this run's summary.
+		const FDCRunSummary Sum = GetRunSummary();
+		if (Phase == EDCGamePhase::Won) { OnRunWon.Broadcast(Sum); } else { OnGameOver.Broadcast(Sum); }
+	}
+	OnPhaseChanged.Broadcast(Phase);
+	return true;
+}
+
+bool UDCRunSubsystem::ContinueRun()
+{
+	const int32 Slot = GetMostRecentSlot(true);
+	return Slot >= 0 && LoadSlot(Slot);
+}
+
+bool UDCRunSubsystem::SaveToSlot(int32 Slot)
+{
+	if (!bActive || Slot < 0 || Slot >= NumSaveSlots) { return false; }
+	CurrentSlot = Slot;
+	if (!bSaveEnabled) { return true; }
+	if (Phase == EDCGamePhase::Playing && Data.IsValid()) { NextAutosaveAt = RunTime + FMath::Max(1.f, Data->Balance.AutosaveSeconds); }
+	bSaveDirty = false;
+	return WriteSlot(Slot);
+}
+
+bool UDCRunSubsystem::DeleteSlot(int32 Slot)
+{
+	if (Slot < 0 || Slot >= NumSaveSlots) { return false; }
+	EnsureSlotCache();
+	const FString Name = GetSlotName(Slot);
+	const bool bOk = !UGameplayStatics::DoesSaveGameExist(Name, 0) || UGameplayStatics::DeleteGameInSlot(Name, 0);
+	SlotCache[Slot] = FDCSaveSlotInfo();
+	SlotCache[Slot].Slot = Slot;
+	if (Slot == CurrentSlot) { CurrentSlot = -1; } // a loaded run keeps going but stops autosaving until SaveToSlot
+	return bOk;
 }
 
 void UDCRunSubsystem::ExitToTitle()
@@ -209,10 +293,189 @@ void UDCRunSubsystem::ExitToTitle()
 
 void UDCRunSubsystem::AbandonRun()
 {
-	UGameplayStatics::DeleteGameInSlot(GetSlotName(), 0);
+	if (CurrentSlot >= 0 && bSaveEnabled) { DeleteSlot(CurrentSlot); }
 	ResetRunState();
 	OnPhaseChanged.Broadcast(Phase);
 	OnRunStateChanged.Broadcast();
+}
+
+// ─── slots ──────────────────────────────────────────────────────────────────
+
+FString UDCRunSubsystem::GetSlotPrefix() const { return SaveSlotOverride.IsEmpty() ? FString(TEXT("DCRun")) : SaveSlotOverride; }
+FString UDCRunSubsystem::GetSlotName(int32 Slot) const { return GetSlotPrefix() + FString::FromInt(Slot); }
+FString UDCRunSubsystem::GetLeaderboardSlotName() const { return SaveSlotOverride.IsEmpty() ? FString(TEXT("DCLeaderboard")) : SaveSlotOverride + TEXT("_Leaderboard"); }
+
+FDCSaveSlotInfo UDCRunSubsystem::MakeSlotInfo(int32 Slot) const
+{
+	FDCSaveSlotInfo I;
+	I.Slot = Slot;
+	I.bUsed = true;
+	I.bFinished = IsFinished();
+	I.bWon = Phase == EDCGamePhase::Won;
+	I.EndReason = EndReason;
+	I.Seed = Seed;
+	I.Day = GetDay();
+	I.Hour = GetHourOfDay();
+	I.PlayTime = RunTime;
+	I.Cash = Cash;
+	I.MissionsSucceeded = MissionsSucceeded;
+	I.RosterCount = Roster.Num();
+	I.RoomsBuilt = RoomsBuilt;
+	I.SavedAt = FDateTime::UtcNow();
+	return I;
+}
+
+void UDCRunSubsystem::MigrateLegacySave() const
+{
+	if (bLegacyChecked) { return; }
+	bLegacyChecked = true;
+	const FString Legacy = GetSlotPrefix();
+	if (!UGameplayStatics::DoesSaveGameExist(Legacy, 0)) { return; }
+	int32 Target = INDEX_NONE;
+	for (int32 i = 0; i < NumSaveSlots; ++i) { if (!UGameplayStatics::DoesSaveGameExist(GetSlotName(i), 0)) { Target = i; break; } }
+	if (Target == INDEX_NONE) { return; } // every slot taken: leave the old save on disk untouched
+	UDCSaveGame* SG = Cast<UDCSaveGame>(UGameplayStatics::LoadGameFromSlot(Legacy, 0));
+	if (!SG || SG->Version < UDCSaveGame::MinVersion || SG->Version > UDCSaveGame::CurrentVersion || SG->Rooms.Num() == 0)
+	{
+		UE_LOG(LogDC, Warning, TEXT("[Sim] legacy save %s unusable, left in place"), *Legacy);
+		return;
+	}
+	SG->Version = UDCSaveGame::CurrentVersion;
+	if (!SG->RunId.IsValid()) { SG->RunId = FGuid::NewGuid(); }
+	if (SG->SavedAt.GetTicks() == 0) { SG->SavedAt = FDateTime::UtcNow(); }
+	if (UGameplayStatics::SaveGameToSlot(SG, GetSlotName(Target), 0))
+	{
+		UGameplayStatics::DeleteGameInSlot(Legacy, 0);
+		UE_LOG(LogDC, Display, TEXT("[Sim] migrated legacy save %s -> %s"), *Legacy, *GetSlotName(Target));
+	}
+	bSlotCacheValid = false;
+}
+
+void UDCRunSubsystem::EnsureSlotCache() const
+{
+	MigrateLegacySave();
+	if (bSlotCacheValid && SlotCache.Num() == NumSaveSlots) { return; }
+	bSlotCacheValid = true;
+	SlotCache.SetNum(NumSaveSlots);
+	const FDCBalance& B = DCImpl::Bal(*this);
+	for (int32 i = 0; i < NumSaveSlots; ++i)
+	{
+		FDCSaveSlotInfo I;
+		I.Slot = i;
+		const FString Name = GetSlotName(i);
+		const UDCSaveGame* SG = UGameplayStatics::DoesSaveGameExist(Name, 0) ? Cast<UDCSaveGame>(UGameplayStatics::LoadGameFromSlot(Name, 0)) : nullptr;
+		if (SG && SG->Version >= UDCSaveGame::MinVersion && SG->Version <= UDCSaveGame::CurrentVersion && SG->Rooms.Num() > 0)
+		{
+			const double Hours = B.StartHour + SG->RunTime * B.GameMinutesPerSecond / 60.0;
+			I.bUsed = true;
+			I.bFinished = SG->bFinished;
+			I.bWon = SG->bWon;
+			I.EndReason = SG->EndReason;
+			I.Seed = SG->Seed;
+			I.Day = FMath::FloorToInt(Hours / 24.0) + 1;
+			I.Hour = (float)FMath::Fmod(Hours, 24.0);
+			I.PlayTime = SG->RunTime;
+			I.Cash = SG->Cash;
+			I.MissionsSucceeded = SG->MissionsSucceeded;
+			I.RosterCount = SG->Roster.Num();
+			I.RoomsBuilt = SG->RoomsBuilt;
+			I.SavedAt = SG->SavedAt;
+		}
+		SlotCache[i] = I;
+	}
+}
+
+TArray<FDCSaveSlotInfo> UDCRunSubsystem::GetSaveSlots() const
+{
+	EnsureSlotCache();
+	return SlotCache;
+}
+
+int32 UDCRunSubsystem::GetCurrentSlot() const { return bActive ? CurrentSlot : -1; }
+
+int32 UDCRunSubsystem::GetMostRecentSlot(bool bUnfinishedOnly) const
+{
+	EnsureSlotCache();
+	int32 Best = -1;
+	for (const FDCSaveSlotInfo& I : SlotCache)
+	{
+		if (!I.bUsed || (bUnfinishedOnly && I.bFinished)) { continue; }
+		if (Best < 0 || I.SavedAt > SlotCache[Best].SavedAt) { Best = I.Slot; }
+	}
+	return Best;
+}
+
+// ─── leaderboard ────────────────────────────────────────────────────────────
+
+namespace
+{
+	bool RecordBefore(const FDCRunRecord& A, const FDCRunRecord& B)
+	{
+		if (A.bWon != B.bWon) { return A.bWon; }
+		if (A.bWon && A.PlayTime != B.PlayTime) { return A.PlayTime < B.PlayTime; }
+		if (!A.bWon && A.DaysSurvived != B.DaysSurvived) { return A.DaysSurvived > B.DaysSurvived; }
+		if (A.TotalTake != B.TotalTake) { return A.TotalTake > B.TotalTake; }
+		return A.EndedAt > B.EndedAt;
+	}
+}
+
+void UDCRunSubsystem::EnsureLeaderboard() const
+{
+	if (bLeaderboardLoaded) { return; }
+	bLeaderboardLoaded = true;
+	LeaderboardCache.Reset(); LeaderboardIds.Reset();
+	const FString Name = GetLeaderboardSlotName();
+	if (!UGameplayStatics::DoesSaveGameExist(Name, 0)) { return; }
+	if (const UDCLeaderboardSave* LB = Cast<UDCLeaderboardSave>(UGameplayStatics::LoadGameFromSlot(Name, 0)))
+	{
+		LeaderboardCache = LB->Records;
+		LeaderboardIds = LB->RunIds;
+		LeaderboardIds.SetNum(LeaderboardCache.Num());
+	}
+}
+
+TArray<FDCRunRecord> UDCRunSubsystem::GetLeaderboard() const
+{
+	EnsureLeaderboard();
+	TArray<FDCRunRecord> Out = LeaderboardCache;
+	Out.StableSort(RecordBefore);
+	return Out;
+}
+
+void UDCRunSubsystem::ClearLeaderboard()
+{
+	LeaderboardCache.Reset(); LeaderboardIds.Reset();
+	bLeaderboardLoaded = true;
+	const FString Name = GetLeaderboardSlotName();
+	if (UGameplayStatics::DoesSaveGameExist(Name, 0)) { UGameplayStatics::DeleteGameInSlot(Name, 0); }
+}
+
+void UDCRunSubsystem::RecordFinishedRun()
+{
+	if (!bSaveEnabled) { return; } // tests/bots: no disk writes, no leaderboard
+	if (!RunId.IsValid()) { RunId = FGuid::NewGuid(); }
+	if (CurrentSlot >= 0) { WriteSlot(CurrentSlot); }
+
+	EnsureLeaderboard();
+	if (LeaderboardIds.Contains(RunId)) { return; } // this run (or a copy of it from another slot) is already on the board
+	const FDCRunSummary Sum = GetRunSummary();
+	FDCRunRecord R;
+	R.Seed = Sum.Seed; R.bWon = Sum.bWon; R.EndReason = Sum.EndReason; R.PlayTime = Sum.PlayTime; R.DaysSurvived = Sum.DaysSurvived;
+	R.MissionsSucceeded = Sum.MissionsSucceeded; R.TotalTake = Sum.TotalTake; R.RoomsBuilt = Sum.RoomsBuilt; R.EndedAt = FDateTime::UtcNow();
+	LeaderboardCache.Add(R);
+	LeaderboardIds.Add(RunId);
+	if (LeaderboardCache.Num() > UDCLeaderboardSave::MaxRecords)
+	{
+		int32 Worst = 0; // drop the worst record
+		for (int32 i = 1; i < LeaderboardCache.Num(); ++i) { if (RecordBefore(LeaderboardCache[Worst], LeaderboardCache[i])) { Worst = i; } }
+		LeaderboardCache.RemoveAt(Worst);
+		LeaderboardIds.RemoveAt(Worst);
+	}
+	UDCLeaderboardSave* LB = Cast<UDCLeaderboardSave>(UGameplayStatics::CreateSaveGameObject(UDCLeaderboardSave::StaticClass()));
+	if (!LB) { return; }
+	LB->Records = LeaderboardCache;
+	LB->RunIds = LeaderboardIds;
+	if (!UGameplayStatics::SaveGameToSlot(LB, GetLeaderboardSlotName(), 0)) { UE_LOG(LogDC, Warning, TEXT("[Sim] leaderboard save failed")); }
 }
 
 bool UDCRunSubsystem::HasActiveRun() const { return bActive; }
@@ -632,7 +895,7 @@ bool UDCRunSubsystem::EquipFromStash(FName ItemId, int32 CriminalId, FString* Ou
 void UDCRunSubsystem::Unequip(int32 CriminalId, EDCGearSlot Slot)
 {
 	FDCCriminal* C = DCImpl::RosterMut(*this, CriminalId);
-	if (!C || C->Status == EDCCriminalStatus::OnMission) { return; }
+	if (!C || Phase != EDCGamePhase::Playing || C->Status == EDCCriminalStatus::OnMission) { return; }
 	FName Item;
 	if (C->Equipped.RemoveAndCopyValue(Slot, Item)) { Stash.Add(Item); MarkChanged(); }
 	FlushChanged();
@@ -641,7 +904,7 @@ void UDCRunSubsystem::Unequip(int32 CriminalId, EDCGearSlot Slot)
 bool UDCRunSubsystem::SellFromStash(FName ItemId)
 {
 	const FDCGearItem* I = FindGear(ItemId);
-	if (!I || !bActive || Stash.RemoveSingle(ItemId) == 0) { return false; }
+	if (!I || !bActive || Phase != EDCGamePhase::Playing || Stash.RemoveSingle(ItemId) == 0) { return false; }
 	Cash += FMath::RoundToInt(I->Price * Data->Balance.SellRefund);
 	MarkChanged();
 	FlushChanged();
@@ -671,7 +934,7 @@ bool UDCRunSubsystem::Hire(int32 RecruitId, FString* OutError)
 void UDCRunSubsystem::Dismiss(int32 CriminalId)
 {
 	const int32 Idx = Roster.IndexOfByPredicate([CriminalId](const FDCCriminal& C) { return C.Id == CriminalId; });
-	if (Idx == INDEX_NONE || Roster[Idx].Status == EDCCriminalStatus::OnMission) { return; }
+	if (Idx == INDEX_NONE || Phase != EDCGamePhase::Playing || Roster[Idx].Status == EDCCriminalStatus::OnMission) { return; }
 	for (const TPair<EDCGearSlot, FName>& G : Roster[Idx].Equipped) { Stash.Add(G.Value); }
 	Roster.RemoveAt(Idx);
 	MarkChanged();
@@ -823,18 +1086,3 @@ bool UDCRunSubsystem::PickPerk(FName PerkId)
 	return true;
 }
 
-// ── v3 save slots + leaderboard: LEAD STUBS (Sim agent replaces) ─────────────────────────────────────────────────
-TArray<FDCSaveSlotInfo> UDCRunSubsystem::GetSaveSlots() const
-{
-	TArray<FDCSaveSlotInfo> Out;
-	for (int32 i = 0; i < NumSaveSlots; ++i) { FDCSaveSlotInfo I; I.Slot = i; I.bUsed = (i == 0 && HasSave()); Out.Add(I); }
-	return Out;
-}
-int32 UDCRunSubsystem::GetCurrentSlot() const { return bActive ? 0 : -1; }
-int32 UDCRunSubsystem::GetMostRecentSlot(bool) const { return HasSave() ? 0 : -1; }
-void UDCRunSubsystem::StartNewRunInSlot(int32, int32 InSeed) { StartNewRun(InSeed); }
-bool UDCRunSubsystem::LoadSlot(int32 Slot) { return Slot == 0 && ContinueRun(); }
-bool UDCRunSubsystem::SaveToSlot(int32 Slot) { if (Slot != 0) { return false; } SaveRun(); return true; }
-bool UDCRunSubsystem::DeleteSlot(int32 Slot) { if (Slot != 0) { return false; } UGameplayStatics::DeleteGameInSlot(GetSlotName(), 0); return true; }
-TArray<FDCRunRecord> UDCRunSubsystem::GetLeaderboard() const { return {}; }
-void UDCRunSubsystem::ClearLeaderboard() {}
