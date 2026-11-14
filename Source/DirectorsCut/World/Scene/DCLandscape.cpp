@@ -202,7 +202,8 @@ void ADCLandscape::InitAssets()
 	// ---- ground (M_DC_Ground)
 	const C GrassA(0.055f, 0.12f, 0.03f), GrassB(0.15f, 0.155f, 0.06f), GrassC(0.035f, 0.08f, 0.025f);
 	Ground("Meadow", 0, GrassA, GrassB, GrassC, 0.92f);
-	Ground("Lawn", 1, C(0.05f, 0.12f, 0.03f), C(0.08f, 0.14f, 0.04f), C(0.04f, 0.10f, 0.03f), 0.9f, 1.f);
+	// the grass round the house: plain, natural meadow ground (no mowing stripes), a touch greener than the field
+	Ground("Lawn", 0, C(0.05f, 0.12f, 0.03f), C(0.12f, 0.145f, 0.05f), C(0.035f, 0.085f, 0.025f), 0.92f);
 	Ground("Gravel", 2, C(0.30f, 0.27f, 0.22f), C(0.12f, 0.105f, 0.085f), C(0.16f, 0.12f, 0.08f), 0.85f);
 	Ground("Lane", 3, C(0.22f, 0.16f, 0.10f), C(0.10f, 0.07f, 0.045f), GrassA, 0.85f, 0.f, DCSite::LaneY, DCSite::LaneW + 240.f);
 	Ground("Drive", 3, C(0.22f, 0.16f, 0.10f), C(0.10f, 0.07f, 0.045f), GrassA, 0.85f, 1.f, DCSite::DriveX, DCSite::DriveW + 160.f);
@@ -247,13 +248,9 @@ void ADCLandscape::InitAssets()
 	Proc("Window", 0, C(0.02f, 0.025f, 0.03f), C(0.02f, 0.025f, 0.03f), 0.2f);
 
 	// ---- night glow (M_DC_Neon, strength fades in at dusk)
-	Glow("BulbAmber", C(1.f, 0.55f, 0.15f), 22.f);
-	Glow("BulbRose", C(1.f, 0.22f, 0.40f), 22.f);
-	Glow("BulbTeal", C(0.10f, 0.85f, 0.80f), 22.f);
-	Glow("BulbLime", C(0.55f, 1.f, 0.15f), 22.f);
-	Glow("Lantern", C(1.f, 0.62f, 0.25f), 30.f, 0.05f);
+	Glow("BulbAmber", C(1.f, 0.45f, 0.12f), 9.f, 0.04f);
+	Glow("Lantern", C(1.f, 0.55f, 0.2f), 14.f, 0.06f);
 	Glow("FarmWindow", C(1.f, 0.6f, 0.28f), 12.f);
-	Glow("Flood", C(1.f, 0.88f, 0.7f), 45.f);
 	Glow("Ember", C(1.f, 0.2f, 0.02f), 10.f, 0.6f);
 	Glow("Flame", C(1.f, 0.32f, 0.04f), 14.f, 0.35f);
 	FireMID = Cast<UMaterialInstanceDynamic>(M("Flame"));

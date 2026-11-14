@@ -289,7 +289,7 @@ void ADCDayNight::Apply(float H, float DeltaSeconds)
 			L->SetVisibility(K > 0.001f);
 		}
 	}
-	if (LampMat) { LampMat->SetScalarParameterValue("Strength", 0.15f + 40.f * LampAlpha); }
+	if (LampMat) { LampMat->SetScalarParameterValue("Strength", 0.1f + 16.f * LampAlpha); } // warm lantern glass
 
 	// ---------------------------------------------------------------- exposure, grade, bloom
 	if (Post)

@@ -3,6 +3,7 @@
 #include "Core/DCSiteLayout.h"
 #include "Core/DCRunSubsystem.h"
 #include "Core/DCSettings.h"
+#include "DirectorsCut.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Components/PointLightComponent.h"
@@ -342,6 +343,7 @@ void ADCVehicle::DriveAway(int32 SlotIndex)
 	// Start from where we actually are (in case we were nudged).
 	if (Pts.Num()) { Pts[0] = FVector(GetActorLocation().X, GetActorLocation().Y, 0.f); }
 	BuildRoute({ Pts }, { false }, 0.f, Cruise);
+	CheckGateClearance(SlotIndex, false);
 	HideAtS = -1.f;
 	for (const FSample& S : Route) { if (S.P.X > OffscreenX) { HideAtS = S.S; break; } }
 	TargetSlot = INDEX_NONE;
@@ -374,6 +376,7 @@ void ADCVehicle::DriveIn(int32 SlotIndex)
 	Rev.Add(FVector(P.X + Dir * 8.f, FMath::Lerp(PullY, P.Y, 0.55f), 0.f));
 	Rev.Add(FVector(P.X, P.Y, 0.f));
 	BuildRoute({ Fwd, Rev }, { false, true }, Cruise, 0.f);
+	CheckGateClearance(SlotIndex, true);
 	HideAtS = -1.f;
 	TargetSlot = SlotIndex;
 	const FVector Start = Route.Num() ? Route[0].P : FVector(OffscreenX, DCSite::LaneY, 0.f);
@@ -385,6 +388,41 @@ void ADCVehicle::DriveIn(int32 SlotIndex)
 	CarState = EDCCarState::Driving;
 	StuckTime = 0.f;
 	DriveTime = 0.f;
+}
+
+void ADCVehicle::CheckGateClearance(int32 SlotIndex, bool bArriving) const
+{
+	static TSet<int32> Checked;
+	const int32 Key = SlotIndex * 2 + (bArriving ? 1 : 0);
+	if (Checked.Contains(Key) || Route.Num() < 2) { return; }
+	Checked.Add(Key);
+	TArray<FVector4f> Obs;
+	DCSite::GateObstacles(Obs);
+	float Best = 1e9f;
+	FVector2D BestAt = FVector2D::ZeroVector;
+	for (int32 i = 0; i + 1 < Route.Num(); ++i)
+	{
+		const FVector2D P(Route[i].P.X, Route[i].P.Y);
+		if (FMath::Abs(P.Y - DCSite::FenceY) > 900.f || FMath::Abs(P.X - DCSite::DriveX) > 1500.f) { continue; }
+		const FVector2D D = FVector2D(Route[i + 1].P.X - P.X, Route[i + 1].P.Y - P.Y).GetSafeNormal();
+		if (D.IsNearlyZero()) { continue; }
+		for (const FVector4f& O : Obs)
+		{
+			const FVector2D L = FVector2D(O.X, O.Y) - P;
+			const float X = FVector2D::DotProduct(L, D), Y = -D.Y * L.X + D.X * L.Y;
+			const float Dx = FMath::Max(FMath::Abs(X) - Length * 0.5f, 0.f), Dy = FMath::Max(FMath::Abs(Y) - Width * 0.5f, 0.f);
+			const float Dist = FMath::Sqrt(Dx * Dx + Dy * Dy) - O.Z;
+			if (Dist < Best) { Best = Dist; BestAt = FVector2D(O.X, O.Y); }
+		}
+	}
+	if (Best < 25.f)
+	{
+		UE_LOG(LogDC, Warning, TEXT("[Vehicle] slot %d %s: only %.0f cm from the gateway at (%.0f, %.0f)"), SlotIndex, bArriving ? TEXT("in") : TEXT("out"), Best, BestAt.X, BestAt.Y);
+	}
+	else
+	{
+		UE_LOG(LogDC, Display, TEXT("[Vehicle] slot %d %s: gateway clearance %.0f cm"), SlotIndex, bArriving ? TEXT("in") : TEXT("out"), Best);
+	}
 }
 
 void ADCVehicle::BuildRoute(const TArray<TArray<FVector>>& Segments, const TArray<bool>& Reverse, float StartSpeed, float EndSpeed)

@@ -36,7 +36,7 @@ namespace
 	// field rectangles (across the lane, measured from it)
 	const FBox2D SoilField(FVector2D(-7200.f, DCSite::LaneY - 5100.f), FVector2D(-1100.f, DCSite::LaneY - 950.f));
 	const FBox2D StubbleField(FVector2D(1100.f, DCSite::LaneY - 5100.f), FVector2D(7200.f, DCSite::LaneY - 950.f));
-	constexpr float FenceY = DCSite::LaneY + 380.f;   // post-and-rail fence on the house side of the lane
+	using DCSite::FenceY;                              // post-and-rail fence on the house side of the lane (site contract)
 	constexpr float BoundaryY = DCSite::LaneY - 430.f;// stone wall / hedgerow on the field side
 	constexpr float PoleY = DCSite::LaneY - 330.f;    // telegraph poles on the far verge
 }
@@ -95,7 +95,7 @@ void ADCLandscape::BuildTerrain()
 		const FVector2D C = (A + B) * 0.5f;
 		Slab(Mat, Cube, FVector(C.X, C.Y, Top - 0.5f), FVector((D.Size() + W * 0.6f) / 100.f, W / 100.f, 0.01f), FMath::RadiansToDegrees(FMath::Atan2(D.Y, D.X)));
 	};
-	// mown lawn round the house
+	// short natural grass round the house (plain meadow ground, no mowing stripes)
 	Slab("Lawn", Disc, FVector(LawnC.X, LawnC.Y, GroundTop + 0.4f), FVector(LawnR.X / 50.f, LawnR.Y / 50.f, 1.f), 12.f);
 	// fields across the lane
 	Skin("Soil", SoilField, GroundTop + 0.5f);
@@ -164,7 +164,7 @@ void ADCLandscape::BuildVegetation()
 	Grid(7000.f, 85.f, 0.f, 1.f);
 	Grid(13500.f, 150.f, 7000.f, 1.15f);
 
-	// a ragged fringe of taller grass along the lawn edge so the mown patch reads as mown
+	// a ragged fringe of taller grass along the lawn edge so the short grass blends into the meadow
 	for (int32 i = 0; i < 520; ++i)
 	{
 		const float A = R.FRandRange(0.f, 2.f * PI);
@@ -396,33 +396,36 @@ void ADCLandscape::BuildFieldsAndFences()
 		if (i % 5 == 0) { Add("Cyl", "Hay", FTransform(FRotator(90.f, Yaw, 0.f), FVector(P.X + 150.f * FMath::Cos(FMath::DegreesToRadians(Yaw + 90.f)), P.Y + 150.f * FMath::Sin(FMath::DegreesToRadians(Yaw + 90.f)), GroundTop + 72.f), FVector(1.45f, 1.45f, 1.25f))); }
 	}
 
-	// post-and-rail fence on the house side of the lane, open at the driveway
-	const float GateHalf = 260.f;
-	for (float X = -5800.f; X <= 5800.f; X += 260.f)
-	{
-		const bool bGap = FMath::Abs(X - DriveX) < GateHalf - 1.f;
-		if (bGap) { continue; }
-		const float Lean = R.FRandRange(-3.f, 3.f);
-		Add("Post", "TimberV", FTransform(FRotator(Lean, 0.f, R.FRandRange(-3.f, 3.f)), FVector(X, FenceY, GroundTop - 10.f), FVector(0.15f, 0.15f, 1.25f)));
-		const float NX = X + 260.f;
-		if (NX > 5800.f || FMath::Abs(NX - DriveX) < GateHalf - 1.f) { continue; }
-		if (R.FRand() < 0.06f) { Rod("Timber", FVector(X, FenceY, 60.f), FVector(NX, FenceY + 10.f, 5.f), 9.f); continue; } // broken rail
-		Rod("Timber", FVector(X, FenceY, 58.f), FVector(NX, FenceY, 58.f + R.FRandRange(-4.f, 4.f)), 9.f);
-		Rod("Timber", FVector(X, FenceY, 98.f), FVector(NX, FenceY, 98.f + R.FRandRange(-4.f, 4.f)), 9.f);
-	}
-	// gate posts + an open five-bar gate
+	// post-and-rail fence on the house side of the lane, open at the driveway. Posts are laid out outwards from the two
+	// gate posts so the rails always meet them.
 	const FVector GL(DriveX - GateHalf, FenceY, GroundTop), GR(DriveX + GateHalf, FenceY, GroundTop);
+	for (const float Side : { -1.f, 1.f })
+	{
+		float X = (Side < 0.f ? GL.X : GR.X);
+		for (int32 k = 0; k < 40; ++k)
+		{
+			const float NX = X + Side * 260.f;
+			if (FMath::Abs(NX) > 5800.f) { break; }
+			Add("Post", "TimberV", FTransform(FRotator(R.FRandRange(-3.f, 3.f), 0.f, R.FRandRange(-3.f, 3.f)), FVector(NX, FenceY, GroundTop - 10.f), FVector(0.15f, 0.15f, 1.25f)));
+			if (k > 0 && R.FRand() < 0.06f) { Rod("Timber", FVector(X, FenceY, 60.f), FVector(NX, FenceY + 10.f, 5.f), 9.f); X = NX; continue; } // broken rail
+			Rod("Timber", FVector(X, FenceY, 58.f), FVector(NX, FenceY, 58.f + R.FRandRange(-4.f, 4.f)), 9.f);
+			Rod("Timber", FVector(X, FenceY, 98.f), FVector(NX, FenceY, 98.f + R.FRandRange(-4.f, 4.f)), 9.f);
+			X = NX;
+		}
+	}
+	// gate posts + a five-bar gate swung right back outwards onto the verge (DCSite::GateOpenYaw), well clear of the
+	// driveway and the turn onto the lane
 	for (const FVector& G : { GL, GR }) { Add("Post", "TimberV", FTransform(FRotator::ZeroRotator, G - FVector(0, 0, 10.f), FVector(0.24f, 0.24f, 1.45f))); }
 	{
-		const FRotator GateRot(0.f, 72.f, 0.f); // swung open towards the yard
-		const FVector Hinge = GL + FVector(14.f, 0, 0);
+		const FVector Hinge(GateHinge().X, GateHinge().Y, GroundTop);
+		const FVector End(GateLeafEnd().X, GateLeafEnd().Y, GroundTop);
 		for (int32 b = 0; b < 5; ++b)
 		{
 			const float Z = 30.f + b * 22.f;
-			Rod("PaintWhite", Hinge + FVector(0, 0, Z), Hinge + GateRot.RotateVector(FVector(330.f, 0, 0)) + FVector(0, 0, Z), 7.f);
+			Rod("PaintWhite", Hinge + FVector(0, 0, Z), End + FVector(0, 0, Z), 7.f);
 		}
-		Rod("PaintWhite", Hinge + FVector(0, 0, 30.f), Hinge + GateRot.RotateVector(FVector(330.f, 0, 0)) + FVector(0, 0, 118.f), 7.f);
-		Rod("PaintWhite", Hinge + GateRot.RotateVector(FVector(330.f, 0, 0)) + FVector(0, 0, 25.f), Hinge + GateRot.RotateVector(FVector(330.f, 0, 0)) + FVector(0, 0, 122.f), 8.f);
+		Rod("PaintWhite", Hinge + FVector(0, 0, 30.f), End + FVector(0, 0, 118.f), 7.f);
+		Rod("PaintWhite", End + FVector(0, 0, 25.f), End + FVector(0, 0, 122.f), 8.f);
 	}
 
 	// dry-stone wall along the ploughed field
@@ -477,7 +480,7 @@ void ADCLandscape::BuildLaneProps()
 		for (float S : { -70.f, 70.f }) { Sag(Tops[i] + FVector(0, S, 0), Tops[i + 1] + FVector(0, S, 0), 75.f, 10, "Wire", 2.2f); }
 	}
 	// mailbox on a post by the gate
-	const FVector MB(DriveX + 360.f, FenceY - 70.f, GroundTop);
+	const FVector MB(MailboxPos().X, MailboxPos().Y, GroundTop);
 	Add("Post", "Timber", FTransform(FRotator::ZeroRotator, MB, FVector(0.14f, 0.14f, 1.05f)));
 	Box("PaintGreen", MB + FVector(0, 0, 118.f), FVector(48.f, 26.f, 26.f));
 	Add("Cyl", "PaintGreen", FTransform(FRotator(90.f, 0.f, 0.f), MB + FVector(0, 0, 131.f), FVector(0.26f, 0.26f, 0.48f)));
@@ -491,7 +494,7 @@ void ADCLandscape::BuildLaneProps()
 }
 
 // =====================================================================================================================
-// The garden: campfire with log seats, yard festoon poles, a floodlight
+// The garden: campfire with log seats, yard festoon poles
 // =====================================================================================================================
 
 void ADCLandscape::BuildGarden()
@@ -539,23 +542,9 @@ void ADCLandscape::BuildGarden()
 		Add("Cyl", "LogWood", FTransform(FRotator(90.f, 25.f, 0.f), F + FVector(-330.f, 160.f, 0.f) + FRotator(0.f, 25.f, 0.f).RotateVector(FVector(0.f, Col * 26.f + Row * 13.f, 13.f + Row * 22.f)), FVector(0.24f, 0.24f, 0.9f)));
 	}
 
-	// festoon poles around the yard (outside the yard rect, nothing tall inside it)
-	const float Ys[2] = { YardRect().Min.Y - 80.f, YardRect().Max.Y - 30.f };
-	const FBox2D Yd = YardRect();
-	const float Xs[4] = { Yd.Min.X - 90.f, FMath::Lerp(Yd.Min.X, Yd.Max.X, 0.3f), FMath::Lerp(Yd.Min.X, Yd.Max.X, 0.68f), Yd.Max.X + 90.f };
-	for (float Y : Ys) { for (float X : Xs) { Add("Post", "TimberV", FTransform(FRotator(R.FRandRange(-2.f, 2.f), 0.f, R.FRandRange(-2.f, 2.f)), FVector(X, Y, GroundTop - 15.f), FVector(0.13f, 0.13f, 3.55f))); } }
-
-	// floodlight on a pole at the yard's back corner, aimed into the yard
-	const FVector FP(FMath::Max(YardRect().Max.X, BuildingClearRect().Max.X) + 60.f, YardRect().Max.Y - 40.f, GroundTop);
-	Add("Post", "Timber", FTransform(FRotator::ZeroRotator, FP, FVector(0.18f, 0.18f, 5.1f)));
-	const FVector Lamp = FP + FVector(-35.f, -35.f, 490.f);
-	Box("Metal", Lamp, FVector(34.f, 26.f, 22.f), FRotator(-35.f, -135.f, 0.f));
-	Box("Flood", Lamp + FRotator(-35.f, -135.f, 0.f).RotateVector(FVector(12.f, 0, 0)), FVector(4.f, 22.f, 16.f), FRotator(-35.f, -135.f, 0.f), false);
-	if (DayNight)
-	{
-		const FVector Aim(YardRect().GetCenter().X - 200.f, YardRect().GetCenter().Y, 0.f);
-		DayNight->AddStreetLight(Lamp + FVector(-20.f, -20.f, -10.f), Aim, FLinearColor(1.f, 0.82f, 0.62f), 550.f, 2600.f, 58.f, false);
-	}
+	// three festoon poles along the house side of the yard (nothing tall where the cars drive). No floodlight: the yard
+	// is meant to sit in the dark, lit only by a few warm bulbs and the gate lanterns.
+	for (const FVector2D& P : YardFestoonPoles()) { Add("Post", "TimberV", FTransform(FRotator(R.FRandRange(-2.f, 2.f), 0.f, R.FRandRange(-2.f, 2.f)), FVector(P.X, P.Y, GroundTop - 15.f), FVector(0.13f, 0.13f, 3.55f))); }
 }
 
 // =====================================================================================================================
@@ -638,53 +627,46 @@ void ADCLandscape::BuildDistant()
 }
 
 // =====================================================================================================================
-// Night: festoon lights over the yard, lanterns on the fence, campfire light, fireflies, pond glow
+// Night: one dim festoon string by the yard, gate lanterns, campfire light, fireflies, pond glow
 // =====================================================================================================================
 
 void ADCLandscape::BuildNightLights()
 {
 	using namespace DCSite;
 	FRandomStream R(8080);
-	const FName Bulbs[4] = { "BulbAmber", "BulbRose", "BulbTeal", "BulbLime" };
-	const FLinearColor BulbCol[4] = { FLinearColor(1.f, 0.55f, 0.2f), FLinearColor(1.f, 0.35f, 0.5f), FLinearColor(1.f, 0.7f, 0.4f), FLinearColor(0.3f, 0.8f, 0.85f) };
 
-	// festoon strings: front row, back row and a zig-zag across the yard
-	const float Ys[2] = { YardRect().Min.Y - 80.f, YardRect().Max.Y - 30.f };
-	const FBox2D Yd = YardRect();
-	const float Xs[4] = { Yd.Min.X - 90.f, FMath::Lerp(Yd.Min.X, Yd.Max.X, 0.3f), FMath::Lerp(Yd.Min.X, Yd.Max.X, 0.68f), Yd.Max.X + 90.f };
+	// one festoon string along the house side of the yard: sparse amber bulbs, a couple of dim, short-range lights
+	const TArray<FVector2D> Poles = YardFestoonPoles();
 	const float PoleTop = 325.f;
-	TArray<TPair<FVector, FVector>> Spans;
-	for (int32 r = 0; r < 2; ++r) { for (int32 i = 0; i < 3; ++i) { Spans.Add({ FVector(Xs[i], Ys[r], PoleTop), FVector(Xs[i + 1], Ys[r], PoleTop) }); } }
-	for (int32 i = 0; i < 3; ++i) { Spans.Add({ FVector(Xs[i], Ys[i % 2], PoleTop - 8.f), FVector(Xs[i + 1], Ys[(i + 1) % 2], PoleTop - 8.f) }); }
-	int32 BulbIdx = 0;
-	for (int32 s = 0; s < Spans.Num(); ++s)
+	for (int32 s = 0; s + 1 < Poles.Num(); ++s)
 	{
+		const FVector A(Poles[s].X, Poles[s].Y, PoleTop), B(Poles[s + 1].X, Poles[s + 1].Y, PoleTop);
 		TArray<FVector> Pts;
-		const float Len = FVector::Dist(Spans[s].Key, Spans[s].Value);
-		Sag(Spans[s].Key, Spans[s].Value, 55.f + Len * 0.02f, 14, "Wire", 1.6f, &Pts);
-		const int32 NB = FMath::Max(4, FMath::RoundToInt(Len / 62.f));
+		const float Len = FVector::Dist(A, B);
+		Sag(A, B, 60.f + Len * 0.02f, 16, "Wire", 1.6f, &Pts);
+		const int32 NB = FMath::Max(4, FMath::RoundToInt(Len / 120.f));
 		for (int32 b = 1; b < NB; ++b)
 		{
 			const float u = (float)b / NB * (Pts.Num() - 1);
 			const int32 k = FMath::Min((int32)u, Pts.Num() - 2);
 			const FVector P = FMath::Lerp(Pts[k], Pts[k + 1], u - k) - FVector(0, 0, 9.f);
-			Add("Sphere", Bulbs[BulbIdx++ % 4], FTransform(FRotator::ZeroRotator, P, FVector(0.085f, 0.085f, 0.11f)), false);
+			Add("Sphere", "BulbAmber", FTransform(FRotator::ZeroRotator, P, FVector(0.075f, 0.075f, 0.1f)), false);
 		}
-		const FVector Mid = Pts[Pts.Num() / 2] - FVector(0, 0, 30.f);
-		NightPoint(Mid, BulbCol[s % 4], 55.f, 750.f);
+		for (const float T : { 0.3f, 0.7f })
+		{
+			const FVector P = Pts[FMath::RoundToInt(T * (Pts.Num() - 1))] - FVector(0, 0, 25.f);
+			NightPoint(P, FLinearColor(1.f, 0.52f, 0.2f), 9.f, 430.f, false, 0.04f);
+		}
 	}
 
-	// lanterns on the gate posts and two fence posts
-	const float GateHalf = 260.f;
-	const FVector LanternPos[4] = {
-		FVector(DriveX - GateHalf, FenceY, 155.f), FVector(DriveX + GateHalf, FenceY, 155.f),
-		FVector(YardRect().Min.X - 650.f, FenceY, 135.f), FVector(YardRect().Max.X + 650.f, FenceY, 135.f) };
-	for (const FVector& L : LanternPos)
+	// a small lantern on each gate post: a low, warm glow either side of the gateway
+	for (const float Side : { -1.f, 1.f })
 	{
+		const FVector L(DriveX + Side * GateHalf, FenceY, 152.f);
 		Box("Metal", L + FVector(0, 0, 18.f), FVector(20.f, 20.f, 5.f));
 		Box("Lantern", L, FVector(13.f, 13.f, 26.f), FRotator::ZeroRotator, false);
 		Box("Metal", L - FVector(0, 0, 15.f), FVector(18.f, 18.f, 4.f));
-		NightPoint(L + FVector(0, 0, 5.f), FLinearColor(1.f, 0.6f, 0.25f), 70.f, 520.f, false, 0.12f);
+		NightPoint(L + FVector(0, 0, 5.f), FLinearColor(1.f, 0.5f, 0.18f), 14.f, 320.f, false, 0.14f);
 	}
 
 	// campfire: the one shadowed night light

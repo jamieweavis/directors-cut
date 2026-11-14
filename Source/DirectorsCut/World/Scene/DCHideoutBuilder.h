@@ -2,14 +2,15 @@
 // Spawned by ADCGameMode::StartPlay (after ADCLandscape) before BeginPlay is dispatched. Deterministic and fast.
 //
 // The look: a small abandoned farmhouse (the Office) in open country, taken over by a crew. Camera-facing walls
-// (-X, -Y) are collapsed to knee-high stubs and rubble so the iso camera sees in; the back walls (+X, +Y) stand tall
-// with old windows.
+// (-X, -Y) and the partitions between rooms are razed to low stubs just above the floor so the iso camera sees into
+// every room; the back walls (+X, +Y) stand tall with old windows. No roof timbers. The Office has two warm porch
+// lanterns at its open front that come on at dusk.
 //
 // v3 build grid (DCHideoutGrid.cpp, Core/DCSiteLayout.h DCSite::Grid): every room is one cell of an irregular
 // (jittered) grid and the player chooses where each new room goes. All 8 room modules exist from the start; an
 // unplaced one is parked off-site and hidden. Whenever a placement or a room's stage changes, the builder regenerates
-// the whole house: per cell a floor, and per edge either a tall back wall (exterior +X/+Y), a collapsed stub (exterior
-// -X/-Y) or a low partition with a doorway at the edge midpoint (two finished rooms; built by the -side room). A room
+// the whole house: per cell a floor, and per edge either a tall back wall (exterior +X/+Y), a low stub (exterior
+// -X/-Y) or a low partition stub with a doorway gap at the edge midpoint (two finished rooms; built by the -side room). A room
 // under its first build is a slab + timber frame + scaffold. Rooms are EMPTY for now: one clickable station covers
 // each whole room and opens its panel. No house geometry collides (pawns path through the doorway midpoints).
 //
@@ -246,6 +247,12 @@ protected:
 	void TallEdge(const FVector2D& A, const FVector2D& B, float H, const FGridStyle& St, int32 Seed, bool bStepStart, bool bStepEnd);
 	void RuinEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed, float EndA, float EndB);
 	void PartitionEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed);
+	/** Wall lamp on the inside face of edge A->B at fraction T, height Z (room light). */
+	void BracketLamp(const FVector2D& A, const FVector2D& B, float T, float Z, const FLinearColor& Col, float Cd, float Radius);
+	/** The Office's two porch lantern posts (geometry; the night lights are added once, see BuildLightingAndPost). */
+	void OfficePorchLamps(const FVector2D Q[4]);
+	/** Porch lantern K (0 front-left, 1 front-right): post position and the direction the lantern hangs (room-local). */
+	static void PorchLampSpot(const FVector2D Q[4], int32 K, FVector2D& OutPost, FVector2D& OutDir);
 	void FrameRoom(const FVector2D Q[4], float H, int32 Seed, int32 ScaffoldEdge);
 	/** Scaffolding along edge E, just outside the room (E < 0: none). */
 	void EdgeScaffold(const FVector2D Q[4], int32 E, float H);

@@ -91,6 +91,8 @@ protected:
 	void BuildBody(int32 Seed);
 	void BuildRoute(const TArray<TArray<FVector>>& Segments, const TArray<bool>& Reverse, float StartSpeed, float EndSpeed);
 	FSample SampleAt(float S, FVector* OutTangent) const;
+	/** Once per slot and direction: logs the car body's closest approach to the gateway (posts, open gate, mailbox). */
+	void CheckGateClearance(int32 SlotIndex, bool bArriving) const;
 	void UpdateLights(float Dt, bool bDriving);
 	float TraceGround(const FVector& P) const;
 };

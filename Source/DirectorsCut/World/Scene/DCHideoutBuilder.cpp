@@ -818,6 +818,19 @@ void ADCHideoutBuilder::BuildLightingAndPost()
 		if (UMaterialInstanceDynamic* W = Cast<UMaterialInstanceDynamic>(M("Window"))) { DayNight->WindowMats.Add(W); }
 		DayNight->DustMat = Cast<UMaterialInstanceDynamic>(M("Dust"));
 		for (ULocalFogVolumeComponent* LF : SunFogs) { DayNight->AddShaftFog(LF); }
+		// porch lanterns on the Office (its cell never moves): glass + a soft warm pool on the ground at night
+		DayNight->LampMat = Cast<UMaterialInstanceDynamic>(M("LampHead"));
+		FVector2D Wc[4], Q[4];
+		DCSite::Grid::Corners(DCSite::Grid::OfficeCell(), Wc);
+		const FVector2D Ctr = DCSite::Grid::Centre(DCSite::Grid::OfficeCell());
+		for (int32 k = 0; k < 4; ++k) { Q[k] = Wc[k] - Ctr; }
+		for (int32 k = 0; k < 2; ++k)
+		{
+			FVector2D P, Out;
+			PorchLampSpot(Q, k, P, Out);
+			const FVector2D Arm = Ctr + P + Out * 34.f;
+			DayNight->AddStreetLight(FVector(Arm.X, Arm.Y, 176.f), FVector(Arm.X + Out.X * 90.f, Arm.Y + Out.Y * 90.f, 0.f), FLinearColor(1.f, 0.6f, 0.3f), 60.f, 620.f, 75.f, false);
+		}
 	}
 }
 

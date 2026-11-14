@@ -256,11 +256,8 @@ void ADCHideoutBuilder::BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 
 			}
 			if (Grid::IsFrontEdge(e))
 			{
-				// Collapsed front. Its end rises where it meets a standing back wall.
-				float EndA = 35.f + H01(S, 1) * 40.f, EndB = 35.f + H01(S, 2) * 40.f;
-				if (e == 0 && bTall[1]) { EndB = 115.f + H01(S, 3) * 70.f; }
-				if (e == 3 && bTall[2]) { EndA = 115.f + H01(S, 4) * 70.f; }
-				RuinEdge(A, B, St, S, EndA, EndB);
+				// Collapsed front: razed to a low stub just above the floor so the camera sees the whole room.
+				RuinEdge(A, B, St, S, 16.f + H01(S, 1) * 8.f, 16.f + H01(S, 2) * 8.f);
 			}
 			else
 			{
@@ -277,12 +274,18 @@ void ADCHideoutBuilder::BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 
 			const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Q[2].Y - Q[1].Y, Q[2].X - Q[1].X));
 			Deco(EDCShape::Cube, FVector(Q[2].X + In.X, Q[2].Y + In.Y, (H + 14.f) * 0.5f), FVector(42.f, 42.f, H + 14.f), St.Outer, FRotator(0, Yaw, 0));
 		}
-		// a broken joist across the room with a bare bulb (the room's light)
-		const FVector2D J0 = (Q[3] + Q[0]) * 0.5f, J1 = (Q[1] + Q[2]) * 0.5f;
-		const float JZ = H - 14.f;
-		Bar(FVector(J0.X, J0.Y, JZ), FVector(J1.X, J1.Y, JZ + HS(Seed, 9) * 6.f), 14.f, 18.f, "TimberDark");
-		const FVector2D BulbP = FMath::Lerp(J0, J1, 0.45f + HS(Seed, 10) * 0.08f);
-		HangingBulb(FVector(BulbP.X, BulbP.Y, JZ - 70.f), JZ - 9.f, GWarm, 30.f, 760.f, true);
+		// The room's light (no roof timbers any more): a bracket lamp on a standing back wall, else a bare light.
+		if (bTall[2] || bTall[1])
+		{
+			const int32 E = bTall[2] ? 2 : 1;
+			BracketLamp(Q[E], Q[(E + 1) & 3], 0.5f + HS(Seed, 10) * 0.08f, FMath::Min(H - 40.f, 215.f), GWarm, 30.f, 760.f);
+		}
+		else
+		{
+			const FVector2D C = FMath::Lerp(Q[0], Q[2], 0.5f);
+			Point(FVector(C.X, C.Y, FMath::Min(H - 40.f, 230.f)), GWarm, 26.f, 760.f, true, true, 4.f);
+		}
+		if (Room->RoomType == EDCRoomType::Office) { OfficePorchLamps(Q); }
 
 		// upgrade scaffolding (Building group: only visible while an upgrade is running)
 		CurGroup = DCGroups::Building;
@@ -401,62 +404,97 @@ void ADCHideoutBuilder::RuinEdge(const FVector2D& A, const FVector2D& B, const F
 	const float HalfT = GWallT * 0.5f;
 	EdgeBox(A, B, -HalfT, L + HalfT, HalfT, -4.f, 9.f, GWallT + 12.f, "StoneDark");                 // foundation lip
 
-	// ragged stub: chunks along the edge, high at the ends, broken down in the middle, the odd gap
+	// the last course or two of the old wall: a low, slightly uneven stub along the whole edge, the odd gap
 	float Tc = -HalfT;
 	int32 K = 0;
 	while (Tc < L + HalfT - 1.f)
 	{
-		const float Len = FMath::Min(32.f + H01(Seed, 100 + K) * 46.f, L + HalfT - Tc);
+		const float Len = FMath::Min(40.f + H01(Seed, 100 + K) * 50.f, L + HalfT - Tc);
 		const float U = FMath::Clamp((Tc + Len * 0.5f) / L, 0.f, 1.f);
 		const bool bEnd = Tc < 40.f || Tc + Len > L - 40.f;
-		if (bEnd || H01(Seed, 200 + K) < 0.86f)
+		if (bEnd || H01(Seed, 200 + K) < 0.9f)
 		{
-			const float Base = FMath::Lerp(EndA, EndB, U) * (1.f - 0.62f * FMath::Sin(PI * U));
-			const float Hc = FMath::Max(12.f, Base + HS(Seed, 300 + K) * 14.f);
-			EdgeBox(A, B, Tc, Tc + Len - 1.5f, HalfT + HS(Seed, 400 + K) * 2.5f, 0.f, Hc, GWallT - 2.f + HS(Seed, 500 + K) * 2.f, St.Front);
+			const float Hc = FMath::Max(10.f, FMath::Lerp(EndA, EndB, U) + HS(Seed, 300 + K) * 5.f);
+			EdgeBox(A, B, Tc, Tc + Len - 1.5f, HalfT + HS(Seed, 400 + K) * 1.5f, 0.f, Hc, GWallT - 2.f, St.Front);
 		}
 		Tc += Len;
 		++K;
 	}
 
-	// fallen masonry outside, a little inside, plus weeds pushing through
+	// weeds pushing through outside the stub
 	const FVector2D D = (B - A).GetSafeNormal();
 	const FVector2D N(-D.Y, D.X);
-	const int32 Count = FMath::Max(4, FMath::RoundToInt(L / 42.f));
-	for (int32 i = 0; i < Count; ++i)
-	{
-		const bool bIn = H01(Seed, 600 + i) < 0.2f;
-		const float Out = bIn ? 25.f + H01(Seed, 700 + i) * 45.f : -(18.f + H01(Seed, 700 + i) * 95.f);
-		const FVector2D P = A + D * (H01(Seed, 800 + i) * L) + N * Out;
-		const float S = bIn ? 9.f + H01(Seed, 900 + i) * 10.f : 11.f + H01(Seed, 900 + i) * 20.f;
-		const FRotator R(HS(Seed, 1000 + i) * 30.f, H01(Seed, 1100 + i) * 360.f, HS(Seed, 1200 + i) * 30.f);
-		Deco(EDCShape::Cube, FVector(P.X, P.Y, S * 0.3f), FVector(S * 1.4f, S, S * 0.7f), H01(Seed, 1300 + i) < 0.5f ? St.Front : FName("Rubble"), R);
-	}
 	const FVector2D WP = A + D * (L * (0.3f + 0.4f * H01(Seed, 1400))) - N * 55.f;
 	Weeds(FVector(WP.X, WP.Y, 0.f), 70.f, 9, Seed, 55.f);
 }
 
 void ADCHideoutBuilder::PartitionEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed)
 {
+	// Interior wall razed to a low stub; the gap at the midpoint is the doorway pawns walk through.
 	const float L = FVector2D::Distance(A, B);
 	const float HalfT = GWallT * 0.5f;
 	const float D0 = L * 0.5f - GDoorW * 0.5f, D1 = L * 0.5f + GDoorW * 0.5f;
-	const float Base = 82.f + H01(Seed, 1) * 22.f;
+	const float Base = 14.f + H01(Seed, 1) * 6.f;
 	auto Run = [&](float T0, float T1, int32 K)
 	{
 		const int32 Pieces = 3;
 		for (int32 p = 0; p < Pieces; ++p)
 		{
 			const float U0 = FMath::Lerp(T0, T1, (float)p / Pieces), U1 = FMath::Lerp(T0, T1, (float)(p + 1) / Pieces);
-			EdgeBox(A, B, U0, U1 - 1.f, 0.f, 0.f, Base + HS(Seed, K + p) * 11.f, GWallT - 4.f, St.Front);
+			EdgeBox(A, B, U0, U1 - 1.f, 0.f, 0.f, Base + HS(Seed, K + p) * 4.f, GWallT - 4.f, St.Front);
 		}
-		EdgeBox(A, B, T0, T1, 0.f, 0.f, 14.f, GWallT + 4.f, "StoneDark");
+		EdgeBox(A, B, T0, T1, 0.f, 0.f, 8.f, GWallT + 4.f, "StoneDark");
 	};
 	Run(-HalfT, D0, 10);
 	Run(D1, L + HalfT, 20);
 	EdgeBox(A, B, D0, D1, 0.f, -1.f, 2.f, GWallT + 10.f, "Timber");                                    // threshold
-	EdgeBox(A, B, D0 - 9.f, D0, 0.f, 0.f, Base + 18.f, GWallT, "TimberGrey");                         // door posts
-	EdgeBox(A, B, D1, D1 + 9.f, 0.f, 0.f, Base + 12.f, GWallT, "TimberGrey");
+}
+
+void ADCHideoutBuilder::BracketLamp(const FVector2D& A, const FVector2D& B, float T, float Z, const FLinearColor& Col, float Cd, float Radius)
+{
+	// a small enamel shade on an iron bracket, on the inside face of the wall A->B (room on the left)
+	const float L = FVector2D::Distance(A, B);
+	const FVector2D D = (B - A).GetSafeNormal(), N(-D.Y, D.X);
+	const FVector2D W = A + D * (L * T) + N * (GWallT + 2.f);
+	const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(N.Y, N.X));
+	Deco(EDCShape::Cube, FVector(W.X, W.Y, Z), FVector(4.f, 14.f, 20.f), "Black", FRotator(0, Yaw, 0), false);             // back plate
+	const FVector2D Arm = W + N * 22.f;
+	Bar(FVector(W.X, W.Y, Z + 4.f), FVector(Arm.X, Arm.Y, Z + 4.f), 3.f, 3.f, "Black", false);
+	Deco(EDCShape::Cone, FVector(Arm.X, Arm.Y, Z - 6.f), FVector(22.f, 22.f, 12.f), "Black", FRotator::ZeroRotator, false); // shade
+	Deco(EDCShape::Sphere, FVector(Arm.X, Arm.Y, Z - 13.f), FVector(7.f, 7.f, 8.f), "Tungsten", FRotator::ZeroRotator, false);
+	Point(FVector(Arm.X, Arm.Y, Z - 20.f), Col, Cd, Radius, true, true, 2.f);
+}
+
+void ADCHideoutBuilder::OfficePorchLamps(const FVector2D Q[4])
+{
+	// Two lantern posts flanking the Office's open front: glass driven by DayNight (LampHead), the light itself is a
+	// DayNight street light added once in BuildLightingAndPost (the Office never moves).
+	for (int32 k = 0; k < 2; ++k)
+	{
+		FVector2D P, Out;
+		PorchLampSpot(Q, k, P, Out);
+		Deco(EDCShape::Cube, FVector(P.X, P.Y, 115.f), FVector(12.f, 12.f, 230.f), "TimberDark");                             // post
+		Deco(EDCShape::Cube, FVector(P.X, P.Y, 8.f), FVector(26.f, 26.f, 16.f), "StoneDark");                                 // footing
+		const FVector2D Arm = P + Out * 34.f;
+		Bar(FVector(P.X, P.Y, 214.f), FVector(Arm.X, Arm.Y, 214.f), 5.f, 5.f, "Black", false);                               // bracket
+		Bar(FVector(P.X, P.Y, 190.f), FVector(Arm.X, Arm.Y, 212.f), 2.5f, 2.5f, "Black", false);                             // brace
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Out.Y, Out.X));
+		Deco(EDCShape::Cube, FVector(Arm.X, Arm.Y, 207.f), FVector(4.f, 4.f, 10.f), "Black", FRotator::ZeroRotator, false);   // hook
+		Deco(EDCShape::Cube, FVector(Arm.X, Arm.Y, 199.f), FVector(20.f, 20.f, 4.f), "Black", FRotator(0, Yaw, 0), false);    // cap
+		Deco(EDCShape::Cube, FVector(Arm.X, Arm.Y, 184.f), FVector(14.f, 14.f, 26.f), "LampHead", FRotator(0, Yaw, 0), false);// glass
+		Deco(EDCShape::Cube, FVector(Arm.X, Arm.Y, 170.f), FVector(17.f, 17.f, 3.f), "Black", FRotator(0, Yaw, 0), false);    // base
+	}
+}
+
+void ADCHideoutBuilder::PorchLampSpot(const FVector2D Q[4], int32 K, FVector2D& OutPost, FVector2D& OutDir)
+{
+	// K = 0: just outside the front-left corner, K = 1: the front-right corner. Room-local (relative to the cell centre).
+	const FVector2D C = K == 0 ? Q[0] : Q[1];
+	const FVector2D Front = (Q[1] - Q[0]).GetSafeNormal();
+	const FVector2D Outward(Front.Y, -Front.X);               // away from the room (-Y-ish)
+	const FVector2D Side = K == 0 ? -Front : Front;
+	OutPost = C + Outward * 70.f + Side * 30.f;
+	OutDir = (Outward * 0.6f + (-Side) * 0.4f).GetSafeNormal(); // the lantern hangs towards the doorway
 }
 
 void ADCHideoutBuilder::EdgeScaffold(const FVector2D Q[4], int32 E, float H)

@@ -2,8 +2,8 @@
 // day/night), World (pawns, vehicles, camera, build placement) and Sim (room placement rules).
 //
 // The scene: a small abandoned farmhouse in a rural landscape. Camera looks from -X-Y towards +X+Y (yaw 45,
-// isometric), so the -X and -Y walls of every room face the camera: those are COLLAPSED (knee-high broken stubs +
-// rubble) so you see inside. The +X/+Y walls are the tall back walls.
+// isometric), so the -X and -Y walls of every room face the camera: those are COLLAPSED (a low stub just above the
+// floor) so you see inside, and partitions between rooms are low stubs too. The +X/+Y walls are the tall back walls.
 //
 // v3 (Nov 14): the house grows on an irregular BUILD GRID (DCSite::Grid). Every room is one cell. The Office (the
 // original house) sits in the front row at cell (0,0), facing the lane (-Y). New rooms go on any free cell that
@@ -49,6 +49,10 @@ namespace DCSite
 		constexpr float Jitter = 62.f;        // max corner offset (cm) per axis
 		constexpr int32 MinCol = -2, MaxCol = 2;
 		constexpr int32 MinRow = 0, MaxRow = 3; // row 0 = the front row (the Office's row); rows grow behind (+Y)
+		/** World position of the centre of cell (0,0) before jitter. The house sits forward of the world origin, close
+		 *  to the yard, so the walk from the front door to the cars is short. Everything on the grid derives from it. */
+		constexpr float OriginX = 0.f;
+		constexpr float OriginY = -560.f;
 		inline FIntPoint OfficeCell() { return FIntPoint(0, 0); }
 		/** Sentinel for "not placed". */
 		inline FIntPoint NoCell() { return FIntPoint(-999, -999); }
@@ -64,7 +68,7 @@ namespace DCSite
 		/** Lattice corner (I, J) = the -X-Y corner of cell (I, J). Corners are jittered (deterministic). */
 		inline FVector2D Vertex(int32 I, int32 J)
 		{
-			const FVector2D Base((I - 0.5f) * CellSize, (J - 0.5f) * CellSize);
+			const FVector2D Base(OriginX + (I - 0.5f) * CellSize, OriginY + (J - 0.5f) * CellSize);
 			return Base + FVector2D((Hash01(I, J, 1) * 2.f - 1.f) * Jitter, (Hash01(I, J, 2) * 2.f - 1.f) * Jitter);
 		}
 		/** Cell corners, counter-clockwise: 0 (-X-Y), 1 (+X-Y), 2 (+X+Y), 3 (-X+Y).
@@ -102,7 +106,7 @@ namespace DCSite
 		/** Grid cell containing P (false if outside the grid). */
 		inline bool CellAt(const FVector2D& P, FIntPoint& Out)
 		{
-			const int32 CI = FMath::RoundToInt(P.X / CellSize), CJ = FMath::RoundToInt(P.Y / CellSize);
+			const int32 CI = FMath::RoundToInt((P.X - OriginX) / CellSize), CJ = FMath::RoundToInt((P.Y - OriginY) / CellSize);
 			for (int32 dy = -1; dy <= 1; ++dy)
 			{
 				for (int32 dx = -1; dx <= 1; ++dx)
@@ -142,19 +146,31 @@ namespace DCSite
 		/** World AABB of the whole grid (incl. jitter). */
 		inline FBox2D Bounds()
 		{
-			return FBox2D(FVector2D((MinCol - 0.5f) * CellSize - Jitter, (MinRow - 0.5f) * CellSize - Jitter),
-				FVector2D((MaxCol + 0.5f) * CellSize + Jitter, (MaxRow + 0.5f) * CellSize + Jitter));
+			return FBox2D(FVector2D(OriginX + (MinCol - 0.5f) * CellSize - Jitter, OriginY + (MinRow - 0.5f) * CellSize - Jitter),
+				FVector2D(OriginX + (MaxCol + 0.5f) * CellSize + Jitter, OriginY + (MaxRow + 0.5f) * CellSize + Jitter));
 		}
 	}
 
 	/** Where the fully expanded building can reach (the whole build grid). */
 	inline FBox2D CompoundRect() { return Grid::Bounds(); }
 
-	/** Keep-clear zone around the compound: Landscape places no trees/fences/rocks inside it (grass/flowers ok). */
-	inline FBox2D BuildingClearRect() { const FBox2D C = CompoundRect(); return FBox2D(FVector2D(C.Min.X - 300.f, -1200.f), C.Max + FVector2D(300.f, 300.f)); }
-
 	/** Gravel yard where cars park (Landscape draws it; nothing tall inside it). */
 	inline FBox2D YardRect() { return FBox2D(FVector2D(-950, -2050), FVector2D(900, -1200)); }
+
+	/** Festoon poles along the house side of the yard (just outside it, so nothing tall stands where cars drive). */
+	inline TArray<FVector2D> YardFestoonPoles()
+	{
+		const FBox2D Y = YardRect();
+		return { FVector2D(Y.Min.X - 60.f, Y.Max.Y + 40.f), FVector2D(FMath::Lerp(Y.Min.X, Y.Max.X, 0.5f), Y.Max.Y + 40.f), FVector2D(Y.Max.X + 60.f, Y.Max.Y + 40.f) };
+	}
+
+	/** Keep-clear zone around the compound, down to the yard: Landscape places no trees/fences/rocks inside it
+	 *  (grass/flowers ok). */
+	inline FBox2D BuildingClearRect()
+	{
+		const FBox2D C = CompoundRect();
+		return FBox2D(FVector2D(C.Min.X - 300.f, FMath::Min(YardRect().Max.Y, C.Min.Y - 150.f)), C.Max + FVector2D(300.f, 300.f));
+	}
 
 	constexpr int32 MaxParkingSlots = 8;
 	/** Parking slot i (0..7): car centre on the ground, nose facing -Y (towards the lane). Slot 0 is the first car. */
@@ -174,6 +190,33 @@ namespace DCSite
 	constexpr float DriveX = -100.f;
 	constexpr float DriveW = 380.f;
 
+	/** Post-and-rail fence on the house side of the lane, with a gateway where the driveway crosses it. The five-bar
+	 *  gate hangs on the -X gate post and stands swung right back OUTWARDS (towards the lane verge, away from the
+	 *  yard and the turn onto the lane) so nothing a car drives over is anywhere near it. */
+	constexpr float FenceY = LaneY + 380.f;
+	constexpr float GateHalf = 320.f;      // gate posts at DriveX +- GateHalf
+	constexpr float GateLeafLen = 330.f;
+	constexpr float GateOpenYaw = -158.f;  // leaf direction from the hinge (0 = closed, across the gateway towards +X)
+	inline FVector2D GateHinge() { return FVector2D(DriveX - GateHalf + 14.f, FenceY); }
+	inline FVector2D GateLeafEnd()
+	{
+		const float A = FMath::DegreesToRadians(GateOpenYaw);
+		return GateHinge() + FVector2D(FMath::Cos(A), FMath::Sin(A)) * GateLeafLen;
+	}
+	/** Things a car must never touch around the gateway (centre, radius): both gate posts, the leaf (sampled), the
+	 *  mailbox. Used by the vehicle route check. */
+	inline FVector2D MailboxPos() { return FVector2D(DriveX + GateHalf + 170.f, FenceY - 45.f); }
+	inline void GateObstacles(TArray<FVector4f>& Out)
+	{
+		Out.Reset();
+		Out.Add(FVector4f(DriveX - GateHalf, FenceY, 14.f, 0.f));
+		Out.Add(FVector4f(DriveX + GateHalf, FenceY, 14.f, 0.f));
+		const FVector2D H = GateHinge(), E = GateLeafEnd();
+		for (int32 i = 0; i <= 16; ++i) { const FVector2D P = FMath::Lerp(H, E, i / 16.f); Out.Add(FVector4f(P.X, P.Y, 6.f, 0.f)); }
+		const FVector2D MB = MailboxPos();
+		Out.Add(FVector4f(MB.X, MB.Y, 30.f, 0.f));
+	}
+
 	/** Route a car drives when LEAVING from slot I: out of the slot, down the driveway, onto the lane (left-hand
 	 *  lane side, heading +X), and off-screen. Returning cars drive the exact reverse (arrive from +X). */
 	inline void DepartRoute(int32 I, TArray<FVector>& Out)
@@ -182,8 +225,8 @@ namespace DCSite
 		const FVector P = ParkingSlot(I).GetLocation();
 		Out.Add(P);
 		Out.Add(FVector(P.X, -1880.f, GroundZ));                 // pull forward out of the bay
-		Out.Add(FVector(DriveX, -2020.f, GroundZ));              // line up with the driveway
-		Out.Add(FVector(DriveX, LaneY + 260.f, GroundZ));        // down the driveway
+		Out.Add(FVector(DriveX, FenceY + 250.f, GroundZ));       // line up with the driveway
+		Out.Add(FVector(DriveX, FenceY - 120.f, GroundZ));       // down the driveway, straight through the gateway
 		Out.Add(FVector(DriveX + 400.f, LaneY + 110.f, GroundZ));// turn onto the lane
 		Out.Add(FVector(LaneX1 - 1000.f, LaneY + 110.f, GroundZ));// and away
 	}
