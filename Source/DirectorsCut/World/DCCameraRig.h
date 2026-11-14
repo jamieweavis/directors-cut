@@ -43,8 +43,6 @@ public:
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") bool bTiltShiftDOF = true;
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float DOFFstop = 0.9f;
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float DOFSensorWidth = 120.f;
-	/** Idle breathing drift amplitude (fraction of distance). */
-	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float DriftAmount = 0.0022f;
 
 	/** Smoothly move the pivot to a world point (station / room focus). ZoomAlpha 0 = overview distance, 1 = closest. */
 	virtual void FocusOn(const FVector& WorldPoint, float ZoomAlpha = 0.5f);
@@ -97,7 +95,6 @@ protected:
 	FVector OverviewPivot = FVector::ZeroVector;
 	float OverviewDistance = 6000.f;
 	float LastAspect = 0.f;
-	double DriftTime = 0.0;
 	bool bInitialized = false;
 
 	// Cinematic

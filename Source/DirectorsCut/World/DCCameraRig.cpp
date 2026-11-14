@@ -254,19 +254,9 @@ void ADCCameraRig::Tick(float DeltaSeconds)
 	CurDistance = SmoothDamp(CurDistance, TargetDistance, DistanceVel, FMath::Max(ActiveSmoothTime, ZoomSmoothTime), Dt);
 	SetActorLocation(CurPivot);
 
-	// Idle breathing drift (camera-local, so it never fights the pivot).
-	DriftTime += Dt;
 	const FRotator Rot(Pitch, Yaw, 0.f);
-	const FRotationMatrix M(Rot);
-	const float Amp = DCSettings::ReduceMotion() ? 0.f : CurDistance * DriftAmount;
-	const float T = (float)DriftTime;
-	const FVector Drift = M.GetUnitAxis(EAxis::Y) * (FMath::Sin(T * UE_TWO_PI / 11.f) * Amp)
-		+ M.GetUnitAxis(EAxis::Z) * (FMath::Sin(T * UE_TWO_PI / 7.3f + 1.3f) * Amp * 0.6f);
-	const float RotAmp = DCSettings::ReduceMotion() ? 0.f : 1.f;
-	const FRotator DriftRot(FMath::Sin(T * UE_TWO_PI / 13.f) * 0.12f * RotAmp, FMath::Sin(T * UE_TWO_PI / 17.f + 0.7f) * 0.18f * RotAmp, 0.f);
-
-	Camera->SetRelativeLocation(-Rot.Vector() * CurDistance + Drift);
-	Camera->SetRelativeRotation(Rot + DriftRot);
+	Camera->SetRelativeLocation(-Rot.Vector() * CurDistance);
+	Camera->SetRelativeRotation(Rot);
 	Camera->SetFieldOfView(FOV);
 
 	// Tilt-shift: shallow cinematic DOF focused on the pivot.
