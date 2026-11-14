@@ -1,8 +1,9 @@
-// Director's Cut — day/night lighting rig (Agent D). Spawned and wired by ADCHideoutBuilder.
-// Reads UDCRunSubsystem's clock every tick and drives: the sun/moon directional light (azimuth sweeps behind the +X/+Y
-// back walls so light falls through the factory windows), sky light colour/intensity, window-glass glow, sun-shaft
-// fog volumes, dust motes, exterior street lamps (on at dusk) and the exposure curve. Interior practicals (RoomLight)
-// are never touched. With no active run (title screen) it holds golden hour.
+// Director's Cut — day/night lighting rig. Spawned and wired by ADCLandscape (global lighting owner).
+// Reads UDCRunSubsystem's clock every tick and drives: a natural sun arc (rises ~06:00 on the upper-left of the
+// screen, peaks behind the house, sets ~20:00 on the right), a cool moon at night, sky light colour/intensity, height
+// fog (distance haze + ground mist at dawn and night), window-glass glow, sun-shaft fog volumes, dust motes, exterior
+// lights (on at dusk), bloom and the exposure curve. Interior practicals (RoomLight) are never touched. With no active
+// run (title screen) it holds golden hour.
 //
 // Dev flags:  -DCFixedHour=H   force the displayed hour (ignores the run clock; for lighting review)
 #pragma once
@@ -44,6 +45,14 @@ public:
 
 	/** Hour currently displayed (smoothed). */
 	float GetDisplayHour() const { return DisplayHour; }
+	/** 0 in daylight .. 1 when exterior/night lights are fully on (fades in at dusk, out after dawn). */
+	float GetLampAlpha() const { return LampAlpha; }
+	/** 0 at night .. 1 at noon. */
+	float GetSunAlpha() const { return SunAlphaNow; }
+	/** Colour distant ground fades into (matches the fog). */
+	FLinearColor GetHazeColor() const { return HazeColor; }
+	/** Force an hour (review tools). bSnap skips the smoothing and the lamp fade. Negative = follow the run clock. */
+	void SetFixedHour(float Hour, bool bSnap);
 
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -64,8 +73,11 @@ protected:
 	bool bHaveHour = false;
 	float FixedHour = -1.f;
 	float LampAlpha = 0.f;
+	float SunAlphaNow = 0.f;
+	bool bSnapLamps = false;
+	FLinearColor HazeColor = FLinearColor(0.4f, 0.45f, 0.5f);
 	double Time = 0.0;
-	float EVDay = -2.5f;
+	float EVDay = -3.0f;
 	float EVNight = -1.6f;
 	float SunLux = 110.f;
 	float MoonLux = 4.f;

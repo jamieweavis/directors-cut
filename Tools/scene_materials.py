@@ -17,6 +17,12 @@
 #   M_DC_Smoke     : translucent drifting smoke wisps. Color, Opacity
 #   M_DC_Dust      : additive dust motes, WPO drift per instance (ISM). Color, Strength, Drift
 #   M_DC_GlassI    : translucent lit glass usable on instanced meshes. Color, Opacity, Roughness
+#   M_DC_Ground    : opaque lit procedural terrain (world-aligned). ColorA/B/C, FarColor (vec); Pattern, Scale, Roughness,
+#                    Axis, Center, Width, FarStart, FarEnd. Pattern: 0 meadow 1 mown lawn 2 gravel 3 dirt track (ruts,
+#                    grass centre strip; Axis 0 = along X, Center/Width across) 4 ploughed rows 5 mud/soil
+#   M_DC_Foliage   : two-sided lit foliage, per-instance hue (ColorA..ColorB), macro tint ColorC (CMix), vertex colour
+#                    R = height/AO, G = wind weight. Wind WPO. Params ColorA, ColorB, ColorC, CMix, Wind, Roughness, AOMin
+#   M_DC_Water     : opaque glossy water with animated ripples + night glow. Color, Deep, GlowColor, Glow, Ripple
 import unreal
 
 AT = unreal.AssetToolsHelpers.get_asset_tools()
@@ -557,6 +563,154 @@ def glassi():
     return m
 
 
+GROUND_CODE = NOISE_LIB + r"""
+float3 A = ColorA.rgb; float3 B = ColorB.rgb; float3 C = ColorC.rgb;
+float sc = max(Scale, 0.001);
+float3 q = P * sc;
+float macro = d.fbm(float3(P.xy * 0.00035, 1.3));
+float mid = d.fbm(float3(P.xy * 0.0035, 7.7));
+float fine = d.n(float3(P.xy * 0.09, 2.0));
+float along = lerp(P.x, P.y, Axis); float across = lerp(P.y, P.x, Axis) - Center;
+float3 col = A; float rough = Rough;
+int pat = (int)round(Pattern);
+if (pat == 1) { // mown lawn: stripes + clover patches
+  float s = step(0.5, frac(across / 260.0));
+  col = lerp(A, B, smoothstep(0.3, 0.8, macro) * 0.6);
+  col = lerp(col, C, smoothstep(0.55, 0.8, mid) * 0.5);
+  col *= (s > 0.5 ? 1.07 : 0.93) * (0.9 + 0.2 * fine);
+} else if (pat == 2) { // gravel
+  float p1 = d.n(q * 0.55); float p2 = d.n(q * 1.7 + 4.0);
+  float peb = smoothstep(0.45, 0.65, p1 * 0.6 + p2 * 0.4);
+  col = lerp(B, A, peb) * (0.85 + 0.3 * d.n(q * 3.1));
+  float patch = smoothstep(0.5, 0.75, d.fbm(q * 0.006));
+  col = lerp(col, C, patch * 0.7);
+  float weeds = smoothstep(0.66, 0.8, d.fbm(q * 0.02 + 9.0));
+  col = lerp(col, float3(0.10, 0.16, 0.05), weeds * 0.8);
+  rough = Rough;
+} else if (pat == 3) { // dirt track with ruts and a grass centre strip
+  float hw = max(Width * 0.5, 1.0);
+  float u = abs(across) / hw; // 0 centre .. 1 edge
+  float wob = (d.n(float3(along * 0.01, 3.0, 1.0)) - 0.5) * 0.18;
+  float rut = exp(-pow((u - 0.5 + wob) / 0.13, 2.0));
+  float centre = 1.0 - smoothstep(0.10, 0.22, u + wob * 0.6 + (fine - 0.5) * 0.08);
+  float verge = smoothstep(0.80, 0.98, u + wob + (fine - 0.5) * 0.12);
+  float3 dirt = lerp(A, B, saturate(rut * 0.8 + (mid - 0.5) * 0.6)) * (0.85 + 0.3 * d.n(q * 0.8));
+  float stones = smoothstep(0.72, 0.8, d.n(q * 0.9));
+  dirt = lerp(dirt, A * 1.5, stones * 0.5);
+  float3 grass = lerp(C, C * float3(1.2, 1.1, 0.7), macro) * (0.85 + 0.3 * fine);
+  col = lerp(dirt, grass, saturate(centre + verge));
+  rough = lerp(Rough, 0.9, saturate(centre + verge)) - rut * 0.1;
+} else if (pat == 4) { // ploughed field rows
+  float r = sin(across * 6.2831 / 90.0) * 0.5 + 0.5;
+  col = lerp(B, A, r) * (0.85 + 0.25 * d.n(q * 0.5)) * (0.9 + 0.2 * macro);
+  rough = Rough;
+} else if (pat == 5) { // mud / soil
+  col = lerp(A, B, saturate(mid * 1.4 - 0.2)) * (0.85 + 0.3 * fine);
+} else { // meadow
+  col = lerp(A, B, smoothstep(0.35, 0.72, macro));
+  col = lerp(col, C, smoothstep(0.5, 0.78, mid) * 0.55);
+  col *= 0.86 + 0.28 * fine;
+}
+float dist = length(P.xy);
+col = lerp(col, FarColor.rgb, smoothstep(FarStart, FarEnd, dist));
+return float4(saturate(col), saturate(rough));
+"""
+
+
+def ground():
+    m = fresh_material("M_DC_Ground")
+    ca = vparam(m, "ColorA", (0.10, 0.20, 0.04, 1), -1200, -500)
+    cb = vparam(m, "ColorB", (0.22, 0.24, 0.07, 1), -1200, -350)
+    cc = vparam(m, "ColorC", (0.05, 0.12, 0.03, 1), -1200, -200)
+    fc = vparam(m, "FarColor", (0.4, 0.45, 0.5, 1), -1200, -50)
+    ins = [("P", expr(m, unreal.MaterialExpressionWorldPosition, -1200, 700)), ("ColorA", ca), ("ColorB", cb), ("ColorC", cc), ("FarColor", fc)]
+    y = 50
+    for nm, dv in (("Pattern", 0.0), ("Scale", 1.0), ("Rough", 0.9), ("Axis", 0.0), ("Center", 0.0), ("Width", 500.0),
+                   ("FarStart", 14000.0), ("FarEnd", 26000.0)):
+        ins.append((nm, sparam(m, "Roughness" if nm == "Rough" else nm, dv, -1200, y)))
+        y += 80
+    c = custom(m, GROUND_CODE, ins, out_type=unreal.CustomMaterialOutputType.CMOT_FLOAT4, desc="DCGround")
+    MEL.connect_material_property(mask(m, c, True, True, True, False, -200, -200), "", MP.MP_BASE_COLOR)
+    MEL.connect_material_property(mask(m, c, False, False, False, True, -200, 0), "", MP.MP_ROUGHNESS)
+    return m
+
+
+FOLIAGE_CODE = NOISE_LIB + r"""
+float3 col = lerp(ColorA.rgb, ColorB.rgb, R);
+float macro = d.fbm(float3(P.xy * 0.0006, 4.2));
+col = lerp(col, ColorC.rgb, smoothstep(0.42, 0.75, macro) * CMix);
+col *= lerp(AOMin, 1.12, saturate(VC.r));
+return col;
+"""
+
+WIND_CODE = r"""
+float ph = T * 1.6 + P.x * 0.011 + P.y * 0.007 + R * 6.2831;
+float w = (sin(ph) + 0.45 * sin(ph * 2.3 + 1.7) + 0.25 * sin(T * 0.37 + P.y * 0.002)) * Wind * VC.g;
+return float3(w, w * 0.55, -abs(w) * 0.15);
+"""
+
+
+def foliage():
+    m = fresh_material("M_DC_Foliage")
+    m.set_editor_property("two_sided", True)
+    ca = vparam(m, "ColorA", (0.08, 0.20, 0.04, 1), -1200, -500)
+    cb = vparam(m, "ColorB", (0.18, 0.26, 0.05, 1), -1200, -350)
+    cc = vparam(m, "ColorC", (0.30, 0.22, 0.06, 1), -1200, -200)
+    cm = sparam(m, "CMix", 0.4, -1200, -50)
+    ao = sparam(m, "AOMin", 0.35, -1200, 30)
+    wind = sparam(m, "Wind", 6.0, -1200, 110)
+    rgh = sparam(m, "Roughness", 0.75, -600, 300)
+    wp = expr(m, unreal.MaterialExpressionWorldPosition, -1200, 200)
+    vc = expr(m, unreal.MaterialExpressionVertexColor, -1200, 300)
+    pr = expr(m, unreal.MaterialExpressionPerInstanceRandom, -1200, 400)
+    t = expr(m, unreal.MaterialExpressionTime, -1200, 500)
+    c = custom(m, FOLIAGE_CODE, [("P", wp), ("VC", vc), ("R", pr), ("ColorA", ca), ("ColorB", cb), ("ColorC", cc),
+                                  ("CMix", cm), ("AOMin", ao)], desc="DCFoliage", y=-300)
+    MEL.connect_material_property(c, "", MP.MP_BASE_COLOR)
+    MEL.connect_material_property(rgh, "", MP.MP_ROUGHNESS)
+    w = custom(m, WIND_CODE, [("P", wp), ("VC", vc), ("R", pr), ("T", t), ("Wind", wind)], desc="DCWind", y=300)
+    MEL.connect_material_property(w, "", MP.MP_WORLD_POSITION_OFFSET)
+    return m
+
+
+WATER_N = NOISE_LIB + r"""
+float2 p = P.xy * 0.02;
+float e = 0.35;
+float t = T * 0.6;
+float h0 = d.n(float3(p, t)) + 0.5 * d.n(float3(p * 2.7 + 3.0, t * 1.4));
+float hx = d.n(float3(p + float2(e, 0), t)) + 0.5 * d.n(float3((p + float2(e, 0)) * 2.7 + 3.0, t * 1.4));
+float hy = d.n(float3(p + float2(0, e), t)) + 0.5 * d.n(float3((p + float2(0, e)) * 2.7 + 3.0, t * 1.4));
+return normalize(float3((h0 - hx) * Ripple, (h0 - hy) * Ripple, 1.0));
+"""
+
+WATER_E = NOISE_LIB + r"""
+float sh = d.fbm(float3(P.xy * 0.004, T * 0.15));
+return GlowColor.rgb * Glow * (0.45 + 0.9 * sh);
+"""
+
+
+def water():
+    m = fresh_material("M_DC_Water")
+    c = vparam(m, "Color", (0.015, 0.03, 0.035, 1), -900, -300)
+    gc = vparam(m, "GlowColor", (0.05, 0.6, 0.55, 1), -900, -150)
+    g = sparam(m, "Glow", 0.0, -900, 0)
+    rp = sparam(m, "Ripple", 1.2, -900, 80)
+    wp = expr(m, unreal.MaterialExpressionWorldPosition, -900, 160)
+    t = expr(m, unreal.MaterialExpressionTime, -900, 240)
+    MEL.connect_material_property(c, "", MP.MP_BASE_COLOR)
+    r = expr(m, unreal.MaterialExpressionConstant, -400, 100)
+    r.set_editor_property("r", 0.03)
+    MEL.connect_material_property(r, "", MP.MP_ROUGHNESS)
+    sp = expr(m, unreal.MaterialExpressionConstant, -400, 160)
+    sp.set_editor_property("r", 0.6)
+    MEL.connect_material_property(sp, "", MP.MP_SPECULAR)
+    n = custom(m, WATER_N, [("P", wp), ("T", t), ("Ripple", rp)], desc="DCWaterN", y=300)
+    MEL.connect_material_property(n, "", MP.MP_NORMAL)
+    e = custom(m, WATER_E, [("P", wp), ("T", t), ("GlowColor", gc), ("Glow", g)], desc="DCWaterE", y=500)
+    MEL.connect_material_property(e, "", MP.MP_EMISSIVE_COLOR)
+    return m
+
+
 def fixflags():
     # Wave-0 materials (Tools/create_materials.py) predate the ISM usage flag; set it in place so references stay intact.
     for name in ("M_DC_Emissive", "M_DC_Glass", "M_DC_Surface", "M_DC_Criminal"):
@@ -570,7 +724,7 @@ def fixflags():
     return None
 
 
-for f in (highlight, proc, neon, beam, rain, screen, window, fence, smoke, dust, glassi, fixflags):
+for f in (highlight, proc, neon, beam, rain, screen, window, fence, smoke, dust, glassi, ground, foliage, water, fixflags):
     if _only and f.__name__ not in _only:
         continue
     try:

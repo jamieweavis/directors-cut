@@ -12,7 +12,7 @@ public class DirectorsCut : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[] {
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
 			"UMG", "Slate", "SlateCore", "Json", "JsonUtilities", "Niagara",
-			"AudioMixer", "DeveloperSettings"
+			"AudioMixer", "DeveloperSettings", "MeshDescription", "StaticMeshDescription"
 		});
 	}
 }
