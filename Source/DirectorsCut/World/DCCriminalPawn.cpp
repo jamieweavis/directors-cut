@@ -23,7 +23,7 @@ namespace
 	constexpr float HalfHeight = 90.f;
 	constexpr float WalkSpeed = 165.f;
 	constexpr float LimpSpeed = 95.f;
-	constexpr float HurrySpeed = 250.f;     // walking out to / in from the door
+	constexpr float HurrySpeed = 300.f;     // walking out to / in from the door
 	constexpr float HurryLimpSpeed = 140.f;
 	constexpr float LevelUpLength = 1.1f;
 
@@ -486,6 +486,67 @@ void ADCCriminalPawn::BeginWalkIn(ADCGarageDoor* Door)
 	}
 	UpdateSpeed();
 	// Stay hidden until StartDelay elapses (Tick reveals us).
+}
+
+void ADCCriminalPawn::WalkOutAlong(const TArray<FVector>& FloorPath, float Delay, bool bForever)
+{
+	bLeaveForever |= bForever;
+	bReturnQueued = false;
+	if (Mode == EDCPawnMode::Away || (Mode == EDCPawnMode::WalkIn && IsHidden()))
+	{
+		SetAway();
+		if (bLeaveForever) { bWantsDestroy = true; }
+		return;
+	}
+	GetUp();
+	Mode = EDCPawnMode::WalkOut;
+	Activity = EDCPawnActivity::Stand;
+	ActiveDoor = nullptr;
+	bHasGoalYaw = false;
+	StartDelay = Delay;
+	StuckTime = 0.f;
+	Path.Reset();
+	for (const FVector& P : FloorPath) { Path.Add(Ground(P)); }
+	UpdateSpeed();
+}
+
+void ADCCriminalPawn::WalkInAlong(const FVector& Start, const TArray<FVector>& FloorPath, float Delay)
+{
+	if (bLeaveForever) { return; }
+	const bool bWasAway = Mode == EDCPawnMode::Away || IsHidden();
+	GetUp();
+	Mode = EDCPawnMode::WalkIn;
+	Activity = EDCPawnActivity::Stand;
+	ActiveDoor = nullptr;
+	bHasGoalYaw = false;
+	bReturnQueued = false;
+	StuckTime = 0.f;
+	Path.Reset();
+	for (const FVector& P : FloorPath) { Path.Add(Ground(P)); }
+	if (bWasAway)
+	{
+		SetActorLocation(Ground(Start));
+		const FVector Dir = Path.Num() ? (Path[0] - GetActorLocation()).GetSafeNormal2D() : FVector::ZeroVector;
+		if (!Dir.IsNearlyZero()) { SetActorRotation(Dir.Rotation()); }
+		SetHidden(true);
+		StartDelay = FMath::Max(0.01f, Delay); // Tick reveals us when the delay runs out
+	}
+	else { StartDelay = Delay; }
+	UpdateSpeed();
+}
+
+void ADCCriminalPawn::CancelWalkOut()
+{
+	if (Mode != EDCPawnMode::WalkOut) { return; }
+	Mode = EDCPawnMode::Wander;
+	Activity = EDCPawnActivity::Stand;
+	ActiveDoor = nullptr;
+	bReturnQueued = false;
+	Path.Reset();
+	StartDelay = 0.f;
+	WaitTime = Rng.FRandRange(0.2f, 0.8f);
+	GetCharacterMovement()->StopMovementImmediately();
+	UpdateSpeed();
 }
 
 bool ADCCriminalPawn::IsNearDoor(float Radius) const

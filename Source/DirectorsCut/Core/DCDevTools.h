@@ -3,6 +3,7 @@
 //   -DCShots=name:focus[:panel],name2:focus2   take screenshots then quit.
 //        focus = wide | Office | Lounge | Workshop | Garage | OpsRoom | Clinic | ServerRoom | LawyerOffice
 //                (aliases Bunkroom, Ops, Lawyer) | crew (close-up on a crew member, a sleeping one if any)
+//                | yard (the parked cars + driveway) | house (the built house) | far (zoomed right out over the landscape)
 //        panel = optional EDCPanel name to open before the shot (e.g. Missions, MissionPlanner, Reports)
 //   -DCShotDir=/abs/dir     where PNGs go (default <Project>/Saved/DCShots)
 //   -DCShotDelay=6          seconds before the first shot (default 6; shaders/Lumen settle)
