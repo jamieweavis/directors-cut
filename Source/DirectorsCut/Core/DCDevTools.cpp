@@ -78,6 +78,12 @@ void UDCDevTools::RunAutoPlay()
 			if (B.bValid && B.SuccessChance >= 0.5f) { Run->StartMission(P); }
 		}
 		if (Run->HasPendingPerkOffer()) { const TArray<FDCPerk> O = Run->GetPerkOffer(); if (O.Num()) { Run->PickPerk(O[0].Id); } }
+		if (Run->GetRoster().Num() < 2)
+		{
+			const FDCCriminal* Cheapest = nullptr;
+			for (const FDCCriminal& C : Run->GetRecruits()) { if (C.HireCost <= Run->GetCash() && (!Cheapest || C.HireCost < Cheapest->HireCost)) { Cheapest = &C; } }
+			if (Cheapest) { Run->Hire(Cheapest->Id); }
+		}
 		Run->AdvanceTime(5.0);
 	}
 	for (const FDCMissionReport& R : Run->GetReports())

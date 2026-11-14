@@ -78,8 +78,8 @@ When an effect appears more than once, it **stacks**: chance effects add; `*Mult
 
 ```jsonc
 {
-  "startingCash": 6000,
-  "startingRoster": 4,              // distinct types; at least one Street of each starter type
+  "startingCash": 3500,              // ~2 Street L2 hires or 1 Pro L2
+  "startingRoster": 0,              // free starting crew (0..6, distinct types); 0 = hire your first crew
   "startingRosterLevels": [1, 2],
   "clock": { "startHour": 7.0, "dawnHour": 6.0, "duskHour": 20.0, "gameMinutesPerSecond": 1.0 },
   "autosaveSeconds": 30,

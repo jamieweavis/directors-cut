@@ -350,7 +350,8 @@ void FDCSimImpl::GenerateStartingRoster(S& Sim)
 	TArray<EDCCriminalType> Free;
 	for (int32 i = 0; i < (int32)EDCCriminalType::MAX; ++i) { Free.Add((EDCCriminalType)i); }
 	Shuffle(R, Free);
-	const int32 N = FMath::Clamp(B.StartingRoster, 1, (int32)EDCCriminalType::MAX);
+	const int32 N = FMath::Clamp(B.StartingRoster, 0, (int32)EDCCriminalType::MAX);
+	if (N == 0) { return; }
 
 	// Cover the starting board: one specialist per posting (first fixed threat), levelled to the mission.
 	TArray<FDCMission> Board = Sim.Missions;

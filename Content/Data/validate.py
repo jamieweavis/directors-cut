@@ -536,8 +536,8 @@ def main():
         c = "balance"
         req(b, "startingCash", c, "num")
         sr = req(b, "startingRoster", c, "num")
-        if is_num(sr) and not (1 <= sr <= 6):
-            err(f"{c}.startingRoster must be 1..6 (distinct types)")
+        if is_num(sr) and not (0 <= sr <= 6):
+            err(f"{c}.startingRoster must be 0..6 (distinct types)")
         check_range(req(b, "startingRosterLevels", c, "list"), f"{c}.startingRosterLevels", 1, 10, True)
         clk = req(b, "clock", c, "dict") or {}
         for k in ("startHour", "dawnHour", "duskHour", "gameMinutesPerSecond"):
