@@ -66,6 +66,25 @@ public:
 	void AbandonRun();
 	bool HasActiveRun() const;
 	EDCGamePhase GetPhase() const;
+	// ── Save slots + leaderboard (v3) ────────────────────────────────────────
+	// Every run lives in one of NumSaveSlots slots and autosaves there. A finished run (GameOver/Won) is NOT deleted:
+	// it stays in its slot marked finished. StartNewRun() / HasSave() / ContinueRun() keep working: they use the
+	// most recently saved unfinished slot (StartNewRun: the first empty slot, else the oldest).
+	static constexpr int32 NumSaveSlots = 3;
+	TArray<FDCSaveSlotInfo> GetSaveSlots() const;          // always NumSaveSlots entries
+	int32 GetCurrentSlot() const;                          // slot the loaded run saves to, -1 if none
+	int32 GetMostRecentSlot(bool bUnfinishedOnly = true) const; // -1 if none
+	/** Fresh run in Slot (overwrites it). Phase -> Playing. */
+	void StartNewRunInSlot(int32 Slot, int32 Seed = 0);
+	/** Loads Slot. Unfinished -> Playing; finished -> its end phase (GameOver/Won) with GetRunSummary() valid. */
+	bool LoadSlot(int32 Slot);
+	/** Copies the loaded run (active or finished) into Slot, which becomes the current slot. */
+	bool SaveToSlot(int32 Slot);
+	bool DeleteSlot(int32 Slot);
+	/** Finished runs, best first: wins by fastest PlayTime, then losses by DaysSurvived, then TotalTake. Persistent. */
+	TArray<FDCRunRecord> GetLeaderboard() const;
+	void ClearLeaderboard();
+
 	int32 GetSeed() const;
 
 	/** The Esc menu pauses the clock. Broadcasts OnPauseChanged. */

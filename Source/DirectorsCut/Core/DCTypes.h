@@ -450,6 +450,45 @@ struct FDCRunSummary
 	UPROPERTY(BlueprintReadOnly) TArray<FName> Perks;
 };
 
+/** One of the 3 save slots (UDCRunSubsystem::GetSaveSlots). Finished runs stay saved (bFinished) and load read-only. */
+USTRUCT(BlueprintType)
+struct FDCSaveSlotInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly) int32 Slot = 0;              // 0..NumSaveSlots-1
+	UPROPERTY(BlueprintReadOnly) bool bUsed = false;
+	UPROPERTY(BlueprintReadOnly) bool bFinished = false;      // game over or won
+	UPROPERTY(BlueprintReadOnly) bool bWon = false;
+	UPROPERTY(BlueprintReadOnly) FString EndReason;
+	UPROPERTY(BlueprintReadOnly) int32 Seed = 0;
+	UPROPERTY(BlueprintReadOnly) int32 Day = 1;
+	UPROPERTY(BlueprintReadOnly) float Hour = 7.f;
+	UPROPERTY(BlueprintReadOnly) double PlayTime = 0.0;       // run seconds
+	UPROPERTY(BlueprintReadOnly) int32 Cash = 0;
+	UPROPERTY(BlueprintReadOnly) int32 MissionsSucceeded = 0;
+	UPROPERTY(BlueprintReadOnly) int32 RosterCount = 0;
+	UPROPERTY(BlueprintReadOnly) int32 RoomsBuilt = 0;
+	UPROPERTY(BlueprintReadOnly) FDateTime SavedAt;           // UTC wall clock
+};
+
+/** A finished run on the persistent leaderboard (UDCRunSubsystem::GetLeaderboard). */
+USTRUCT(BlueprintType)
+struct FDCRunRecord
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly) int32 Seed = 0;
+	UPROPERTY(BlueprintReadOnly) bool bWon = false;
+	UPROPERTY(BlueprintReadOnly) FString EndReason;
+	UPROPERTY(BlueprintReadOnly) double PlayTime = 0.0;       // run seconds (the "run time")
+	UPROPERTY(BlueprintReadOnly) int32 DaysSurvived = 0;
+	UPROPERTY(BlueprintReadOnly) int32 MissionsSucceeded = 0;
+	UPROPERTY(BlueprintReadOnly) int32 TotalTake = 0;
+	UPROPERTY(BlueprintReadOnly) int32 RoomsBuilt = 0;
+	UPROPERTY(BlueprintReadOnly) FDateTime EndedAt;           // UTC wall clock
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers. Icon names are Lucide (Content/Fonts/lucide_codepoints.json).
 // ─────────────────────────────────────────────────────────────────────────────

@@ -822,3 +822,19 @@ bool UDCRunSubsystem::PickPerk(FName PerkId)
 	FlushChanged();
 	return true;
 }
+
+// ── v3 save slots + leaderboard: LEAD STUBS (Sim agent replaces) ─────────────────────────────────────────────────
+TArray<FDCSaveSlotInfo> UDCRunSubsystem::GetSaveSlots() const
+{
+	TArray<FDCSaveSlotInfo> Out;
+	for (int32 i = 0; i < NumSaveSlots; ++i) { FDCSaveSlotInfo I; I.Slot = i; I.bUsed = (i == 0 && HasSave()); Out.Add(I); }
+	return Out;
+}
+int32 UDCRunSubsystem::GetCurrentSlot() const { return bActive ? 0 : -1; }
+int32 UDCRunSubsystem::GetMostRecentSlot(bool) const { return HasSave() ? 0 : -1; }
+void UDCRunSubsystem::StartNewRunInSlot(int32, int32 InSeed) { StartNewRun(InSeed); }
+bool UDCRunSubsystem::LoadSlot(int32 Slot) { return Slot == 0 && ContinueRun(); }
+bool UDCRunSubsystem::SaveToSlot(int32 Slot) { if (Slot != 0) { return false; } SaveRun(); return true; }
+bool UDCRunSubsystem::DeleteSlot(int32 Slot) { if (Slot != 0) { return false; } UGameplayStatics::DeleteGameInSlot(GetSlotName(), 0); return true; }
+TArray<FDCRunRecord> UDCRunSubsystem::GetLeaderboard() const { return {}; }
+void UDCRunSubsystem::ClearLeaderboard() {}
