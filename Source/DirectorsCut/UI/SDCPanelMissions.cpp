@@ -202,7 +202,7 @@ TSharedRef<SWidget> SDCRoot::BuildMissions()
 	];
 	if (Final) { Body->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 12.f)[MissionCard(*Final)]; }
 
-	if (Board.Num() == 0 && !Final)
+	if (Board.Num() == 0 && !Final && Ghosts.Num() == 0)
 	{
 		Body->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 40.f)
 		[
@@ -213,9 +213,31 @@ TSharedRef<SWidget> SDCRoot::BuildMissions()
 	}
 	else
 	{
+		// Expired postings stay a moment where they were, fading and shrinking away.
+		TArray<TSharedRef<SWidget>> Cards;
+		for (const FDCMission* M : Board) { Cards.Add(MissionCard(*M)); }
+		for (const FGhost& G : Ghosts)
+		{
+			const double GT0 = G.T0;
+			auto GA = [GT0]() { return 1.f - EaseInOut((float)(Now() - GT0 - 0.15) / 0.75f); };
+			TSharedRef<SWidget> W = SNew(SBorder)
+				.BorderImage(NoBrush()).Padding(0.f)
+				.Visibility(EVisibility::HitTestInvisible)
+				.ColorAndOpacity_Lambda([GA]() { return FLinearColor(1, 1, 1, GA()); })
+				.RenderTransformPivot(FVector2D(0.5f, 0.5f))
+				.RenderTransform_Lambda([GA]() { const float Sc = Prefs().bReduceMotion ? 1.f : 0.94f + 0.06f * GA(); return TOptional<FSlateRenderTransform>(FSlateRenderTransform(FScale2f(Sc))); })
+				[
+					SNew(SOverlay)
+					+ SOverlay::Slot()[MissionCard(G.M)]
+					+ SOverlay::Slot()[SNew(SBorder).BorderImage(Box(A(Hex(0x0B0D10), 0.6f), 10.f, A(Bad, 0.5f), 1.f))]
+					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
+					[Pill(IconText(TEXT("hourglass"), TEXT("EXPIRED"), Caps(9.f), Bad, Bad, 11.f, 6.f), Hex(0x1A0D10, 0.95f), FMargin(12.f, 5.f), A(Bad, 0.6f))]
+				];
+			Cards.Insert(W, FMath::Clamp(G.Index, 0, Cards.Num()));
+		}
 		TSharedRef<SUniformGridPanel> Grid = SNew(SUniformGridPanel).SlotPadding(FMargin(6.f));
-		for (int32 i = 0; i < Board.Num(); ++i) { Grid->AddSlot(i % 3, i / 3)[MissionCard(*Board[i])]; }
-		for (int32 i = Board.Num(); i < 3; ++i) { Grid->AddSlot(i, 0)[SNew(SSpacer)]; } // keep three columns
+		for (int32 i = 0; i < Cards.Num(); ++i) { Grid->AddSlot(i % 3, i / 3)[Cards[i]]; }
+		for (int32 i = Cards.Num(); i < 3; ++i) { Grid->AddSlot(i, 0)[SNew(SSpacer)]; } // keep three columns
 		Body->AddSlot().AutoHeight().Padding(-6.f, -6.f, -6.f, 0.f)[Grid];
 	}
 
@@ -300,6 +322,12 @@ TSharedRef<SWidget> SDCRoot::MissionCard(const FDCMission& M)
 		return (float)FMath::Clamp((Q->ExpiresAt - X->GetRunTime()) / Len, 0.0, 1.0);
 	};
 
+	auto Left = [RR, Id]() -> double
+	{
+		const UDCRunSubsystem* X = RR(); const FDCMission* Q = X ? X->FindMission(Id) : nullptr;
+		return (Q && Q->ExpiresAt >= 0.0 && !Q->bInProgress) ? FMath::Max(0.0, Q->ExpiresAt - X->GetRunTime()) : -1.0;
+	};
+
 	TSharedRef<SWidget> Top = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.f, 0.f, 12.f, 0.f)[IconTile(M.bFinal ? FName(TEXT("crown")) : M.Icon, M.bFinal ? 52.f : 44.f, TC)]
 		+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
@@ -363,16 +391,25 @@ TSharedRef<SWidget> SDCRoot::MissionCard(const FDCMission& M)
 			SNew(SBox).Visibility(M.ExpiresAt >= 0.0 ? EVisibility::Visible : EVisibility::Collapsed)
 			[
 				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)
+				[
+					SNew(SBorder).BorderImage(NoBrush()).Padding(0.f)
+					.Visibility_Lambda([Left]() { return (Prefs().bExpiryWarnings && Urgency(Left()) == EUrgency::Critical) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+					.ColorAndOpacity_Lambda([]() { return FLinearColor(1, 1, 1, 0.6f + 0.4f * Pulse()); })
+					[Pill(IconText(TEXT("hourglass"), TEXT("EXPIRING"), Caps(7.5f), Bad, Bad, 8.f, 4.f), A(Bad, 0.16f), FMargin(6.f, 1.f), A(Bad, 0.4f))]
+				]
 				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
-				[Bar(TAttribute<float>::CreateLambda(ExpiryFrac), TAttribute<FSlateColor>::CreateLambda([ExpiryFrac]() { return FSlateColor(ExpiryFrac() < 0.25f ? Bad : A(TextDim, 0.6f)); }), 2.f)]
+				[Bar(TAttribute<float>::CreateLambda(ExpiryFrac), TAttribute<FSlateColor>::CreateLambda([Left]() { return FSlateColor(UrgencyColor(Left(), A(TextDim, 0.6f))); }), 2.f)]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0.f, 0.f, 0.f)
-				[TxtA(TAttribute<FText>::CreateLambda([RR, Id]()
-					{
-						const UDCRunSubsystem* X = RR(); const FDCMission* Q = X ? X->FindMission(Id) : nullptr;
-						return FText::FromString(Q ? DC::Clock(Q->ExpiresAt - X->GetRunTime()) : TEXT(""));
-					}), Mono(8.5f), FSlateColor(TextFaint))]
+				[TxtA(TAttribute<FText>::CreateLambda([Left]() { return FText::FromString(DC::Clock(Left())); }), Mono(8.5f),
+					TAttribute<FSlateColor>::CreateLambda([Left]() { return FSlateColor(UrgencyColor(Left(), TextFaint)); }))]
 			]
 		];
+
+	// Critical: a soft red outline breathes around the card.
+	TSharedRef<SWidget> Alarm = SNew(SBorder)
+		.Visibility_Lambda([Left]() { return (Prefs().bExpiryWarnings && Urgency(Left()) == EUrgency::Critical) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+		.BorderImage_Lambda([]() { return Box(FLinearColor::Transparent, 10.f, A(Bad, 0.35f + 0.45f * Pulse()), 1.5f); });
 
 	TSharedRef<SWidget> Btn = Button(Content, [this, Id]() { OpenPlanner(Id); }, EBtn::Card, true, nullptr, FMargin(14.f, 14.f, 14.f, 12.f));
 	if (M.bRare || M.bFinal)
@@ -380,9 +417,10 @@ TSharedRef<SWidget> SDCRoot::MissionCard(const FDCMission& M)
 		return SNew(SOverlay)
 			+ SOverlay::Slot().Padding(-3.f)[SNew(SBorder).BorderImage(Box(A(Accent, 0.07f), 13.f, A(Accent, 0.22f), 1.f)).Visibility(EVisibility::HitTestInvisible)]
 			+ SOverlay::Slot()[Btn]
-			+ SOverlay::Slot()[SNew(SBorder).BorderImage(Box(FLinearColor::Transparent, 10.f, A(Accent, 0.55f), 1.f)).Visibility(EVisibility::HitTestInvisible)];
+			+ SOverlay::Slot()[SNew(SBorder).BorderImage(Box(FLinearColor::Transparent, 10.f, A(Accent, 0.55f), 1.f)).Visibility(EVisibility::HitTestInvisible)]
+			+ SOverlay::Slot()[Alarm];
 	}
-	return Btn;
+	return SNew(SOverlay) + SOverlay::Slot()[Btn] + SOverlay::Slot()[Alarm];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1023,7 +1061,11 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 			{
 				const UDCRunSubsystem* X = RR(); const FDCMission* Q = X ? X->FindMission(MId) : nullptr;
 				return FText::FromString(Q ? DC::Clock(Q->ExpiresAt - X->GetRunTime()) : TEXT(""));
-			}), TextDim, Mono(10.f), FSlateColor(TextDim));
+			}), TextDim, Mono(10.f), TAttribute<FSlateColor>::CreateLambda([RR, MId]()
+			{
+				const UDCRunSubsystem* X = RR(); const FDCMission* Q = X ? X->FindMission(MId) : nullptr;
+				return FSlateColor(Q ? UrgencyColor(Q->ExpiresAt - X->GetRunTime(), TextDim) : TextDim);
+			}));
 		Exp->SetToolTip(Tip(TEXT("Posting expires"), TEXT("Start it before the timer runs out"), TEXT("hourglass")));
 		HR->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(14.f, 0.f, 0.f, 0.f)[Exp];
 	}

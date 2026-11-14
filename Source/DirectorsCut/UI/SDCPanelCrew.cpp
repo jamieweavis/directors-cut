@@ -580,8 +580,10 @@ TSharedRef<SWidget> SDCRoot::BuildRecruits()
 	TSharedRef<SWidget> Refresh = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 10.f, 0.f)
 		[
-			SNew(SBox).ToolTip(Tip(TEXT("New faces"), TEXT("The recruit list refreshes on its own"), TEXT("timer")))
-			[IconTextA(TEXT("timer"), TAttribute<FText>::CreateLambda([RR]() { const UDCRunSubsystem* X = RR(); return FText::FromString(X ? DC::Clock(X->GetRecruitRefreshIn()) : TEXT("")); }), Mono(10.f), FSlateColor(TextDim), FSlateColor(TextDim), 11.f, 5.f)]
+			SNew(SBox).ToolTip(Tip(TEXT("New faces"), TEXT("The recruit list refreshes on its own. Everyone listed now moves on when it does."), TEXT("timer")))
+			[IconTextA(TEXT("timer"), TAttribute<FText>::CreateLambda([RR]() { const UDCRunSubsystem* X = RR(); return FText::FromString(X ? DC::Clock(X->GetRecruitRefreshIn()) : TEXT("")); }), Mono(10.f),
+				TAttribute<FSlateColor>::CreateLambda([this]() { return FSlateColor(UrgencyColor(RecruitExpiry(), TextDim)); }),
+				TAttribute<FSlateColor>::CreateLambda([this]() { return FSlateColor(UrgencyColor(RecruitExpiry(), TextDim)); }), 11.f, 5.f)]
 		]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 		[TextButton(TEXT("refresh-cw"), Money(RefreshCost), [this]()
@@ -599,8 +601,27 @@ TSharedRef<SWidget> SDCRoot::BuildRecruits()
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[Icon(TEXT("user-search"), 30.f, TextFaint)]
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 10.f, 0.f, 0.f)[Txt(TEXT("Nobody's looking for work"), Font(11.f), TextDim)]
 			]);
+	// Escalating notice above the cards while the pool is about to roll over.
+	auto Urg = [this]() { return Prefs().bExpiryWarnings ? Urgency(RecruitExpiry()) : EUrgency::Calm; };
+	TSharedRef<SWidget> Notice = SNew(SBox)
+		.Visibility_Lambda([Urg]() { return Urg() != EUrgency::Calm ? EVisibility::Visible : EVisibility::Collapsed; })
+		.Padding(FMargin(0.f, 0.f, 8.f, 10.f))
+		[
+			SNew(SBorder)
+			.BorderImage_Lambda([Urg]() { const FLinearColor C = Urg() == EUrgency::Critical ? Bad : Accent; return Box(A(C, 0.10f), 9.f, A(C, Urg() == EUrgency::Critical ? 0.3f + 0.4f * Pulse() : 0.35f), 1.f); })
+			.Padding(FMargin(12.f, 8.f))
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 10.f, 0.f)
+				[IconA(TEXT("hourglass"), 13.f, TAttribute<FSlateColor>::CreateLambda([Urg]() { return FSlateColor(Urg() == EUrgency::Critical ? Bad : Accent); }))]
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+				[TxtA(TAttribute<FText>::CreateLambda([Urg]() { return FText::FromString(Urg() == EUrgency::Critical ? TEXT("Expiring · these recruits move on any moment") : TEXT("These recruits move on soon")); }), Font(10.5f, EW::Medium), FSlateColor(Text))]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[TxtA(TAttribute<FText>::CreateLambda([this]() { return FText::FromString(DC::Clock(RecruitExpiry())); }), Mono(12.f), TAttribute<FSlateColor>::CreateLambda([this]() { return FSlateColor(UrgencyColor(RecruitExpiry(), Text)); }))]
+			]
+		];
 	TSharedRef<SWidget> Body = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().FillWidth(1.f)[Left]
+		+ SHorizontalBox::Slot().FillWidth(1.f)[SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[Notice] + SVerticalBox::Slot().FillHeight(1.f)[Left]]
 		+ SHorizontalBox::Slot().AutoWidth().Padding(18.f, 0.f)[VLine()]
 		+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(260.f)[Finances]];
 	return Shell(TEXT("user-plus"), TEXT("Recruits"), Body, Refresh);

@@ -1,5 +1,6 @@
 #include "UI/DCUIStyle.h"
 #include "Core/DCAudioSubsystem.h"
+#include "Core/DCSettings.h"
 #include "Brushes/SlateColorBrush.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Brushes/SlateNoResource.h"
@@ -36,22 +37,61 @@ namespace DCUI
 	// Accent: sodium-vapour amber (#F5A524). Streetlights, cash and warning tape: it reads as "night-time city" without
 	// any neon, stays legible on near-black glass at small sizes, and is far enough from the semantic green/red that the
 	// odds ring (green) and its bonus overflow (amber) never get confused.
-	const FLinearColor Glass     = Hex(0x0B0D10, 0.92f);
-	const FLinearColor GlassSoft = Hex(0x0E1115, 0.86f);
-	const FLinearColor Card      = Hex(0x161A20, 0.92f);
-	const FLinearColor CardHi    = Hex(0x1E232B, 0.96f);
-	const FLinearColor Inset     = Hex(0x07080A, 0.70f);
-	const FLinearColor Line      = FLinearColor(1.f, 1.f, 1.f, 0.085f);
-	const FLinearColor LineHi    = FLinearColor(1.f, 1.f, 1.f, 0.20f);
-	const FLinearColor Text      = Hex(0xE8EAED);
-	const FLinearColor TextDim   = Hex(0x9AA3AE);
-	const FLinearColor TextFaint = Hex(0x5C6570);
-	const FLinearColor Accent    = Hex(0xF5A524);
-	const FLinearColor AccentInk = Hex(0x14100A);
-	const FLinearColor Good      = Hex(0x34D399);
-	const FLinearColor Bad       = Hex(0xF43F5E);
-	const FLinearColor Warn      = Hex(0xFACC15);
-	const FLinearColor Info      = Hex(0x60A5FA);
+	FLinearColor Glass = Hex(0x0B0D10, 0.92f);
+	FLinearColor GlassSoft = Hex(0x0E1115, 0.86f);
+	FLinearColor Card = Hex(0x161A20, 0.92f);
+	FLinearColor CardHi = Hex(0x1E232B, 0.96f);
+	FLinearColor Inset = Hex(0x07080A, 0.70f);
+	FLinearColor Line = FLinearColor(1.f, 1.f, 1.f, 0.085f);
+	FLinearColor LineHi = FLinearColor(1.f, 1.f, 1.f, 0.20f);
+	FLinearColor Text = Hex(0xE8EAED);
+	FLinearColor TextDim = Hex(0x9AA3AE);
+	FLinearColor TextFaint = Hex(0x5C6570);
+	FLinearColor Accent = Hex(0xF5A524);
+	FLinearColor AccentInk = Hex(0x14100A);
+	FLinearColor Good = Hex(0x34D399);
+	FLinearColor Bad = Hex(0xF43F5E);
+	FLinearColor Warn = Hex(0xFACC15);
+	FLinearColor Info = Hex(0x60A5FA);
+
+	void ApplyHighContrast(bool bOn)
+	{
+		Glass     = bOn ? Hex(0x050608, 0.985f) : Hex(0x0B0D10, 0.92f);
+		GlassSoft = bOn ? Hex(0x07090B, 0.97f) : Hex(0x0E1115, 0.86f);
+		Card      = bOn ? Hex(0x14181E, 1.f) : Hex(0x161A20, 0.92f);
+		CardHi    = bOn ? Hex(0x222832, 1.f) : Hex(0x1E232B, 0.96f);
+		Line      = bOn ? FLinearColor(1.f, 1.f, 1.f, 0.24f) : FLinearColor(1.f, 1.f, 1.f, 0.085f);
+		LineHi    = bOn ? FLinearColor(1.f, 1.f, 1.f, 0.55f) : FLinearColor(1.f, 1.f, 1.f, 0.20f);
+		Text      = bOn ? Hex(0xFFFFFF) : Hex(0xE8EAED);
+		TextDim   = bOn ? Hex(0xCDD3DA) : Hex(0x9AA3AE);
+		TextFaint = bOn ? Hex(0x9AA3AE) : Hex(0x5C6570);
+	}
+
+	static FPrefs GPrefs;
+	const FPrefs& Prefs() { return GPrefs; }
+
+	EUrgency Urgency(double S)
+	{
+		if (S < 0.0) { return EUrgency::Calm; }
+		if (S < UrgentCritical) { return EUrgency::Critical; }
+		if (S < UrgentSoon) { return EUrgency::Soon; }
+		return EUrgency::Calm;
+	}
+	FLinearColor UrgencyColor(double S, const FLinearColor& Calm)
+	{
+		if (!GPrefs.bExpiryWarnings) { return Calm; }
+		switch (Urgency(S))
+		{
+		case EUrgency::Critical: return Bad;
+		case EUrgency::Soon:     return Accent;
+		default:                 return Calm;
+		}
+	}
+	float Pulse(float Hz)
+	{
+		if (GPrefs.bReduceFlashing) { return 1.f; }
+		return 0.5f + 0.5f * FMath::Cos((float)FMath::Fmod(FPlatformTime::Seconds() * Hz, 1.0) * 2.f * PI);
+	}
 
 	FLinearColor ChanceColor(float C)
 	{
@@ -135,7 +175,7 @@ namespace DCUI
 	}
 
 	// Small sizes get a nudge: the UI is laid out at 1080p and scales down to 720p, where 7-8 pt gets too thin.
-	static float Legible(float Size) { return Size < 10.f ? Size + 0.5f : Size; }
+	static float Legible(float Size) { Size *= GPrefs.TextScale; return Size < 10.f ? Size + 0.5f : Size; }
 
 	FSlateFontInfo Font(float Size, EW Weight, int32 LetterSpacing)
 	{
@@ -267,6 +307,21 @@ namespace DCUI
 		}
 	};
 	static FStyles& Styles() { static FStyles S; return S; }
+
+	void RefreshPrefs()
+	{
+		const bool bHC = DCSettings::HighContrastUI();
+		GPrefs.bReduceMotion = DCSettings::ReduceMotion();
+		GPrefs.bReduceFlashing = DCSettings::ReduceFlashing();
+		GPrefs.bExpiryWarnings = DCSettings::ExpiryWarnings();
+		GPrefs.TextScale = FMath::Clamp(DCSettings::TextScale(), 0.8f, 1.4f);
+		if (bHC != GPrefs.bHighContrast)
+		{
+			GPrefs.bHighContrast = bHC;
+			ApplyHighContrast(bHC);
+			Styles() = FStyles(); // same addresses: live widgets keep valid style pointers
+		}
+	}
 	const FButtonStyle& ButtonStyle(EBtn Kind) { return Styles().Buttons[(int32)Kind]; }
 	const FSliderStyle& SliderStyle() { return Styles().Slider; }
 	const FScrollBarStyle& ScrollBarStyle() { return Styles().Scroll; }
@@ -387,7 +442,7 @@ namespace DCUI
 	}
 	TSharedRef<SWidget> TextButton(FName IconName, const FString& LabelText, TFunction<void()> OnClick, EBtn Kind, TAttribute<bool> Enabled, TSharedPtr<IToolTip> ToolTip, float Size)
 	{
-		const FLinearColor Fg = Kind == EBtn::Primary ? AccentInk : (Kind == EBtn::Danger ? Bad : (Kind == EBtn::Ghost ? TextDim : Text));
+		FLinearColor Fg = Kind == EBtn::Primary ? AccentInk : (Kind == EBtn::Danger ? Bad : (Kind == EBtn::Ghost ? TextDim : Text));
 		TSharedRef<SHorizontalBox> H = SNew(SHorizontalBox);
 		if (!IconName.IsNone())
 		{
@@ -401,7 +456,7 @@ namespace DCUI
 	}
 	TSharedRef<SWidget> IconButton(FName IconName, TFunction<void()> OnClick, TSharedPtr<IToolTip> ToolTip, EBtn Kind, float Size, TAttribute<bool> Enabled)
 	{
-		const FLinearColor Fg = Kind == EBtn::Primary ? AccentInk : (Kind == EBtn::Danger ? Bad : (Kind == EBtn::Ghost ? TextDim : Text));
+		FLinearColor Fg = Kind == EBtn::Primary ? AccentInk : (Kind == EBtn::Danger ? Bad : (Kind == EBtn::Ghost ? TextDim : Text));
 		return Button(SNew(SBox).WidthOverride(Size * 1.5f).HeightOverride(Size * 1.5f).HAlign(HAlign_Center).VAlign(VAlign_Center)[Icon(IconName, Size, Fg)],
 			OnClick, Kind, Enabled, ToolTip, FMargin(Size * 0.35f));
 	}
@@ -489,8 +544,8 @@ namespace DCUI
 
 	TSharedRef<SWidget> AvatarType(EDCCriminalType T, EDCQuality Q, float Size, bool bDim)
 	{
-		const FLinearColor QC = DC::QualityColor(Q);
-		const FLinearColor TC = DC::TypeColor(T);
+		FLinearColor QC = DC::QualityColor(Q);
+		FLinearColor TC = DC::TypeColor(T);
 		const float Ring = FMath::Max(1.5f, Size * 0.055f);
 		return SNew(SBox).WidthOverride(Size).HeightOverride(Size)
 			[

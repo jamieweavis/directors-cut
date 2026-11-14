@@ -41,4 +41,18 @@ namespace DCSettings
 	inline bool ShowCrewNames()       { return GetBool(TEXT("ShowCrewNames"), true); }
 	inline bool ExpiryWarnings()      { return GetBool(TEXT("ExpiryWarnings"), true); }  // pulsing + sound when leads/recruits expire
 	inline bool PauseOnFocusLoss()    { return GetBool(TEXT("PauseOnFocusLoss"), true); }
+	inline int32 ColorVisionSeverity(){ return GetInt(TEXT("ColorVisionSeverity"), 8); } // 1 .. 10 correction strength
+	inline float TextScale()          { return GetFloat(TEXT("TextScale"), 1.f); }       // 0.9 .. 1.3, UI text only (on top of UIScale)
+
+	// Audio (volumes live in UDCAudioSubsystem; these are global multipliers applied through FApp by the UI)
+	inline bool MuteAll()             { return GetBool(TEXT("MuteAll"), false); }
+	inline bool MuteWhenUnfocused()   { return GetBool(TEXT("MuteWhenUnfocused"), true); }
+
+	// Display
+	inline bool ShowFPS()             { return GetBool(TEXT("ShowFPS"), false); }        // small fps readout on the HUD
+
+	// Gameplay / camera (read by World: ADCCameraRig / ADCPlayerController)
+	inline bool EdgeScroll()          { return GetBool(TEXT("EdgeScroll"), false); }     // pan when the mouse touches the screen edge
+	inline float CameraPanSpeed()     { return GetFloat(TEXT("CameraPanSpeed"), 1.f); }  // 0.5 .. 2 multiplier on keyboard/edge pan
+	inline float CameraZoomSpeed()    { return GetFloat(TEXT("CameraZoomSpeed"), 1.f); } // 0.5 .. 2 multiplier on scroll zoom
 }

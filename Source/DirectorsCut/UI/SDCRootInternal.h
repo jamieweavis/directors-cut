@@ -7,6 +7,7 @@
 #include "Core/DCRunSubsystem.h"
 #include "Core/DCUISubsystem.h"
 #include "Core/DCAudioSubsystem.h"
+#include "Core/DCSettings.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/SToolTip.h"

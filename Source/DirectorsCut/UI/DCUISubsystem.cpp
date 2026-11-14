@@ -12,6 +12,8 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/Application/IInputProcessor.h"
 #include "Input/Events.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "DirectorsCut.h"
 
 /** Panel hotkeys (C, G, R, B, N, M). Observes only: never consumes, so the game still sees every key. */
@@ -81,7 +83,12 @@ void UDCUISubsystem::InitializeUI(APlayerController* PC)
 	}
 
 	Root = SNew(SDCRoot).Owner(this);
+	Root->ApplyPlayerSettings(false);
 	RootViewport = VP;
+	// Dev screenshots: -DCUIView=options.graphics,slots.load,... (one entry per -DCShots panel open; "-" = none)
+	DevViews.Reset();
+	FString Views;
+	if (FParse::Value(FCommandLine::Get(), TEXT("DCUIView="), Views, false)) { Views.ParseIntoArray(DevViews, TEXT(","), true); }
 	VP->AddViewportWidgetContent(Root.ToSharedRef(), 10);
 	if (FSlateApplication::IsInitialized())
 	{
@@ -102,7 +109,11 @@ void UDCUISubsystem::InitializeUI(APlayerController* PC)
 
 void UDCUISubsystem::OpenPanel(EDCPanel Panel)
 {
-	if (Root.IsValid()) { Root->Open(Panel); }
+	if (Root.IsValid())
+	{
+		Root->Open(Panel);
+		if (DevViews.Num()) { const FString V = DevViews[0]; DevViews.RemoveAt(0); Root->SetDevView(V); }
+	}
 	else { OpenPanelType = Panel; OnPanelChanged.Broadcast(Panel); }
 }
 

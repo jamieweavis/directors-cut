@@ -21,22 +21,48 @@ namespace DCUI
 	FLinearColor Hex(uint32 RGB, float Alpha = 1.f);
 	inline FLinearColor A(FLinearColor C, float Alpha) { C.A = Alpha; return C; }
 
-	extern const FLinearColor Glass;      // panel fill  #0B0D10 @ 92%
-	extern const FLinearColor GlassSoft;  // HUD pill fill (a touch lighter, more transparent)
-	extern const FLinearColor Card;       // raised surface on glass
-	extern const FLinearColor CardHi;     // hovered surface
-	extern const FLinearColor Inset;      // sunken wells, bar tracks
-	extern const FLinearColor Line;       // 1 px hairline (white ~9%)
-	extern const FLinearColor LineHi;     // hovered hairline
-	extern const FLinearColor Text;       // primary text
-	extern const FLinearColor TextDim;    // secondary text
-	extern const FLinearColor TextFaint;  // tertiary / disabled
-	extern const FLinearColor Accent;     // sodium amber #F5A524
-	extern const FLinearColor AccentInk;  // text on accent
-	extern const FLinearColor Good;       // success green
-	extern const FLinearColor Bad;        // danger red
-	extern const FLinearColor Warn;       // warning yellow
-	extern const FLinearColor Info;       // calm blue
+	extern FLinearColor Glass;      // panel fill  #0B0D10 @ 92%
+	extern FLinearColor GlassSoft;  // HUD pill fill (a touch lighter, more transparent)
+	extern FLinearColor Card;       // raised surface on glass
+	extern FLinearColor CardHi;     // hovered surface
+	extern FLinearColor Inset;      // sunken wells, bar tracks
+	extern FLinearColor Line;       // 1 px hairline (white ~9%)
+	extern FLinearColor LineHi;     // hovered hairline
+	extern FLinearColor Text;       // primary text
+	extern FLinearColor TextDim;    // secondary text
+	extern FLinearColor TextFaint;  // tertiary / disabled
+	extern FLinearColor Accent;     // sodium amber #F5A524
+	extern FLinearColor AccentInk;  // text on accent
+	extern FLinearColor Good;       // success green
+	extern FLinearColor Bad;        // danger red
+	extern FLinearColor Warn;       // warning yellow
+	extern FLinearColor Info;       // calm blue
+
+	/** High-contrast palette (brighter text, stronger hairlines, opaque glass). Rebuild every widget afterwards. */
+	void ApplyHighContrast(bool bOn);
+
+	// ── Player preferences (cached copy of DCSettings, refreshed by RefreshPrefs) ──
+	struct FPrefs
+	{
+		bool bReduceMotion = false;
+		bool bReduceFlashing = false;
+		bool bExpiryWarnings = true;
+		bool bHighContrast = false;
+		float TextScale = 1.f;
+	};
+	const FPrefs& Prefs();
+	/** Re-reads DCSettings into Prefs() and re-applies palette + text scale. Callers rebuild their widgets. */
+	void RefreshPrefs();
+
+	// ── Expiry urgency (leads, recruits, anything on a timer) ────────────────
+	inline constexpr double UrgentSoon = 60.0;      // amber
+	inline constexpr double UrgentCritical = 20.0;  // red + pulse + "Expiring"
+	enum class EUrgency : uint8 { Calm, Soon, Critical };
+	/** SecondsLeft < 0 = never expires (Calm). */
+	EUrgency Urgency(double SecondsLeft);
+	FLinearColor UrgencyColor(double SecondsLeft, const FLinearColor& Calm);
+	/** 0..1 gentle sine pulse for critical timers; a steady 1 with Reduce flashing on. */
+	float Pulse(float Hz = 1.1f);
 
 	FLinearColor ChanceColor(float Chance);       // red -> amber -> green by success chance
 	FLinearColor OutcomeColor(EDCMissionOutcome O);
