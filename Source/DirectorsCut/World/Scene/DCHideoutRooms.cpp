@@ -1,4 +1,4 @@
-// Director's Cut — per-room dressing for the warehouse hideout (Agent D). All coordinates are room-local cm
+// Director's Cut — per-room dressing for the farmhouse hideout and its wings. All coordinates are room-local cm
 // (room actor sits at the centre of its floor rect, floor top at z=0). Camera looks from -X-Y, so tall props are
 // pushed towards the +X/+Y walls and silhouettes face -X/-Y. Station props use the kit with bKitOnStation = true.
 #include "World/Scene/DCHideoutBuilder.h"
@@ -34,171 +34,195 @@ static void SpawnZoneAt(UWorld* W, ADCRoomModule* Room, const FVector& Local, co
 }
 
 // =====================================================================================================================
-// OFFICE  (local == world; x[-500,500] y[-400,400]; +X exterior wall: windows + street door to the yard; +Y tall wall)
+// OFFICE = the old farmhouse  (local == world; x[-500,500] y[-400,400]; +X/+Y tall stone walls, fronts collapsed)
 // =====================================================================================================================
 void ADCHideoutBuilder::BuildOffice()
 {
 	CurRoom = GetRoom(EDCRoomType::Office);
 
-	// ---------------- shell extras: door frame, exit sign, sun shaft volume + motes
+	// ---------------- shell: years of neglect on the floorboards (always there, the house is always built)
 	CurGroup = DCGroups::Shell;
-	const float WX = 478.f;
-	Deco(EDCShape::Cube, FVector(WX - 2, -250, 229), FVector(10, 136, 8), "SteelBlack");
-	Deco(EDCShape::Cube, FVector(WX - 2, -314, 112), FVector(10, 8, 226), "SteelBlack");
-	Deco(EDCShape::Cube, FVector(WX - 2, -186, 112), FVector(10, 8, 226), "SteelBlack");
-	Deco(EDCShape::Cube, FVector(WX - 6, -250, 250), FVector(4, 34, 14), "PlasticWhite");
-	Deco(EDCShape::Cube, FVector(WX - 8.5f, -250, 250), FVector(1, 30, 10), "ExitGreen", FRotator::ZeroRotator, false);
-	ShaftFog(FVector(100, 0, 170), FVector(400, 380, 190), 0.3f);
-	SunDust(FVector(150, 80, 330), FVector(-150, -150, 20), 150, 100.f);
+	SunDust(FVector(150, 200, 420), FVector(-150, -150, 20), 140, 120.f);
+	for (int32 i = 0; i < 6; ++i)
+	{
+		const FVector P(-420.f + i * 160.f + J(i, 40), -330.f + J(i + 9, 30), 0.3f);
+		Deco(EDCShape::Cube, P, FVector(90 + J(i + 3, 40), 60 + J(i + 4, 30), 0.6f), (i % 2) ? FName("Dirt") : FName("Moss"), FRotator(0, J(i + 5, 40), 0), false);
+	}
+	Deco(EDCShape::Cube, FVector(455, 380, 0.4f), FVector(70, 30, 0.8f), "Moss", FRotator::ZeroRotator, false);
+	Deco(EDCShape::Cube, FVector(-120, -300, -1.f), FVector(70, 34, 4), "Black", FRotator(0, 8, 0), false);    // missing boards
+	Weeds(FVector(-120, -300, 0), 30.f, 6, 3, 55.f);
+	Weeds(FVector(-460, -360, 0), 50.f, 8, 5, 70.f);
+	Weeds(FVector(460, -360, 0), 40.f, 6, 7, 60.f);
+	Weeds(FVector(250, 40, 0), 25.f, 4, 9, 35.f);
+	RubblePile(FVector(-420, -120, 0), 40.f, 6, 11, "Stone");
+	Deco(EDCShape::Cube, FVector(180, -335, 6), FVector(160, 16, 5), "TimberGrey", FRotator(4, 35, 0));            // a fallen joist end
+	ShaftFog(FVector(0, 0, 200), FVector(480, 380, 200), 0.18f);
 
 	CurGroup = DCGroups::Level1;
-	// concrete floor with a worn dark rug under the desk zone
-	Deco(EDCShape::Cube, FVector(60, -30, 0.6f), FVector(320, 420, 1.2f), "Fabric");
-	Pendant(FVector(40, -90, 255), true, true, 45.f);
-	Pendant(FVector(40, 60, 255), true, true, 30.f);
-	LedBatten(FVector(-300, -230, 300), 150.f, 0.f, true, 30.f);
+	// threadbare rug under the desk, a hanging bulb on a flex from the loft joist (the house's key light)
+	Deco(EDCShape::Cube, FVector(60, -30, 0.6f), FVector(300, 400, 1.2f), "Fabric", FRotator(0, 3, 0));
+	HangingBulb(FVector(40, -30, 228), 352.f - 9.f, FLinearColor(1.f, 0.58f, 0.28f), 38.f, 780.f, true);
 
-	// ---------------- Desk: steel desk, laptop, burner phones, cash counter
+	// ---------------- Desk: old farmhouse table, laptop, burner phones, cash counter
 	BeginStation(EDCStationType::Desk, TEXT("Desk"), FVector(40, -30, 0), FVector(80, 130, 75));
 	bKitOnStation = true;
 	{
 		const FVector D(40, -30, 0);
-		K(EDCShape::Cube, D + FVector(0, 0, 75), FVector(100, 220, 4), "PaintGrey");
-		K(EDCShape::Cube, D + FVector(0, 0, 72), FVector(96, 216, 3), "SteelBlack");
-		for (int32 i = 0; i < 2; ++i)
-		{
-			const float Y = i ? 100.f : -100.f;
-			K(EDCShape::Cube, D + FVector(0, Y, 36), FVector(90, 6, 72), "SteelBlack");
-		}
-		K(EDCShape::Cube, D + FVector(0, -62, 36), FVector(84, 56, 68), "PaintGrey");                 // drawer pedestal
-		for (int32 i = 0; i < 3; ++i) { K(EDCShape::Cube, D + FVector(43, -62, 14 + i * 22.f), FVector(1, 40, 2), "Alu"); }
-		K(EDCShape::Cube, D + FVector(-40, 0, 42), FVector(4, 190, 50), "SteelBlack");                 // modesty panel
+		K(EDCShape::Cube, D + FVector(0, 0, 75), FVector(100, 220, 5), "Timber");
+		K(EDCShape::Cube, D + FVector(0, 0, 71), FVector(92, 210, 4), "TimberDark");
+		for (int32 i = 0; i < 4; ++i) { K(EDCShape::Cube, D + FVector((i % 2) ? 40.f : -40.f, (i / 2) ? 98.f : -98.f, 36), FVector(8, 8, 72), "TimberDark"); }
+		K(EDCShape::Cube, D + FVector(0, -62, 36), FVector(84, 56, 68), "PaintGreen");                // old drawer chest
+		for (int32 i = 0; i < 3; ++i) { K(EDCShape::Cube, D + FVector(43, -62, 14 + i * 22.f), FVector(1, 40, 2), "Rust"); }
 		// laptop (boss side is +X)
-		K(EDCShape::Cube, D + FVector(18, 10, 77.8f), FVector(24, 34, 1.6f), "Alu", FRotator(0, 0, 0));
-		K(EDCShape::Cube, D + FVector(6, 10, 88), FVector(1.4f, 34, 22), "Alu", FRotator(-18, 0, 0));
-		K(EDCShape::Cube, D + FVector(7.2f, 10, 88.4f), FVector(0.3f, 31, 19), "Screen1", FRotator(-18, 0, 0), false);
+		K(EDCShape::Cube, D + FVector(18, 10, 78.3f), FVector(24, 34, 1.6f), "Alu", FRotator(0, 0, 0));
+		K(EDCShape::Cube, D + FVector(6, 10, 88.5f), FVector(1.4f, 34, 22), "Alu", FRotator(-18, 0, 0));
+		K(EDCShape::Cube, D + FVector(7.2f, 10, 88.9f), FVector(0.3f, 31, 19), "Screen1", FRotator(-18, 0, 0), false);
 		// burner phones + SIM packs
-		for (int32 i = 0; i < 4; ++i) { K(EDCShape::Cube, D + FVector(-12 + J(i, 6), -40 + i * 11.f, 77.6f), FVector(13, 6.5f, 1.4f), "PlasticBlack", FRotator(0, J(i + 4, 20), 0)); }
-		K(EDCShape::Cube, D + FVector(-14, -42, 78.4f), FVector(9, 5, 0.2f), "Laptop", FRotator(0, J(4, 20), 0), false);
+		for (int32 i = 0; i < 4; ++i) { K(EDCShape::Cube, D + FVector(-12 + J(i, 6), -40 + i * 11.f, 78.1f), FVector(13, 6.5f, 1.4f), "PlasticBlack", FRotator(0, J(i + 4, 20), 0)); }
+		K(EDCShape::Cube, D + FVector(-14, -42, 78.9f), FVector(9, 5, 0.2f), "Laptop", FRotator(0, J(4, 20), 0), false);
 		// cash-counting machine + stacks
-		K(EDCShape::Cube, D + FVector(-18, 62, 84), FVector(30, 30, 18), "PaintGrey");
-		K(EDCShape::Cube, D + FVector(-18, 62, 94), FVector(18, 8, 4), "Cash", FRotator(-25, 0, 0));
-		K(EDCShape::Cube, D + FVector(-3, 62, 88), FVector(1, 10, 3), "LedG", FRotator::ZeroRotator, false);
-		for (int32 i = 0; i < 9; ++i) { K(EDCShape::Cube, D + FVector(20 + (i % 3) * 9.f, 50 + (i / 3) * 17.f - 9.f, 79 + (i % 2) * 2.5f), FVector(7.5f, 16, 2.5f + (i % 2) * 2.5f), "Cash", FRotator(0, J(i, 6), 0)); }
-		for (int32 i = 0; i < 9; ++i) { K(EDCShape::Cube, D + FVector(20 + (i % 3) * 9.f, 50 + (i / 3) * 17.f - 9.f, 79.2f), FVector(7.7f, 2.f, 3.f + (i % 2) * 2.5f), "Paper", FRotator(0, J(i, 6), 0)); }
-		// pistol, ashtray, coffee
-		K(EDCShape::Cube, D + FVector(-20, -70, 78.2f), FVector(18, 3, 4), "PlasticBlack", FRotator(0, 25, 0));
-		K(EDCShape::Cube, D + FVector(-15, -66, 77.6f), FVector(4, 3, 10), "PlasticBlack", FRotator(0, 25, 90));
-		K(EDCShape::Cylinder, D + FVector(25, -78, 81), FVector(8, 8, 10), "PlasticWhite");
-		// architect lamp
-		K(EDCShape::Cylinder, D + FVector(30, 98, 78), FVector(14, 14, 3), "SteelBlack");
+		K(EDCShape::Cube, D + FVector(-18, 62, 86), FVector(30, 30, 18), "PaintGrey");
+		K(EDCShape::Cube, D + FVector(-18, 62, 96), FVector(18, 8, 4), "Cash", FRotator(-25, 0, 0));
+		K(EDCShape::Cube, D + FVector(-3, 62, 90), FVector(1, 10, 3), "LedG", FRotator::ZeroRotator, false);
+		for (int32 i = 0; i < 9; ++i) { K(EDCShape::Cube, D + FVector(20 + (i % 3) * 9.f, 50 + (i / 3) * 17.f - 9.f, 79.5f + (i % 2) * 2.5f), FVector(7.5f, 16, 2.5f + (i % 2) * 2.5f), "Cash", FRotator(0, J(i, 6), 0)); }
+		for (int32 i = 0; i < 9; ++i) { K(EDCShape::Cube, D + FVector(20 + (i % 3) * 9.f, 50 + (i / 3) * 17.f - 9.f, 79.7f), FVector(7.7f, 2.f, 3.f + (i % 2) * 2.5f), "Paper", FRotator(0, J(i, 6), 0)); }
+		// pistol, enamel mug, candle stub in a bottle
+		K(EDCShape::Cube, D + FVector(-20, -70, 78.7f), FVector(18, 3, 4), "PlasticBlack", FRotator(0, 25, 0));
+		K(EDCShape::Cube, D + FVector(-15, -66, 78.1f), FVector(4, 3, 10), "PlasticBlack", FRotator(0, 25, 90));
+		K(EDCShape::Cylinder, D + FVector(25, -78, 82), FVector(8, 8, 10), "PlasticWhite");
+		K(EDCShape::Cylinder, D + FVector(-30, 88, 88), FVector(7, 7, 22), "Bottle");
+		K(EDCShape::Cylinder, D + FVector(-30, 88, 102), FVector(2.5f, 2.5f, 6), "Paper");
+		K(EDCShape::Sphere, D + FVector(-30, 88, 107), FVector(1.6f, 1.6f, 3.f), "Candle", FRotator::ZeroRotator, false);
+		// architect lamp, clamped on
+		K(EDCShape::Cylinder, D + FVector(30, 98, 78.5f), FVector(14, 14, 3), "SteelBlack");
 		KTube(D + FVector(30, 98, 78), D + FVector(10, 92, 118), 1.6f, "SteelBlack");
 		KTube(D + FVector(10, 92, 118), D + FVector(-5, 78, 110), 1.6f, "SteelBlack");
 		K(EDCShape::Cone, D + FVector(-6, 76, 104), FVector(16, 16, 12), "SteelBlack");
-		K(EDCShape::Cylinder, D + FVector(-6, 76, 98.5f), FVector(10, 10, 0.6f), "LedWarm", FRotator::ZeroRotator, false);
+		K(EDCShape::Cylinder, D + FVector(-6, 76, 98.5f), FVector(10, 10, 0.6f), "Tungsten", FRotator::ZeroRotator, false);
 		OfficeChair(D + FVector(95, 0, 0), 180.f);
 	}
 	bKitOnStation = false;
 	{
-		USpotLightComponent* Key = Spot(FVector(34, 46, 96), FVector(20, -10, 75), Warm, 30.f, 500.f, 30.f, 70.f, true, true);
+		USpotLightComponent* Key = Spot(FVector(34, 46, 96), FVector(20, -10, 75), FLinearColor(1.f, 0.62f, 0.32f), 26.f, 450.f, 30.f, 70.f, false, true);
 		Key->SourceRadius = 5.f;
 	}
 
-	// ---------------- Mission Board: wall of monitors + city map with pins, on the tall +Y wall
-	BeginStation(EDCStationType::MissionBoard, TEXT("Mission Board"), FVector(-150, 360, 0), FVector(190, 30, 150));
+	// ---------------- Mission Board: screens and a paper map rigged on scaffold poles against the tall +Y wall
+	BeginStation(EDCStationType::MissionBoard, TEXT("Mission Board"), FVector(-150, 355, 0), FVector(190, 30, 150));
 	bKitOnStation = true;
 	{
-		const float Y = 383.f;
-		// steel frame
-		K(EDCShape::Cube, FVector(-150, Y + 2, 300), FVector(380, 6, 6), "SteelBlack");
-		K(EDCShape::Cube, FVector(-150, Y + 2, 120), FVector(380, 6, 6), "SteelBlack");
-		// centre: big map screen; flanks: 2x2 feeds and data
+		const float Y = 366.f;
+		for (float X : { -340.f, -150.f, 40.f }) { KTube(FVector(X, Y + 4, 0), FVector(X, Y + 4, 322), 4.8f, "Galv"); K(EDCShape::Cube, FVector(X, Y + 4, 2), FVector(16, 16, 4), "SteelBlack"); }
+		KTube(FVector(-350, Y + 4, 300), FVector(50, Y + 4, 300), 4.8f, "Galv");
+		KTube(FVector(-350, Y + 4, 122), FVector(50, Y + 4, 122), 4.8f, "Galv");
 		Monitor(FVector(-150, Y, 212), 150, 88, 90.f, "Screen2");
 		Monitor(FVector(-268, Y, 172), 64, 38, 90.f, "Screen0");
 		Monitor(FVector(-268, Y, 224), 64, 38, 90.f, "Screen1");
 		Monitor(FVector(-32, Y, 172), 64, 38, 90.f, "Screen1");
 		Monitor(FVector(-32, Y, 224), 64, 38, 90.f, "Screen0");
-		// paper city map with pins and string, right of the screens
-		K(EDCShape::Cube, FVector(55, Y + 1, 200), FVector(110, 3, 80), "Cork");
-		K(EDCShape::Cube, FVector(55, Y - 1, 200), FVector(100, 1, 70), "Paper");
+		// paper map with pins and string, pinned straight onto the plaster
+		K(EDCShape::Cube, FVector(130, Y + 6, 200), FVector(110, 3, 80), "Cork");
+		K(EDCShape::Cube, FVector(130, Y + 4, 200), FVector(100, 1, 70), "Paper");
 		for (int32 i = 0; i < 7; ++i)
 		{
-			K(EDCShape::Cube, FVector(55 + J(i, 40), Y - 1.6f, 200 + J(i + 30, 28)), FVector(5 + FMath::Abs(J(i + 7, 4)), 0.4f, 3 + FMath::Abs(J(i + 9, 3))), "PaintGrey");
-			K(EDCShape::Sphere, FVector(55 + J(i + 50, 42), Y - 2.5f, 200 + J(i + 60, 30)), FVector(2.4f), "Pin");
+			K(EDCShape::Cube, FVector(130 + J(i, 40), Y + 3.4f, 200 + J(i + 30, 28)), FVector(5 + FMath::Abs(J(i + 7, 4)), 0.4f, 3 + FMath::Abs(J(i + 9, 3))), "PaintGrey");
+			K(EDCShape::Sphere, FVector(130 + J(i + 50, 42), Y + 2.5f, 200 + J(i + 60, 30)), FVector(2.4f), "Pin");
 		}
-		for (int32 i = 0; i < 4; ++i) { K(EDCShape::Cube, FVector(55 + J(i + 70, 30), Y - 2.f, 200 + J(i + 80, 22)), FVector(40, 0.3f, 0.5f), "Pin", FRotator(0, 0, J(i, 40)), false); }
-		for (int32 i = 0; i < 5; ++i) { K(EDCShape::Cube, FVector(-15 + i * 3.f + 70.f + J(i, 10), Y - 1.7f, 140 + J(i + 3, 6)), FVector(14, 0.4f, 10), "Photo", FRotator(0, 0, J(i + 2, 8))); }
-		// planning table in front of the wall
-		K(EDCShape::Cube, FVector(-150, 330, 88), FVector(300, 70, 4), "Plywood");
-		for (int32 i = 0; i < 4; ++i) { K(EDCShape::Cube, FVector(-150 + ((i % 2) ? 140.f : -140.f), 330 + ((i / 2) ? 28.f : -28.f), 43), FVector(5, 5, 86), "SteelBlack"); }
-		for (int32 i = 0; i < 6; ++i) { K(EDCShape::Cube, FVector(-250 + i * 38.f + J(i, 8), 328 + J(i + 2, 10), 90.6f), FVector(24, 30, 0.6f), (i % 3 == 0) ? FName("Photo") : FName("Paper"), FRotator(0, J(i + 5, 15), 0)); }
-		K(EDCShape::Cube, FVector(-40, 322, 91.5f), FVector(20, 28, 1.5f), "PlasticBlack", FRotator(0, -12, 0));  // tablet
-		K(EDCShape::Cube, FVector(-40, 322, 92.4f), FVector(18, 25, 0.2f), "Screen2", FRotator(0, -12, 0), false);
+		for (int32 i = 0; i < 4; ++i) { K(EDCShape::Cube, FVector(130 + J(i + 70, 30), Y + 3.f, 200 + J(i + 80, 22)), FVector(40, 0.3f, 0.5f), "Pin", FRotator(0, 0, J(i, 40)), false); }
+		for (int32 i = 0; i < 5; ++i) { K(EDCShape::Cube, FVector(90 + i * 18.f + J(i, 6), Y + 3.3f, 140 + J(i + 3, 6)), FVector(14, 0.4f, 10), "Photo", FRotator(0, 0, J(i + 2, 8))); }
+		// planning table: a door on two trestles
+		K(EDCShape::Cube, FVector(-150, 318, 84), FVector(300, 72, 5), "TimberGrey");
+		for (float X : { -270.f, -30.f }) { KTube(FVector(X, 290, 0), FVector(X, 318, 82), 4.f, "Timber"); KTube(FVector(X, 346, 0), FVector(X, 318, 82), 4.f, "Timber"); }
+		for (int32 i = 0; i < 6; ++i) { K(EDCShape::Cube, FVector(-250 + i * 38.f + J(i, 8), 316 + J(i + 2, 10), 87.1f), FVector(24, 30, 0.6f), (i % 3 == 0) ? FName("Photo") : FName("Paper"), FRotator(0, J(i + 5, 15), 0)); }
+		K(EDCShape::Cube, FVector(-40, 310, 88), FVector(20, 28, 1.5f), "PlasticBlack", FRotator(0, -12, 0));  // tablet
+		K(EDCShape::Cube, FVector(-40, 310, 88.9f), FVector(18, 25, 0.2f), "Screen2", FRotator(0, -12, 0), false);
+		// cables from the screens down the pole and off across the floor to the generator
+		KTube(FVector(-150, Y, 168), FVector(-150, Y - 6, 2), 1.4f, "Rubber");
+		KTube(FVector(40, Y - 6, 160), FVector(40, Y - 8, 2), 1.4f, "Rubber");
 	}
 	bKitOnStation = false;
-	// LED accent strip washing the wall + screen glow
-	Deco(EDCShape::Cube, FVector(-150, 381, 312), FVector(380, 3, 2), "Accent", FRotator::ZeroRotator, false);
-	Rect(FVector(-150, 360, 215), FVector(-150, 0, 120), ScreenBlue, 14.f, 300.f, 90.f, 700.f, false, true);
+	Rect(FVector(-150, 340, 215), FVector(-150, 0, 110), FLinearColor(0.1f, 0.85f, 1.f), 16.f, 300.f, 90.f, 720.f, false, true);
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const float X0 = i ? 40.f : -150.f;
+		Tube(FVector(X0, 358, 1.f), FVector(380, 358 - i * 12.f, 1.f), 1.5f, "Rubber", false);
+	}
+	Tube(FVector(380, 358, 1.f), FVector(400, -330, 1.f), 2.f, "Rubber", false);
+	CampChair(FVector(-250, 240, 0), 95.f, "Canvas");
+	CampChair(FVector(-125, 232, 0), 75.f, "FabricOlive");
+	CampChair(FVector(5, 250, 0), 110.f, "Canvas");
 
-	// ---------------- Build Table: drafting table with site plans (front-left)
+	// ---------------- Build Table: drafting table with site plans (front-left), lantern on a crate beside it
 	BeginStation(EDCStationType::BuildTable, TEXT("Plans Table"), FVector(-300, -235, 0), FVector(78, 95, 80));
 	bKitOnStation = true;
 	{
 		const FVector T(-300, -235, 0);
-		for (int32 sx = -1; sx <= 1; sx += 2) { KTube(T + FVector(sx * 42, -60, 0), T + FVector(sx * 30, 0, 88), 3.f, "SteelBlack"); KTube(T + FVector(sx * 42, 60, 0), T + FVector(sx * 30, 0, 88), 3.f, "SteelBlack"); }
-		KTube(T + FVector(-36, -50, 20), T + FVector(-36, 50, 20), 2.5f, "SteelBlack");
-		KTube(T + FVector(36, -50, 20), T + FVector(36, 50, 20), 2.5f, "SteelBlack");
-		K(EDCShape::Cube, T + FVector(0, 0, 94), FVector(100, 150, 3), "PlasticWhite", FRotator(14, 0, 0));
+		for (int32 sx = -1; sx <= 1; sx += 2) { KTube(T + FVector(sx * 42, -60, 0), T + FVector(sx * 30, 0, 88), 3.f, "Timber"); KTube(T + FVector(sx * 42, 60, 0), T + FVector(sx * 30, 0, 88), 3.f, "Timber"); }
+		KTube(T + FVector(-36, -50, 20), T + FVector(-36, 50, 20), 2.5f, "Timber");
+		KTube(T + FVector(36, -50, 20), T + FVector(36, 50, 20), 2.5f, "Timber");
+		K(EDCShape::Cube, T + FVector(0, 0, 94), FVector(100, 150, 3), "Plywood", FRotator(14, 0, 0));
 		K(EDCShape::Cube, T + FVector(-1, 0, 96), FVector(86, 126, 0.5f), "Blueprint", FRotator(14, 0, 0));
 		K(EDCShape::Cube, T + FVector(4, 20, 96.6f), FVector(50, 60, 0.5f), "Paper", FRotator(14, 12, 0));
-		K(EDCShape::Cube, T + FVector(-46, 0, 85), FVector(3, 150, 3), "Alu");
 		K(EDCShape::Cube, T + FVector(0, -30, 97.5f), FVector(2.5f, 90, 0.8f), "Alu", FRotator(14, 0, 0));
-		K(EDCShape::Cylinder, T + FVector(30, 88, 30), FVector(30, 30, 60), "SteelBlack");
+		K(EDCShape::Cylinder, T + FVector(30, 88, 30), FVector(30, 30, 60), "Rust");
 		for (int32 i = 0; i < 5; ++i) { K(EDCShape::Cylinder, T + FVector(30 + J(i, 8), 88 + J(i + 4, 8), 64), FVector(7, 7, 80), (i % 2) ? FName("Paper") : FName("Blueprint"), FRotator(J(i + 2, 8), 0, J(i + 6, 8))); }
-		K(EDCShape::Cylinder, T + FVector(-80, 30, 62), FVector(34, 34, 4), "PlasticBlack");
-		KTube(T + FVector(-80, 30, 0), T + FVector(-80, 30, 60), 4.f, "Chrome");
+		Crate(T + FVector(-10, -110, 0), FVector(46, 40, 44), 12.f, "Wood");
+		Lantern(T + FVector(-10, -110, 44), false);
 	}
 	bKitOnStation = false;
+	{
+		UPointLightComponent* L = Point(FVector(-310, -345, 60), FLinearColor(1.f, 0.45f, 0.12f), 7.f, 340.f, false, true, 3.f);
+		AddFlicker(L, 6.f, 0.45f);
+	}
+	WorkLight(FVector(-450, -340, 0), 35.f, true, 45.f, true);
 
-	// ---------------- room dressing: shelving, safe, sofa, water cooler
+	// ---------------- room dressing: generator + fuel, a sagging sofa by the hearth, water drums, string lights
+	Generator(FVector(420, -355, 0), 0.f);
+	for (int32 i = 0; i < 3; ++i) { Deco(EDCShape::Cube, FVector(290 + i * 30.f, -375, 24), FVector(26, 15, 48), (i == 1) ? FName("PaintGreen") : FName("PaintRed"), FRotator(0, J(i, 6), 0)); }
+	Deco(EDCShape::Cylinder, FVector(440, 40, 45), FVector(56, 56, 90), "PaintBlue");
+	Deco(EDCShape::Cylinder, FVector(445, -40, 45), FVector(56, 56, 90), "Rust");
 	ShelfUnit(FVector(455, 300, 0), 0.f, 160.f, 3);
-	Deco(EDCShape::Cube, FVector(-440, 160, 22), FVector(80, 200, 40), "Leather");             // sofa
+	Deco(EDCShape::Cube, FVector(-440, 160, 22), FVector(80, 200, 40), "Leather", FRotator(0, 0, 2));
 	Deco(EDCShape::Cube, FVector(-470, 160, 60), FVector(22, 200, 50), "Leather");
 	Deco(EDCShape::Cube, FVector(-440, 52, 40), FVector(80, 18, 34), "Leather");
 	Deco(EDCShape::Cube, FVector(-440, 268, 40), FVector(80, 18, 34), "Leather");
-	Deco(EDCShape::Cylinder, FVector(440, -360, 55), FVector(28, 28, 110), "PlasticWhite");   // water cooler
-	Deco(EDCShape::Cylinder, FVector(440, -360, 128), FVector(26, 26, 38), "Glass", FRotator::ZeroRotator, false);
-	Duffel(FVector(-110, -150, 0), 30.f, "Nylon");
-
-	// ---------------- L2: safe + cash on a pallet; L3: second screen bank, gold
-	CurGroup = DCGroups::Level2;
-	Deco(EDCShape::Cube, FVector(430, 180, 45), FVector(70, 70, 90), "PaintGrey");
-	Deco(EDCShape::Cylinder, FVector(394, 180, 55), FVector(16, 16, 3), "Chrome", FRotator(90, 0, 0));
-	Deco(EDCShape::Cube, FVector(395, 205, 40), FVector(3, 4, 18), "Chrome");
-	Deco(EDCShape::Cube, FVector(-430, -300, 7), FVector(110, 110, 14), "Wood");
-	for (int32 i = 0; i < 12; ++i) { Deco(EDCShape::Cube, FVector(-460 + (i % 3) * 30.f, -330 + ((i / 3) % 2) * 60.f, 24 + (i / 6) * 20.f), FVector(28, 56, 19), "Cash"); }
-	Deco(EDCShape::Cube, FVector(-430, -300, 44), FVector(100, 124, 62), "Plastic", FRotator::ZeroRotator, false);
-	CurGroup = DCGroups::Level3;
-	Monitor(FVector(-380, 383, 172), 64, 38, 90.f, "Screen0");
-	Monitor(FVector(-380, 383, 224), 64, 38, 90.f, "Screen1");
-	Monitor(FVector(-380, 383, 276), 64, 38, 90.f, "Screen0");
-	for (int32 i = 0; i < 6; ++i) { Deco(EDCShape::Cube, FVector(430 + (i % 3) * 0.f - 10.f + (i % 2) * 18.f, 180 - 16 + (i / 2) * 11.f, 93 + (i / 3) * 4.f), FVector(16, 8, 4), "Ball1"); }
-
-	// ---------------- spawn zone + street door
-	SpawnZoneAt(GetWorld(), CurRoom, FVector(-170, 70, 50), FVector(90, 110, 50));
+	Deco(EDCShape::Cube, FVector(-430, 170, 46), FVector(60, 90, 10), "Blanket", FRotator(0, 10, 3));
+	// hearth candles
+	for (int32 i = 0; i < 3; ++i)
 	{
-		ADCGarageDoor* D = GetWorld()->SpawnActor<ADCGarageDoor>(ADCGarageDoor::StaticClass(), FTransform(CurRoom->GetActorTransform().TransformPosition(FVector(490, -250, 0))));
-		D->RoomType = EDCRoomType::Office;
-		D->ExitPoint = FVector(170, 0, 0); // through into the garage
-		D->bRollUp = false;
-		D->SwingAngle = 95.f;
-		D->bFallbackPanel = false;
-		D->DoorPanel->SetRelativeLocation(FVector(0, -59, 0)); // pivot on the hinge jamb
-		Single(D, D->DoorPanel, EDCShape::Cube, FVector(0, 59, 112), FVector(6, 118, 222), M("PaintGrey"));
-		Single(D, D->DoorPanel, EDCShape::Cube, FVector(-1, 59, 170), FVector(7, 30, 40), M("Glass"));
-		Single(D, D->DoorPanel, EDCShape::Cube, FVector(-7, 59, 105), FVector(4, 90, 5), M("Alu"));
-		D->AttachToActor(CurRoom, FAttachmentTransformRules::KeepWorldTransform);
+		const FVector P(-370, 330 + i * 18.f, 0);
+		Deco(EDCShape::Cylinder, P + FVector(0, 0, 6 + i * 3.f), FVector(5, 5, 12 + i * 6.f), "PlasticWhite");
+		Deco(EDCShape::Sphere, P + FVector(0, 0, 14 + i * 6.f), FVector(1.8f, 1.8f, 3.5f), "Candle", FRotator::ZeroRotator, false);
 	}
+	{
+		UPointLightComponent* L = Point(FVector(-360, 345, 30), FLinearColor(1.f, 0.42f, 0.1f), 4.f, 260.f, false, true, 4.f);
+		AddFlicker(L, 5.f, 0.35f);
+	}
+	Duffel(FVector(-110, -150, 0), 30.f, "Nylon");
+	// amber festoon along the ridge and another swagged along the back wall
+	StringLights(FVector(470, 0, 612), FVector(-150, 4, 600), 50.f, 16, 1, 9.f);
+	StringLights(FVector(470, 372, 342), FVector(-380, 300, 336), 70.f, 18, 1, 8.f);
+
+	// ---------------- L2: old iron safe + cash on a pallet; L3: second screen bank on the +X wall, gold
+	CurGroup = DCGroups::Level2;
+	Deco(EDCShape::Cube, FVector(430, 180, 45), FVector(70, 70, 90), "PaintGreen");
+	Deco(EDCShape::Cylinder, FVector(394, 180, 55), FVector(16, 16, 3), "Alu", FRotator(90, 0, 0));
+	Deco(EDCShape::Cube, FVector(395, 205, 40), FVector(3, 4, 18), "Alu");
+	Deco(EDCShape::Cube, FVector(-330, -10, 7), FVector(110, 110, 14), "Wood");
+	for (int32 i = 0; i < 12; ++i) { Deco(EDCShape::Cube, FVector(-360 + (i % 3) * 30.f, -40 + ((i / 3) % 2) * 60.f, 24 + (i / 6) * 20.f), FVector(28, 56, 19), "Cash"); }
+	Deco(EDCShape::Cube, FVector(-330, -10, 44), FVector(100, 124, 62), "Plastic", FRotator::ZeroRotator, false);
+	CurGroup = DCGroups::Level3;
+	for (float Y : { -110.f, -10.f }) { Tube(FVector(468, Y - 52, 0), FVector(468, Y - 52, 300), 4.8f, "Galv"); }
+	Tube(FVector(468, 38, 0), FVector(468, 38, 300), 4.8f, "Galv");
+	Monitor(FVector(468, -60, 160), 64, 38, 0.f, "Screen0");
+	Monitor(FVector(468, -60, 210), 64, 38, 0.f, "Screen1");
+	Monitor(FVector(468, 0, 160), 54, 34, 0.f, "Screen1");
+	Monitor(FVector(468, 0, 210), 54, 34, 0.f, "Screen0");
+	Rect(FVector(455, -30, 190), FVector(0, -30, 90), FLinearColor(0.1f, 0.8f, 1.f), 6.f, 120.f, 80.f, 450.f, false, true);
+	for (int32 i = 0; i < 6; ++i) { Deco(EDCShape::Cube, FVector(420 + (i % 2) * 18.f, 180 - 16 + (i / 2) * 11.f, 93 + (i / 3) * 4.f), FVector(16, 8, 4), "Ball1"); }
+
+	// ---------------- spawn zone
+	SpawnZoneAt(GetWorld(), CurRoom, FVector(-170, 70, 50), FVector(90, 110, 50));
 }
 
 // =====================================================================================================================
@@ -208,10 +232,6 @@ void ADCHideoutBuilder::BuildLounge()
 {
 	CurRoom = GetRoom(EDCRoomType::Lounge);
 	const FBox2D R(FVector2D(-400, -500), FVector2D(400, 500));
-	CurGroup = DCGroups::Shell;
-	ShaftFog(FVector(0, 0, 180), FVector(380, 480, 200), 0.25f);
-	SunDust(FVector(80, 150, 330), FVector(-200, -150, 20), 120, 110.f);
-
 	CurGroup = DCGroups::Level1;
 	// station: sectional sofa + coffee table + TV
 	BeginStation(EDCStationType::Lounge, TEXT("Bunkroom"), FVector(120, -80, 0), FVector(190, 170, 60));
@@ -243,6 +263,9 @@ void ADCHideoutBuilder::BuildLounge()
 	}
 	bKitOnStation = false;
 	Point(FVector(10, -80, 95), ScreenBlue, 4.f, 450.f, false, true, 40.f); // TV glow
+	// magenta LED strip along the top of the sofa back, washing the wall behind
+	Deco(EDCShape::Cube, FVector(328, -80, 93), FVector(3, 256, 2), "LedMagenta", FRotator::ZeroRotator, false);
+	Rect(FVector(322, -80, 96), FVector(0, -80, 30), FLinearColor(1.f, 0.1f, 0.75f), 9.f, 250.f, 6.f, 520.f, false, true);
 
 	// steel bunk beds along the +Y partition (capacity grows with level)
 	auto Bunk = [&](float X, float Y, float Yaw)
@@ -288,8 +311,9 @@ void ADCHideoutBuilder::BuildLounge()
 		static const FName Balls[] = { "Ball1", "Ball2", "BallW", "Ball2", "Ball1", "PlasticBlack", "Ball2" };
 		for (int32 i = 0; i < 7; ++i) { Deco(EDCShape::Sphere, P + FVector(J(i, 40), 40 + J(i + 20, 60), 81), FVector(5.5f), Balls[i]); }
 		Tube(P + FVector(-30, -60, 80), P + FVector(20, 70, 82), 1.8f, "Wood");
-		LedBatten(P + FVector(0, 0, 175), 160.f, 90.f, false);
-		Spot(P + FVector(0, 0, 168), P, Neutral, 45.f, 650.f, 40.f, 72.f, false, true);
+		for (float S : { -1.f, 1.f }) { Tube(P + FVector(S * 95.f, S * 150.f, 0), P + FVector(S * 95.f, S * 150.f, 232), 6.f, "TimberGrey"); }
+		StringLights(P + FVector(-95, -150, 228), P + FVector(95, 150, 228), 40.f, 14, 0, 0.f);
+		Spot(P + FVector(0, 0, 190), P, Warm, 40.f, 650.f, 40.f, 72.f, false, true);
 	}
 	// kitchenette along the +X partition (back corner)
 	{
@@ -313,8 +337,8 @@ void ADCHideoutBuilder::BuildLounge()
 	Point(FVector(-40, 400, 250), Warm, 10.f, 500.f, false, true, 20.f);
 	CurGroup = DCGroups::Level3;
 	Bunk(-310, 230, 90.f);
-	Deco(EDCShape::Cube, FVector(395, -80, 120), FVector(3, 280, 3), "Accent", FRotator::ZeroRotator, false); // LED strip behind sofa
-	Rect(FVector(380, -80, 120), FVector(0, -80, 40), FLinearColor(0.2f, 0.6f, 1.f), 6.f, 280.f, 6.f, 500.f, false, true);
+	StringLights(FVector(-380, 380, 200), FVector(-380, -380, 210), 60.f, 18, 1, 7.f);
+	for (float Y : { 380.f, -380.f }) { Tube(FVector(-380, Y, 0), FVector(-380, Y, 214), 6.f, "TimberGrey"); }
 	Deco(EDCShape::Cube, FVector(200, 300, 45), FVector(60, 60, 90), "PlasticBlack");     // arcade / speaker stack
 	Deco(EDCShape::Cylinder, FVector(170.5f, 300, 60), FVector(30, 30, 1), "Rubber", FRotator(0, 0, 0));
 
@@ -330,9 +354,6 @@ void ADCHideoutBuilder::BuildWorkshop()
 {
 	CurRoom = GetRoom(EDCRoomType::Workshop);
 	const FBox2D R(FVector2D(-500, -500), FVector2D(500, 500));
-	CurGroup = DCGroups::Shell;
-	ShaftFog(FVector(0, 0, 180), FVector(480, 480, 200), 0.25f);
-	SunDust(FVector(100, 150, 330), FVector(-250, -200, 20), 140, 120.f);
 	CurGroup = DCGroups::Level1;
 
 	BeginStation(EDCStationType::Workbench, TEXT("Workbench"), FVector(-60, 420, 0), FVector(150, 75, 125));
@@ -370,12 +391,13 @@ void ADCHideoutBuilder::BuildWorkshop()
 	}
 	bKitOnStation = false;
 	Spot(FVector(-60, 380, 230), FVector(-60, 410, 90), Neutral, 40.f, 500.f, 35.f, 70.f, false, true);
-	LedBatten(FVector(-60, 300, 300), 160.f, 0.f, true, 50.f);
+	WorkLight(FVector(150, 290, 0), 150.f, true, 50.f, true);
 	{
-		LedBatten(FVector(-60, -60, 300), 160.f, 0.f, false);
-		URectLightComponent* F = Rect(FVector(-60, -60, 294), FVector(-60, -60, 0), FLinearColor(0.85f, 0.95f, 1.f), 40.f, 150.f, 10.f, 900.f, false, true);
+		// a bare fluorescent tube propped against the shelving, buzzing
+		Deco(EDCShape::Cylinder, FVector(420, -330, 82), FVector(4, 4, 150), "Fluoro", FRotator(12, 0, 0), false);
+		Deco(EDCShape::Cube, FVector(406, -330, 8), FVector(10, 8, 6), "PlasticWhite");
+		UPointLightComponent* F = Point(FVector(400, -330, 100), FLinearColor(0.8f, 0.92f, 1.f), 10.f, 480.f, false, true, 10.f);
 		AddFlicker(F, 9.f, 0.9f);
-		Deco(EDCShape::Cube, FVector(-60, -60, 296.5f), FVector(152, 8, 1.4f), "Fluoro", FRotator::ZeroRotator, false);
 	}
 	// centre: a safe on a pallet mid-crack, mag drill on it
 	Deco(EDCShape::Cube, FVector(-40, -60, 7), FVector(120, 100, 14), "Wood");
@@ -428,33 +450,27 @@ void ADCHideoutBuilder::BuildGarage()
 	const FBox2D R(FVector2D(-400, -900), FVector2D(400, 900));
 	const float DY = -400.f; // roller-door bay centre
 
-	CurGroup = DCGroups::Shell;
-	Deco(EDCShape::Cube, FVector(372, DY, 312), FVector(34, 390, 34), "SteelBlack"); // roll drum housing
-	Deco(EDCShape::Cube, FVector(372, DY - 186, 145), FVector(14, 10, 290), "SteelBlack");
-	Deco(EDCShape::Cube, FVector(372, DY + 186, 145), FVector(14, 10, 290), "SteelBlack");
-	Deco(EDCShape::Cube, FVector(372, DY - 200, 160), FVector(8, 14, 20), "PlasticBlack");   // door control box
-	Deco(EDCShape::Cube, FVector(367.5f, DY - 200, 164), FVector(1, 3, 3), "LedG", FRotator::ZeroRotator, false);
+	CurGroup = DCGroups::Level1;
 	// oil stains, painted bay lines, drain
 	for (int32 i = 0; i < 5; ++i) { Deco(EDCShape::Cube, FVector(-40 + i * 25.f, DY - 20 + J(i, 60), 0.3f), FVector(50 + i * 9.f, 40 + i * 6.f, 0.6f), "Black", FRotator(0, i * 31.f, 0), false); }
-	for (float Y : { -870.f, -570.f, -250.f, 200.f }) { Deco(EDCShape::Cube, FVector(-10, Y, 0.4f), FVector(560, 10, 0.8f), "Caution", FRotator::ZeroRotator, false); }
+	for (float Y : { -570.f, -250.f, 200.f }) { Deco(EDCShape::Cube, FVector(-10, Y, 0.4f), FVector(560, 10, 0.8f), "Caution", FRotator::ZeroRotator, false); }
 	Deco(EDCShape::Cube, FVector(150, DY, 0.3f), FVector(14, 200, 0.8f), "SteelBlack", FRotator::ZeroRotator, false);
-	ShaftFog(FVector(120, -50, 170), FVector(300, 820, 190), 0.3f);
-	SunDust(FVector(360, 300, 290), FVector(-150, 0, 20), 160, 120.f);
-	SunDust(FVector(360, -750, 290), FVector(-100, -650, 20), 80, 80.f);
+	Weeds(FVector(-360, 860, 0), 40.f, 6, 21, 60.f);
+	Weeds(FVector(350, -860, 0), 50.f, 7, 23, 70.f);
 
 	CurGroup = DCGroups::Level1;
 	BeginStation(EDCStationType::GarageDoor, TEXT("Garage"), FVector(30, DY, 0), FVector(240, 105, 85));
 	bKitOnStation = true;
 	Car(FVector(30, DY, 0), 0.f, "CarPaint", false);
 	bKitOnStation = false;
-	// LED battens over the bay (key)
-	LedBatten(FVector(30, DY - 60, 290), 200.f, 0.f, true, 70.f);
-	LedBatten(FVector(30, DY + 60, 290), 200.f, 0.f, false);
-	Rect(FVector(30, DY + 60, 284), FVector(30, DY + 60, 0), FLinearColor(0.88f, 0.94f, 1.f), 50.f, 200.f, 10.f, 1000.f, false, true);
+	// sodium floodlight bolted to the tin wall over the bay (key)
+	Deco(EDCShape::Cube, FVector(366, DY, 268), FVector(14, 40, 26), "SteelBlack", FRotator(0, 0, 0));
+	Deco(EDCShape::Cube, FVector(358, DY, 266), FVector(1.5f, 34, 20), "Tungsten", FRotator::ZeroRotator, false);
+	Spot(FVector(350, DY, 262), FVector(20, DY, 0), FLinearColor(1.f, 0.6f, 0.26f), 70.f, 1100.f, 35.f, 68.f, false, true);
 	Point(FVector(-215, DY, 70), FLinearColor(1.f, 0.05f, 0.03f), 2.f, 220.f, false, true, 4.f);
 	// second car parked in the back half
 	Car(FVector(60, 380, 0), 0.f, "CarGrey", false);
-	LedBatten(FVector(60, 380, 300), 200.f, 0.f, true, 35.f);
+	HangingBulb(FVector(220, 380, 236), 318.f, FLinearColor(1.f, 0.58f, 0.28f), 24.f, 650.f, false);
 	// workbench along the -X partition, tyre stack, jerry cans, compressor
 	Deco(EDCShape::Cube, FVector(-340, -250, 88), FVector(70, 220, 6), "Plywood");
 	for (int32 i = 0; i < 4; ++i) { Deco(EDCShape::Cube, FVector(-340 + ((i % 2) ? 30.f : -30.f), -250 + ((i / 2) ? 100.f : -100.f), 43), FVector(6, 6, 86), "SteelBlack"); }
@@ -480,7 +496,7 @@ void ADCHideoutBuilder::BuildGarage()
 	for (int32 i = 0; i < 3; ++i) { Deco(EDCShape::Cube, FVector(-300 + J(i, 6), 640, 7 + i * 14.f), FVector(110, 110, 12), "Wood", FRotator(0, J(i + 2, 8), 0)); }
 	CurGroup = DCGroups::Level2;
 	Car(FVector(0, -730, 0), 0.f, "CarWhite", true); // the van
-	LedBatten(FVector(0, -730, 300), 200.f, 0.f, true, 22.f);
+	HangingBulb(FVector(220, -730, 240), 318.f, FLinearColor(1.f, 0.58f, 0.28f), 18.f, 600.f, false);
 	CurGroup = DCGroups::Level3;
 	// two-post lift around the saloon + tool chest
 	for (float X : { -150.f, 190.f }) { Deco(EDCShape::Cube, FVector(X, DY - 120, 150), FVector(26, 26, 300), "PaintBlue"); Deco(EDCShape::Cube, FVector(X, DY - 120, 6), FVector(50, 50, 12), "PaintBlue"); }
@@ -488,17 +504,20 @@ void ADCHideoutBuilder::BuildGarage()
 	Deco(EDCShape::Cube, FVector(-300, -560, 55), FVector(60, 120, 110), "PaintRed");
 	Point(FVector(-300, -560, 220), Neutral, 8.f, 500.f, false, true, 4.f);
 
-	// roller door actor (E animates DoorPanel upwards)
+	// roller door facing the yard (-Y): posts + drum housing, the rusty curtain jammed most of the way up
 	{
-		ADCGarageDoor* D = GetWorld()->SpawnActor<ADCGarageDoor>(ADCGarageDoor::StaticClass(), FTransform(CurRoom->GetActorTransform().TransformPosition(FVector(390, DY, 0))));
+		const float DX = 30.f, Y0 = -890.f;
+		for (float S : { -1.f, 1.f }) { Deco(EDCShape::Cube, FVector(DX + S * 208.f, Y0, 150), FVector(14, 18, 300), "TimberDark"); }
+		Deco(EDCShape::Cylinder, FVector(DX, Y0 + 4.f, 304), FVector(40, 40, 430), "Rust", FRotator(0, 0, 90));
+		Deco(EDCShape::Cube, FVector(DX, Y0, 326), FVector(440, 26, 8), "TimberDark");
+		ADCGarageDoor* D = GetWorld()->SpawnActor<ADCGarageDoor>(ADCGarageDoor::StaticClass(), FTransform(FRotator(0, -90, 0), CurRoom->GetActorTransform().TransformPosition(FVector(DX, Y0, 0))));
 		D->RoomType = EDCRoomType::Garage;
-		D->ExitPoint = FVector(320, 0, 0); // out through the roller door onto the street
+		D->ExitPoint = FVector(320, 0, 0); // out towards the yard
 		D->bRollUp = true;
-		D->RollUpHeight = 280.f;
+		D->RollUpHeight = 30.f;
 		D->bFallbackPanel = false;
-		Single(D, D->DoorPanel, EDCShape::Cube, FVector(0, 0, 145), FVector(6, 360, 290), M("Corrugated"));
-		Single(D, D->DoorPanel, EDCShape::Cube, FVector(-4, 0, 5), FVector(6, 362, 10), M("Rubber"));
-		Single(D, D->DoorPanel, EDCShape::Cube, FVector(-5, 0, 40), FVector(4, 40, 6), M("Alu"));
+		CurRoom->AddToGroup(Single(D, D->DoorPanel, EDCShape::Cube, FVector(0, 0, 262), FVector(5, 400, 66), M("TinRustV")), DCGroups::Level1);
+		CurRoom->AddToGroup(Single(D, D->DoorPanel, EDCShape::Cube, FVector(-3, 0, 230), FVector(6, 402, 6), M("Rust")), DCGroups::Level1);
 		D->AttachToActor(CurRoom, FAttachmentTransformRules::KeepWorldTransform);
 	}
 
@@ -513,11 +532,6 @@ void ADCHideoutBuilder::BuildOpsRoom()
 {
 	CurRoom = GetRoom(EDCRoomType::OpsRoom);
 	const FBox2D R(FVector2D(-900, -600), FVector2D(900, 600));
-	CurGroup = DCGroups::Shell;
-	ShaftFog(FVector(200, 100, 180), FVector(700, 520, 200), 0.3f);
-	SunDust(FVector(600, 560, 300), FVector(0, -100, 20), 220, 160.f);
-	SunDust(FVector(860, 200, 300), FVector(200, -150, 20), 160, 140.f);
-
 	CurGroup = DCGroups::Level1;
 	BeginStation(EDCStationType::OpsRoom, TEXT("Ops Room"), FVector(0, 480, 0), FVector(330, 110, 160));
 	bKitOnStation = true;
@@ -554,11 +568,14 @@ void ADCHideoutBuilder::BuildOpsRoom()
 		for (int32 i = 0; i < 5; ++i) { K(EDCShape::Cube, FVector(279.5f, 520 + i * 4.f, 80 - i * 6.f), FVector(1, 2, 2), (i % 2) ? FName("LedG") : FName("LedB"), FRotator::ZeroRotator, false); }
 	}
 	bKitOnStation = false;
-	Rect(FVector(0, 500, 200), FVector(0, 0, 60), ScreenBlue, 22.f, 520.f, 160.f, 1100.f, false, true);
+	Rect(FVector(0, 500, 200), FVector(0, 0, 60), FLinearColor(0.1f, 0.85f, 1.f), 22.f, 520.f, 160.f, 1100.f, false, true);
 	Deco(EDCShape::Cube, FVector(0, 557, 326), FVector(560, 3, 2), "Accent", FRotator::ZeroRotator, false);
 	// LED battens + pallet racking along the -X side (back of the lawyer / clinic)
-	LedBatten(FVector(0, 300, 320), 220.f, 0.f, true, 45.f);
-	LedBatten(FVector(450, 0, 320), 220.f, 90.f, true, 35.f);
+	HangingBulb(FVector(-420, 470, 245), 322.f, FLinearColor(1.f, 0.58f, 0.28f), 22.f, 700.f, false);
+	HangingBulb(FVector(420, 470, 245), 322.f, FLinearColor(1.f, 0.58f, 0.28f), 22.f, 700.f, false);
+	HangingBulb(FVector(780, -150, 245), 322.f, FLinearColor(1.f, 0.58f, 0.28f), 20.f, 700.f, false);
+	Weeds(FVector(860, 560, 0), 50.f, 7, 31, 70.f);
+	Weeds(FVector(-860, -560, 0), 50.f, 7, 33, 60.f);
 	PalletRack(FVector(-820, 100, 0), 0.f, 5, 3);
 	// lounge corner: couch + low table + whiteboard on wheels
 	Deco(EDCShape::Cube, FVector(500, -350, 22), FVector(90, 220, 30), "Leather");
@@ -630,9 +647,6 @@ void ADCHideoutBuilder::BuildClinic()
 {
 	CurRoom = GetRoom(EDCRoomType::Clinic);
 	const FBox2D R(FVector2D(-400, -300), FVector2D(400, 300));
-	CurGroup = DCGroups::Shell;
-	ShaftFog(FVector(0, 80, 170), FVector(380, 240, 180), 0.3f);
-	SunDust(FVector(0, 270, 290), FVector(-150, -100, 20), 100, 90.f);
 	CurGroup = DCGroups::Level1;
 	BeginStation(EDCStationType::Clinic, TEXT("Clinic"), FVector(80, 60, 0), FVector(115, 60, 100));
 	bKitOnStation = true;
@@ -667,11 +681,16 @@ void ADCHideoutBuilder::BuildClinic()
 	}
 	bKitOnStation = false;
 	// surgical lamp (shadowed, the clinic's key)
-	Tube(FVector(80, 60, 380), FVector(80, 60, 240), 3, "PlasticWhite");
+	Deco(EDCShape::Cylinder, FVector(-30, 150, 2), FVector(50, 50, 4), "PlasticWhite");
+	Tube(FVector(-30, 150, 0), FVector(-30, 150, 262), 4, "PlasticWhite");
+	Tube(FVector(-30, 150, 260), FVector(80, 60, 250), 3, "PlasticWhite");
 	Deco(EDCShape::Sphere, FVector(80, 60, 228), FVector(74, 74, 30), "PlasticWhite");
 	Deco(EDCShape::Cylinder, FVector(80, 60, 214), FVector(56, 56, 1.5f), "LedCool", FRotator::ZeroRotator, false);
 	Spot(FVector(80, 60, 205), FVector(80, 60, 0), FLinearColor(0.88f, 0.95f, 1.f), 90.f, 600.f, 25.f, 48.f, true, true);
-	LedBatten(FVector(-180, -60, 310), 140.f, 90.f, true, 30.f);
+	// green cross sign on the back wall
+	Deco(EDCShape::Cube, FVector(160, 262, 225), FVector(40, 2, 12), "CrossGreen", FRotator::ZeroRotator, false);
+	Deco(EDCShape::Cube, FVector(160, 262, 225), FVector(12, 2.2f, 40), "CrossGreen", FRotator::ZeroRotator, false);
+	Point(FVector(160, 240, 225), FLinearColor(0.2f, 1.f, 0.45f), 3.f, 320.f, false, true, 10.f);
 	// medical cabinet + sink under the windows
 	Deco(EDCShape::Cube, FVector(-220, 255, 75), FVector(160, 40, 150), "PlasticWhite");
 	Deco(EDCShape::Cube, FVector(-220, 234, 105), FVector(150, 2, 84), "Glass", FRotator::ZeroRotator, false);
@@ -702,8 +721,6 @@ void ADCHideoutBuilder::BuildServerRoom()
 {
 	CurRoom = GetRoom(EDCRoomType::ServerRoom);
 	const FBox2D R(FVector2D(-400, -400), FVector2D(400, 400));
-	CurGroup = DCGroups::Shell;
-	ShaftFog(FVector(0, 0, 170), FVector(380, 380, 180), 0.22f);
 	CurGroup = DCGroups::Level1;
 	auto RackAt = [&](const FVector& P, int32 Seed)
 	{
@@ -721,13 +738,13 @@ void ADCHideoutBuilder::BuildServerRoom()
 	RackAt(FVector(220, -85, 0), 1);
 	RackAt(FVector(220, 0, 0), 2);
 	RackAt(FVector(220, 85, 0), 3);
-	KTube(FVector(220, -85, 210), FVector(220, -85, 300), 6, "Rubber");
-	KTube(FVector(220, 85, 210), FVector(220, 85, 300), 6, "Rubber");
+	KTube(FVector(220, -85, 210), FVector(220, -85, 232), 6, "Rubber");
+	KTube(FVector(220, 85, 210), FVector(220, 85, 232), 6, "Rubber");
 	bKitOnStation = false;
 	// overhead cable tray
-	Deco(EDCShape::Cube, FVector(220, 0, 302), FVector(40, 760, 6), "Galv");
-	for (float Y : { -380.f, 0.f, 380.f }) { Tube(FVector(220, Y, 305), FVector(220, Y, 380), 1.5f, "Galv"); }
-	for (int32 i = 0; i < 6; ++i) { Deco(EDCShape::Cylinder, FVector(205 + i * 6.f, 0, 308), FVector(3, 3, 740), (i % 2) ? FName("PaintBlue") : FName("Rubber"), FRotator(90, 90, 0)); }
+	Deco(EDCShape::Cube, FVector(220, 0, 232), FVector(40, 760, 6), "Galv");
+	for (float Y : { -380.f, 380.f }) { Tube(FVector(220, Y, 0), FVector(220, Y, 232), 4.f, "Galv"); }
+	for (int32 i = 0; i < 6; ++i) { Deco(EDCShape::Cylinder, FVector(205 + i * 6.f, 0, 238), FVector(3, 3, 740), (i % 2) ? FName("PaintBlue") : FName("Rubber"), FRotator(90, 90, 0)); }
 	// chain-link cage in front of the racks
 	{
 		const float X = 140.f, H = 250.f;
@@ -747,7 +764,9 @@ void ADCHideoutBuilder::BuildServerRoom()
 	Deco(EDCShape::Cube, FVector(-340, -300, 90), FVector(60, 80, 180), "PlasticWhite");      // CRAC unit
 	for (int32 i = 0; i < 5; ++i) { Deco(EDCShape::Cube, FVector(-371, -300, 120 + i * 10.f), FVector(1, 60, 3), "Black"); }
 	Deco(EDCShape::Cube, FVector(-372, -300, 60), FVector(1, 10, 6), "LedG", FRotator::ZeroRotator, false);
-	LedBatten(FVector(0, 0, 320), 180.f, 90.f, true, 30.f);
+	Point(FVector(150, -300, 40), FLinearColor(1.f, 0.05f, 0.04f), 3.f, 300.f, false, true, 4.f);   // red fault LEDs
+	Point(FVector(150, 300, 40), FLinearColor(0.1f, 1.f, 0.25f), 2.5f, 280.f, false, true, 4.f);    // green status
+	Weeds(FVector(-360, -360, 0), 40.f, 6, 41, 55.f);
 	Rect(FVector(130, 0, 200), FVector(-200, 0, 60), FLinearColor(0.3f, 0.6f, 1.f), 8.f, 30.f, 200.f, 600.f, false, true);
 	CurGroup = DCGroups::Level2;
 	RackAt(FVector(220, -260, 0), 4);
@@ -769,8 +788,6 @@ void ADCHideoutBuilder::BuildLawyer()
 {
 	CurRoom = GetRoom(EDCRoomType::LawyerOffice);
 	const FBox2D R(FVector2D(-400, -300), FVector2D(400, 300));
-	CurGroup = DCGroups::Shell;
-	ShaftFog(FVector(0, 0, 170), FVector(380, 280, 180), 0.2f);
 	CurGroup = DCGroups::Level1;
 	BeginStation(EDCStationType::Lawyer, TEXT("Lawyer"), FVector(150, 30, 0), FVector(120, 200, 75));
 	bKitOnStation = true;
@@ -806,7 +823,13 @@ void ADCHideoutBuilder::BuildLawyer()
 	}
 	bKitOnStation = false;
 	Spot(FVector(150, 88, 105), FVector(140, 40, 0), Warm, 30.f, 500.f, 30.f, 66.f, false, true);
-	Pendant(FVector(60, 30, 260), true, true, 22.f);
+	// standard lamp with a parchment shade
+	Deco(EDCShape::Cylinder, FVector(-60, -200, 2), FVector(34, 34, 4), "TimberDark");
+	Tube(FVector(-60, -200, 0), FVector(-60, -200, 160), 3.f, "Alu");
+	Deco(EDCShape::Cone, FVector(-60, -200, 168), FVector(46, 46, 34), "Canvas");
+	Deco(EDCShape::Cylinder, FVector(-60, -200, 152), FVector(30, 30, 1), "Tungsten", FRotator::ZeroRotator, false);
+	Point(FVector(-60, -200, 145), Warm, 14.f, 520.f, false, true, 10.f);
+	Weeds(FVector(-360, -260, 0), 35.f, 5, 51, 50.f);
 	// client chairs, rug, plant, bookshelf
 	Deco(EDCShape::Cube, FVector(80, 30, 0.6f), FVector(300, 340, 1.2f), "Fabric");
 	for (int32 i = 0; i < 2; ++i)
@@ -843,36 +866,4 @@ void ADCHideoutBuilder::BuildLawyer()
 
 	LockedDressing(R, { {150, 30, 140, 90}, {-30, 228, 220, 140} });
 	BuildingDressing(R);
-}
-
-// =====================================================================================================================
-// STREET  (a dark street strip beyond the garage's roller door; built into the Office room's Shell group, whose
-// local space == world). Lamps are owned/driven by ADCDayNight (on at dusk).
-// =====================================================================================================================
-void ADCHideoutBuilder::BuildYard()
-{
-	CurRoom = GetRoom(EDCRoomType::Office);
-	CurGroup = DCGroups::Shell;
-	Deco(EDCShape::Cube, FVector(1560, -500, -18), FVector(520, 2300, 30), "Asphalt");
-	Deco(EDCShape::Cube, FVector(1560, -500, -80), FVector(500, 2280, 100), "Plinth");
-	Deco(EDCShape::Cube, FVector(1330, -500, -8), FVector(60, 2300, 16), "Concrete");     // kerb / pavement
-	for (int32 i = 0; i < 8; ++i) { Deco(EDCShape::Cube, FVector(1600, -1500 + i * 300.f, -2.5f), FVector(10, 150, 1), "PaintLight", FRotator::ZeroRotator, false); }
-	Deco(EDCShape::Cylinder, FVector(1480, -300, -2.6f), FVector(200, 130, 1), "TintGlass", FRotator(0, 20, 0), false); // puddle
-	// dumpster + bags against the building, bollards either side of the roller door
-	Deco(EDCShape::Cube, FVector(1400, 150, 60), FVector(110, 180, 120), "PaintBlue");
-	Deco(EDCShape::Cube, FVector(1400, 150, 124), FVector(116, 186, 6), "PlasticBlack", FRotator(4, 0, 0));
-	for (int32 i = 0; i < 4; ++i) { Deco(EDCShape::Sphere, FVector(1390 + J(i, 30), 290 + J(i + 4, 40), 22), FVector(50, 45, 44), "Black"); }
-	for (float Y : { -1130.f, -670.f }) { Deco(EDCShape::Cylinder, FVector(1350, Y, 50), FVector(18, 18, 100), "Hazard"); }
-	// wall pack over the roller door, two street lamps
-	Deco(EDCShape::Cube, FVector(1312, -900, 330), FVector(16, 34, 20), "SteelBlack");
-	Deco(EDCShape::Cube, FVector(1320.5f, -900, 325), FVector(1, 28, 10), "LampHead", FRotator::ZeroRotator, false);
-	StreetSpecs.Add({ FVector(1335, -900, 320), FVector(1550, -900, 0), FLinearColor(0.85f, 0.92f, 1.f), 700.f, 1400.f, 65.f, false });
-	for (const FVector& P : { FVector(1700, -1620, 0), FVector(1760, 200, 0) })
-	{
-		Tube(P, P + FVector(0, 0, 560), 12.f, "PaintGrey");
-		Tube(P + FVector(0, 0, 550), P + FVector(-140, 0, 570), 7.f, "PaintGrey");
-		Deco(EDCShape::Cube, P + FVector(-150, 0, 565), FVector(56, 26, 10), "PaintGrey");
-		Deco(EDCShape::Cube, P + FVector(-150, 0, 559), FVector(46, 18, 2), "LampHead", FRotator::ZeroRotator, false);
-		StreetSpecs.Add({ P + FVector(-150, 0, 550), P + FVector(-200, 0, 0), FLinearColor(1.f, 0.66f, 0.35f), 900.f, 2000.f, 70.f, P.Y > 0.f });
-	}
 }

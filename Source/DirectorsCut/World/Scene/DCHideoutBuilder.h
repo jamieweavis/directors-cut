@@ -1,17 +1,23 @@
-// Director's Cut — builds the whole hideout diorama procedurally at runtime (Agent D owns World/Scene/).
-// Spawned by ADCGameMode::StartPlay before BeginPlay is dispatched. Must be deterministic and fast (< 1 s).
+// Director's Cut — builds the hideout procedurally at runtime (Scene / House agent owns this + DCHideoutRooms/Kit).
+// Spawned by ADCGameMode::StartPlay (after ADCLandscape) before BeginPlay is dispatched. Deterministic and fast.
 //
-// The look: an industrial warehouse converted into a crew base (concrete, brick, steel, chain-link, LED, monitors).
-// Layout (world, cm; camera looks from -X-Y towards +X+Y so +X/+Y walls are the tall "back" walls):
-//   Rows X:  R1 [-1300,-500]  R2 [-500,500]  R3 [500,1300]      Cols Y: A [-1400,-400]  B [-400,400]  C [400,1600]
-//   Office R2B (centre) · Workshop R2A · Garage R3A · Ops Room R2-3 x C · Bunkroom (Lounge) R1A · Server Room R1B
-//   Lawyer R1C(front half) · Clinic R1C(back half). R3B is the open yard (street notch behind the office).
-// Exterior back walls carry big steel-mullioned factory windows; interior rooms get roof skylights. A hidden roof casts
-// shadows only, so the sun (ADCDayNight) reaches the floors exclusively through the glazing -> moving window patterns.
+// The look: a small abandoned farmhouse (the Office) in open country, taken over by a crew. Its camera-facing walls
+// (-X, -Y) have collapsed to knee-high stubs and rubble so the iso camera sees in; the back walls (+X, +Y) stand tall
+// with old windows, the roof is a skeleton of rafters with a few tiles left. Every other room is a WING that does not
+// exist until built (Core/DCSiteLayout.h): Locked = staked-out overgrown plot, Building = slab + stud frame + scaffold,
+// Level 1..3 = a rustic annex in the same language (stone, plaster, timber boards, rusty tin).
+//
+// Walls between two rooms ("shared walls") are owned by the builder and switch between variants in Tick, reading each
+// room's state: hidden (neither side exists) / collapsed stub without collision (only the back room exists, so it is
+// that room's open front) / tall back wall (only the front room exists) / knee partition with a doorway (both exist).
+// Collapsed fronts and rubble NEVER collide, so pawns walk in and out along every -X/-Y side.
 //
 // Dev flags (World/Scene only):
 //   -DCSceneShots=wide,Office,Lounge,...   scene-review camera screenshots (independent of the gameplay rig), then quit
 //   -DCSceneShotDir=/abs/dir  -DCSceneShotDelay=8
+//   -DCRoomStates=Workshop:B,Garage:2,Lounge:B1   force room states before the review shots
+//        (L locked, B building (first build), B<n> upgrading over level n, <n> built level n)
+//   -DCHouseGround         temporary flat ground under the compound (review without the landscape)
 //   -DCLightScale=<mult>   practical brightness without rebuilding.   Day/night flags: see DCDayNight.h
 #pragma once
 
@@ -90,16 +96,36 @@ protected:
 	void Bar(const FVector& A, const FVector& B, float W, float H, FName Mat, bool bShadow = true);
 	/** Individual mesh component on Owner attached to Parent (relative transform). */
 	UStaticMeshComponent* Single(AActor* Owner, USceneComponent* Parent, EDCShape Shape, const FVector& Loc, const FVector& Size, UMaterialInterface* Mat, const FRotator& Rot = FRotator::ZeroRotator);
-	/** Walkable / blocking architecture (floors, walls) in CurRoom Shell. bFloor keeps Visibility blocking. */
+	/** Walkable / blocking architecture (floors, walls) in CurRoom's CurGroup. bFloor keeps Visibility blocking. */
 	UStaticMeshComponent* Solid(const FVector& Loc, const FVector& Size, FName Mat, bool bFloor);
-	/** Shadow-only geometry (hidden in game, casts shadows): the roof and skylight mullions. On this actor, world space. */
-	void ShadowCaster(const FVector& WorldLoc, const FVector& Size);
+	/** Records a component in a builder-managed group (shared-wall variants). */
+	void TrackComponent(UPrimitiveComponent* C, FName Group);
 
 	struct FOpening { float Center; float Width; float Bottom; float Top; };
 	/** A wall run along X (bAlongX) or Y at perpendicular coord Fixed, from A to B, with openings. */
 	void WallRun(bool bAlongX, float Fixed, float A, float B, float Z0, float Z1, float Thick, const TArray<FOpening>& Ops, FName Mat, bool bSolid);
-	/** Steel-mullioned factory window filling an opening of a wall run (frame, mullion grid, glowing glass, sill). */
-	void FactoryWindow(bool bAlongX, float Fixed, float Inward, const FOpening& O);
+	/** Old timber window filling an opening of a wall run (frame, cross bars, some panes broken, some boarded). */
+	void OldWindow(bool bAlongX, float Fixed, float Inward, const FOpening& O, int32 Seed);
+	/** Tall standing wall: masonry + interior skin with exposed patches/lath, wall plate, windows. Solid. */
+	void TallWall(bool bAlongX, float Fixed, float Inward, float A, float B, float H, const TArray<FOpening>& Doors, const TArray<FOpening>& Windows, FName Outer, FName Skin, int32 Seed);
+	/** Broken wall stub along a run (ragged tops, piers at the ends). bSolid: collidable knee wall (>= 50 cm). */
+	void RuinStub(bool bAlongX, float Fixed, float A, float B, int32 Seed, FName Mat, float EndA, float EndB, const TArray<FOpening>& Gaps, bool bSolid);
+	/** Fallen masonry, bricks and planks on the Outward side of a run (decoration, no collision). */
+	void RubbleRun(bool bAlongX, float Fixed, float A, float B, float Outward, int32 Seed, FName Mat, float Density = 1.f);
+	void RubblePile(const FVector& C, float Radius, int32 Count, int32 Seed, FName Mat);
+	/** Weeds / grass tufts scattered in a disc. */
+	void Weeds(const FVector& C, float Radius, int32 Count, int32 Seed, float MaxH = 60.f);
+	/** Ivy clinging to a wall face (Normal points away from the wall into the room/air). */
+	void Ivy(const FVector& Base, const FVector& Normal, float W, float H, int32 Seed);
+	/** Bare bulb on a flex hanging from TopZ, optional light. */
+	void HangingBulb(const FVector& C, float TopZ, const FLinearColor& Col, float Cd, float Radius, bool bShadow);
+	/** Amber festoon string lights along a sagging line, with Lights point lights spread along it. */
+	void StringLights(const FVector& A, const FVector& B, float Sag, int32 Bulbs, int32 Lights, float Cd);
+	/** Tripod work light (warm), optional real light. */
+	void WorkLight(const FVector& Base, float Yaw, bool bLight, float Cd, bool bRoomLight);
+	void CampChair(const FVector& C, float Yaw, FName Fabric);
+	void Generator(const FVector& C, float Yaw);
+	void Lantern(const FVector& C, bool bLight);
 
 	// lights (attached to CurRoom, put in CurGroup)
 	float LightScale = 1.f;
@@ -141,12 +167,26 @@ protected:
 	ULocalFogVolumeComponent* ShaftFog(const FVector& Loc, const FVector& Radius, float Density);
 
 	// ---------------------------------------------------------------- layout
-	struct FRoomDef { EDCRoomType Type; FBox2D Rect; FName FloorMat; FName WallMat; bool bSkylight; };
+	struct FRoomDef { EDCRoomType Type; FName FloorMat; FName OuterMat; FName SkinMat; FName FrontMat; FBox2D Rect; };
 	TArray<FRoomDef> Defs;
 	TMap<uint8, TArray<TPair<int32, FOpening>>> RoomOpenings; // room -> (side, opening) side: 0 +X,1 +Y,2 -X,3 -Y
+	TMap<uint8, TArray<TPair<int32, FVector2D>>> KeepSolid;    // room -> (side, [a,b] local) no windows there
 	ADCRoomModule* SpawnRoom(const FRoomDef& Def);
 	void BuildShell(const FRoomDef& Def);
-	void BuildRoof();
+	void BuildHouseRoof();
+	void BuildWingRoof(const FRoomDef& Def);
+
+	// shared walls between two rooms (A on the -side, B on the +side of the wall line)
+	struct FSharedWall
+	{
+		TWeakObjectPtr<ADCRoomModule> A, B;
+		TArray<TWeakObjectPtr<UPrimitiveComponent>> Comps[3]; // 0 stub, 1 tall, 2 partition
+		TArray<TEnumAsByte<ECollisionEnabled::Type>> Coll[3];
+		int32 Cur = -2;
+	};
+	TArray<FSharedWall> SharedWalls;
+	TMap<FName, FIntPoint> TrackedGroups; // group name -> (wall index, variant)
+	void UpdateSharedWalls();
 
 	void BuildOffice();
 	void BuildLounge();
@@ -156,7 +196,6 @@ protected:
 	void BuildClinic();
 	void BuildServerRoom();
 	void BuildLawyer();
-	void BuildYard();
 	void BuildLightingAndPost();
 
 	// ---------------------------------------------------------------- runtime FX
@@ -164,10 +203,6 @@ protected:
 	TArray<FFlicker> Flickers;
 	void AddFlicker(ULightComponent* L, float Rate, float Depth);
 	UPROPERTY() TArray<TObjectPtr<ULocalFogVolumeComponent>> SunFogs;
-	struct FStreetSpec { FVector Pos; FVector Target; FLinearColor Col; float Cd; float Radius; float Cone; bool bShadow; };
-	TArray<FStreetSpec> StreetSpecs;
-	struct FShaftSpec { FVector Centre; FVector Along; float W; float H; }; // world space, windows + skylights
-	TArray<FShaftSpec> ShaftSpecs;
 	double Time = 0.0;
 	double PerfAccum = 0.0;
 	int32 PerfFrames = 0;
@@ -179,6 +214,8 @@ protected:
 	int32 ReviewStep = 0;
 	double ReviewNext = 0.0;
 	bool bReviewPrepared = false;
+	FString ForcedStates;
+	void ApplyForcedStates();
 	void TickReview();
 	void FrameReview(const FString& Focus);
 };
