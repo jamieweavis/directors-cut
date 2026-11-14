@@ -11,7 +11,8 @@
 // unplaced one is parked off-site and hidden. Whenever a placement or a room's stage changes, the builder regenerates
 // the whole house: per cell a floor, and per edge either a tall back wall (exterior +X/+Y), a low stub (exterior
 // -X/-Y) or a low partition stub with a doorway gap at the edge midpoint (two finished rooms; built by the -side room). A room
-// under its first build is a slab + timber frame + scaffold. Rooms are EMPTY for now: one clickable station covers
+// under its first build is a slab + timber frame + scaffold. The Office is furnished by a layout solver that fits
+// its shape and connections (DCHideoutFurnish.cpp); the other rooms are EMPTY for now. One clickable station covers
 // each whole room and opens its panel. No house geometry collides (pawns path through the doorway midpoints).
 //
 // Dev flags (World/Scene only):
@@ -244,7 +245,10 @@ protected:
 	void EdgeBox(const FVector2D& A, const FVector2D& B, float T0, float T1, float Inset, float Z0, float Z1, float Thick, FName Mat, float Pitch = 0.f);
 	void EdgeWall(const FVector2D& A, const FVector2D& B, float T0, float T1, float Inset, float Z0, float Z1, float Thick, const TArray<FOpening>& Ops, FName Mat);
 	void EdgeWindow(const FVector2D& A, const FVector2D& B, const FOpening& O, float Inset, int32 Seed);
-	void TallEdge(const FVector2D& A, const FVector2D& B, float H, const FGridStyle& St, int32 Seed, bool bStepStart, bool bStepEnd);
+	void TallEdge(const FVector2D& A, const FVector2D& B, float H, const FGridStyle& St, int32 Seed, bool bStepStart, bool bStepEnd, uint8 OmitWindows = 0);
+	/** Where TallEdge puts its windows and broken ends (shared with the furnisher so furniture respects them).
+	 *  OutSteps: (t0, t1, height) of each broken-down stretch. */
+	static void TallEdgePlan(float L, float H, int32 Seed, bool bStepStart, bool bStepEnd, TArray<FOpening>& OutWin, TArray<FVector>& OutSteps);
 	void RuinEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed, float EndA, float EndB);
 	void PartitionEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed);
 	/** Wall lamp on the inside face of edge A->B at fraction T, height Z (room light). */
@@ -256,6 +260,15 @@ protected:
 	void FrameRoom(const FVector2D Q[4], float H, int32 Seed, int32 ScaffoldEdge);
 	/** Scaffolding along edge E, just outside the room (E < 0: none). */
 	void EdgeScaffold(const FVector2D Q[4], int32 E, float H);
+
+	// ---------------------------------------------------------------- furnishing (DCHideoutFurnish.cpp)
+	/** Lays furniture out to fit the room's real shape and connections, then draws it. EdgeKind per edge (see
+	 *  DCSite::Grid::Corners): 0 tall wall, 1 low partition with a centred doorway, 2 collapsed open front.
+	 *  bExit: pawns walk out over that edge. WallSeed: the per-edge seed TallEdge used (windows).
+	 *  OutOmitWindows: per edge, a bit per TallEdgePlan window that furniture now stands against (the wall is built
+	 *  without it). Run it BEFORE the walls. Returns false if the room type has no furnishing (the caller then lights
+	 *  the room itself). */
+	bool FurnishGridRoom(ADCRoomModule* Room, const FVector2D Q[4], const int32 EdgeKind[4], const bool bExit[4], const bool bStepStart[4], const bool bStepEnd[4], float H, int32 WallSeed, int32 Seed, uint8 OutOmitWindows[4]);
 
 	// ---------------------------------------------------------------- runtime FX
 	struct FFlicker { TWeakObjectPtr<ULightComponent> Light; float Base; float Rate; float Depth; float Seed; };

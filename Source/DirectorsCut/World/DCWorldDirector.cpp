@@ -408,6 +408,34 @@ void ADCWorldDirector::PlanOutdoor(const FVector& From, const FVector& To, TArra
 
 void ADCWorldDirector::PlanPath(const FVector& From, const FVector& To, TArray<FVector>& Out)
 {
+	const int32 Start = Out.Num();
+	PlanPathRaw(From, To, Out);
+	DetourFurniture(From, Out, Start);
+}
+
+void ADCWorldDirector::DetourFurniture(const FVector& From, TArray<FVector>& Out, int32 Start) const
+{
+	FVector Prev = From;
+	for (int32 i = Start; i < Out.Num(); ++i)
+	{
+		const FVector Q = Out[i];
+		const int32 RA = NavRoomAt(Prev);
+		if (RA != INDEX_NONE && RA == NavRoomAt(Q))
+		{
+			const ADCRoomModule* R = Rooms[RA].Get();
+			if (R && R->FloorQuad.Num() == 4 && R->IsWalkBlocked(Prev, Q))
+			{
+				const FVector2D H = (R->FloorQuad[0] + R->FloorQuad[1] + R->FloorQuad[2] + R->FloorQuad[3]) * 0.25f;
+				const FVector Hub(H.X, H.Y, Q.Z);
+				if (FVector::Dist2D(Hub, Prev) > 40.f && FVector::Dist2D(Hub, Q) > 40.f) { Out.Insert(Hub, i); ++i; }
+			}
+		}
+		Prev = Out[i];
+	}
+}
+
+void ADCWorldDirector::PlanPathRaw(const FVector& From, const FVector& To, TArray<FVector>& Out)
+{
 	EnsureNav();
 	const int32 S = NavRoomAt(From), G = NavRoomAt(To);
 	if (S != INDEX_NONE && S == G) { Out.Add(To); return; }
@@ -482,10 +510,16 @@ void ADCWorldDirector::GetAnchors(const ADCRoomModule* Room, TArray<FAnchor>& Ou
 		if (!Z.IsValid() || RoomAt(Z->GetActorLocation()) != Room) { continue; }
 		for (int32 k = 0; k < 4; ++k)
 		{
+			// a free bit of floor (not inside the furniture)
 			FAnchor A;
-			A.Point = Z->GetRandomPoint(Rng);
-			A.Point.Z = FloorZ;
-			Out.Add(A);
+			bool bFree = false;
+			for (int32 Try = 0; Try < 8 && !bFree; ++Try)
+			{
+				A.Point = Z->GetRandomPoint(Rng);
+				A.Point.Z = FloorZ;
+				bFree = !Room->IsFloorBlocked(A.Point, 30.f);
+			}
+			if (bFree) { Out.Add(A); }
 		}
 	}
 	for (const TWeakObjectPtr<ADCStation>& SW : Stations)
@@ -503,9 +537,22 @@ void ADCWorldDirector::GetAnchors(const ADCRoomModule* Room, TArray<FAnchor>& Ou
 		P.X = FMath::Clamp(P.X, Inner.Min.X, Inner.Max.X);
 		P.Y = FMath::Clamp(P.Y, Inner.Min.Y, Inner.Max.Y);
 		P.Z = FloorZ;
+		if (Room->IsFloorBlocked(P, 25.f) || Room->UseSpots.Num() > 0) { continue; } // furnished rooms use their own spots
 		FAnchor A;
 		A.Point = P + FVector(Rng.FRandRange(-15.f, 15.f), Rng.FRandRange(-15.f, 15.f), 0.f);
 		A.Yaw = (S->GetActorLocation() - P).GetSafeNormal2D().Rotation().Yaw;
+		A.bHasYaw = true;
+		A.bStation = true;
+		Out.Add(A);
+	}
+	// Furnished rooms: busy spots at the furniture (the board, the desk, the stove...).
+	const FTransform RT = Room->GetActorTransform();
+	for (const ADCRoomModule::FUseSpot& U : Room->UseSpots)
+	{
+		FAnchor A;
+		A.Point = RT.TransformPositionNoScale(FVector(U.Point.X, U.Point.Y, 0.f));
+		A.Point.Z = FloorZ;
+		A.Yaw = RT.Rotator().Yaw + U.Yaw;
 		A.bHasYaw = true;
 		A.bStation = true;
 		Out.Add(A);
@@ -676,6 +723,7 @@ void ADCWorldDirector::AssignIdleGoal(ADCCriminalPawn* P)
 	{
 		const FAnchor& A = Anchors[Rng.RandHelper(Anchors.Num())];
 		if (IsSpotTaken(A.Point, P)) { continue; }
+		if (Target == Here && Try < 5 && Here->IsWalkBlocked(P->GetFeet(), A.Point)) { continue; } // don't walk through the furniture
 		TArray<FVector> Route;
 		PlanPath(P->GetFeet(), A.Point, Route);
 		const float Hold = A.bStation ? Rng.FRandRange(6.f, 14.f) : Rng.FRandRange(2.5f, 7.f) * (bNight ? 1.8f : 1.f);

@@ -62,6 +62,17 @@ public:
 	TArray<FVector2D> FloorQuad;
 	/** Point inside the floor outline (2D). */
 	bool ContainsPoint2D(const FVector& P, float Tolerance = 1.f) const;
+	/** Furniture pawns must not stand in or walk through (room-local OBB: centre, half extents, yaw degrees). Set by
+	 *  the Scene furnisher on every rebuild. */
+	struct FFootprint { FVector2D Centre = FVector2D::ZeroVector; FVector2D Half = FVector2D(1, 1); float Yaw = 0.f; };
+	TArray<FFootprint> Footprints;
+	/** Spots in front of furniture where a pawn looks busy (room-local floor point + facing yaw). */
+	struct FUseSpot { FVector2D Point = FVector2D::ZeroVector; float Yaw = 0.f; };
+	TArray<FUseSpot> UseSpots;
+	/** World point P (2D) lies within Pad of a furniture footprint. */
+	bool IsFloorBlocked(const FVector& P, float Pad = 20.f) const;
+	/** The straight walk A -> B (world) crosses furniture (the first/last EndSkip cm are ignored). */
+	bool IsWalkBlocked(const FVector& A, const FVector& B, float Pad = 12.f, float EndSkip = 30.f) const;
 	/** The builder regenerated this room's geometry: drop the fallback scaffold if real scaffolding exists, fix the
 	 *  Building group's visibility and move the build label. Never interrupts a reveal. */
 	void NotifyGeometryRebuilt();

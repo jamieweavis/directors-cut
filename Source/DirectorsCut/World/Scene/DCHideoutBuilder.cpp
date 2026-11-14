@@ -166,6 +166,20 @@ void ADCHideoutBuilder::InitAssets()
 	Proc("Sand",        3, C(0.46f, 0.39f, 0.26f), C(0.34f, 0.28f, 0.18f), 0.95f);
 	Proc("PaintGreen",  7, C(0.05f, 0.13f, 0.07f), C(0.03f, 0.05f, 0.03f), 0.5f, 0.f);
 	Proc("PaintYellow", 7, C(0.55f, 0.38f, 0.03f), C(0.25f, 0.15f, 0.02f), 0.5f, 0.f);
+	// --- furnishing (DCHideoutFurnish.cpp)
+	Proc("Rug",        12, C(0.20f, 0.045f, 0.035f), C(0.09f, 0.025f, 0.02f), 0.95f, 0.f, 2.f, 0.25f);
+	Proc("RugBorder",  12, C(0.26f, 0.19f, 0.09f), C(0.12f, 0.08f, 0.04f), 0.95f, 0.f, 2.f, 0.25f);
+	Proc("RugBlue",    12, C(0.035f, 0.06f, 0.10f), C(0.02f, 0.03f, 0.055f), 0.95f, 0.f, 2.f, 0.25f);
+	Proc("Velvet",      5, C(0.05f, 0.095f, 0.07f), C(0.025f, 0.05f, 0.035f), 0.9f, 0.f, 1.f, 0.2f);
+	Proc("Brass",       7, C(0.50f, 0.34f, 0.11f), C(0.30f, 0.19f, 0.06f), 0.35f, 1.f, 1.f, 0.2f);
+	Proc("Enamel",      7, C(0.52f, 0.49f, 0.42f), C(0.38f, 0.35f, 0.29f), 0.35f, 0.f, 1.f, 0.4f);
+	Proc("Terracotta",  3, C(0.34f, 0.13f, 0.06f), C(0.22f, 0.08f, 0.04f), 0.9f, 0.f, 1.f, 0.4f);
+	Proc("CastIron",    7, C(0.03f, 0.03f, 0.032f), C(0.07f, 0.06f, 0.055f), 0.6f, 0.6f, 1.f, 0.5f);
+	Proc("BookRed",     0, C(0.20f, 0.03f, 0.025f), C(0.15f, 0.02f, 0.02f), 0.7f);
+	Proc("BookBlue",    0, C(0.03f, 0.05f, 0.12f), C(0.02f, 0.04f, 0.09f), 0.7f);
+	Proc("BookGreen",   0, C(0.04f, 0.10f, 0.05f), C(0.03f, 0.07f, 0.04f), 0.7f);
+	Proc("BookTan",     0, C(0.36f, 0.26f, 0.15f), C(0.28f, 0.2f, 0.11f), 0.8f);
+	Proc("LampShade",  12, C(0.62f, 0.50f, 0.32f), C(0.5f, 0.4f, 0.24f), 0.9f, 0.f, 1.f, 0.1f, 0.f, C(1.f, 0.6f, 0.3f), 0.6f);
 	// --- emissive (M_DC_Neon, no flicker unless asked)
 	Emis("Tungsten",    FLinearColor(1.f, 0.55f, 0.22f), 45.f);
 	Emis("StringBulb",  FLinearColor(1.f, 0.52f, 0.14f), 28.f);

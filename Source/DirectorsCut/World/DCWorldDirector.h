@@ -90,6 +90,10 @@ protected:
 	bool IsSolidOutdoors(const ADCRoomModule* R) const;
 	void RoomDistances(int32 S, TArray<float>& Dist, TArray<int32>& Prev, TArray<int32>& Via) const;
 	bool PlanRooms(int32 S, int32 G, const FVector& To, TArray<FVector>& Out) const;
+	void PlanPathRaw(const FVector& From, const FVector& To, TArray<FVector>& Out);
+	/** Legs of Out (from Start, walking from From) that would cut through a room's furniture go via the room's
+	 *  middle instead (the furnisher keeps the middle and the lanes to every doorway clear). */
+	void DetourFurniture(const FVector& From, TArray<FVector>& Out, int32 Start) const;
 	void PlanOutdoor(const FVector& From, const FVector& To, TArray<FVector>& Out) const;
 	bool IsRoomUsable(const ADCRoomModule* R) const;
 	bool IsRoomUsable(EDCRoomType Type) const { return IsRoomUsable(FindRoom(Type)); }

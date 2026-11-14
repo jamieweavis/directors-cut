@@ -175,6 +175,8 @@ void ADCHideoutBuilder::BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 
 		if (UActorComponent* C = CW.Get()) { Room->RemoveInstanceComponent(C); C->DestroyComponent(); }
 	}
 	GridGen[Index].Reset();
+	Room->Footprints.Reset();
+	Room->UseSpots.Reset();
 	UStaticMeshComponent* Floor = GridFloors[Index];
 	ADCStation* Station = GridStations[Index];
 	ADCCriminalSpawnZone* Zone = GridZones[Index];
@@ -244,6 +246,18 @@ void ADCHideoutBuilder::BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 
 		CurGroup = DCGroups::Shell;
 		bool bTall[4];
 		for (int32 e = 0; e < 4; ++e) { bTall[e] = !Grid::IsFrontEdge(e) && NStage(e) < 2; }
+		// Furniture first: laid out to fit this room's shape and connections. It lights the room itself and may stand
+		// against a window, which the wall then leaves out.
+		int32 Kind[4]; bool bExit[4], bSS[4], bSE[4];
+		uint8 Omit[4] = { 0, 0, 0, 0 };
+		for (int32 e = 0; e < 4; ++e)
+		{
+			Kind[e] = NStage(e) == 2 ? 1 : (Grid::IsFrontEdge(e) ? 2 : 0);
+			bExit[e] = Grid::IsFrontEdge(e) && NStage(e) == 0;
+			bSS[e] = e == 1 && NStage(0) < 2;
+			bSE[e] = e == 2 && NStage(3) < 2;
+		}
+		const bool bFurnished = FurnishGridRoom(Room, Q, Kind, bExit, bSS, bSE, H, Seed, Seed, Omit);
 		for (int32 e = 0; e < 4; ++e)
 		{
 			const FVector2D A = Q[e], B = Q[(e + 1) & 3];
@@ -264,7 +278,7 @@ void ADCHideoutBuilder::BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 
 				// Back wall; it breaks down towards an open front.
 				const bool bStepStart = e == 1 && NStage(0) < 2;
 				const bool bStepEnd = e == 2 && NStage(3) < 2;
-				TallEdge(A, B, H, St, S, bStepStart, bStepEnd);
+				TallEdge(A, B, H, St, S, bStepStart, bStepEnd, Omit[e]);
 			}
 		}
 		if (bTall[1] && bTall[2])
@@ -275,7 +289,8 @@ void ADCHideoutBuilder::BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 
 			Deco(EDCShape::Cube, FVector(Q[2].X + In.X, Q[2].Y + In.Y, (H + 14.f) * 0.5f), FVector(42.f, 42.f, H + 14.f), St.Outer, FRotator(0, Yaw, 0));
 		}
 		// The room's light (no roof timbers any more): a bracket lamp on a standing back wall, else a bare light.
-		if (bTall[2] || bTall[1])
+		if (bFurnished) {}
+		else if (bTall[2] || bTall[1])
 		{
 			const int32 E = bTall[2] ? 2 : 1;
 			BracketLamp(Q[E], Q[(E + 1) & 3], 0.5f + HS(Seed, 10) * 0.08f, FMath::Min(H - 40.f, 215.f), GWarm, 30.f, 760.f);
@@ -351,7 +366,28 @@ void ADCHideoutBuilder::EdgeWindow(const FVector2D& A, const FVector2D& B, const
 	EdgeBox(A, B, L0 + 5.f, L1 - 5.f, Inset, O.Bottom, O.Top - 5.f, 1.5f, "Window");                            // glass
 }
 
-void ADCHideoutBuilder::TallEdge(const FVector2D& A, const FVector2D& B, float H, const FGridStyle& St, int32 Seed, bool bStepStart, bool bStepEnd)
+void ADCHideoutBuilder::TallEdgePlan(float L, float H, int32 Seed, bool bStepStart, bool bStepEnd, TArray<FOpening>& OutWin, TArray<FVector>& OutSteps)
+{
+	const float HalfT = GWallT * 0.5f;
+	const float SA = bStepStart ? 70.f + H01(Seed, 1) * 70.f : 0.f;
+	const float SB = bStepEnd ? 70.f + H01(Seed, 2) * 70.f : 0.f;
+	const float Main0 = bStepStart ? SA : -HalfT, Main1 = bStepEnd ? L - SB : L + HalfT;
+	OutWin.Reset();
+	OutSteps.Reset();
+	const int32 NW = L > 540.f ? 2 : 1;
+	for (int32 k = 0; k < NW; ++k)
+	{
+		const float W = 100.f + H01(Seed, 3 + k) * 25.f;
+		const float C = L * (k + 0.5f) / NW + HS(Seed, 5 + k) * 30.f;
+		if (C - W * 0.5f < Main0 + 45.f || C + W * 0.5f > Main1 - 45.f) { continue; }
+		OutWin.Add({ C, W, 92.f + H01(Seed, 7 + k) * 10.f, FMath::Min(205.f, H - 42.f) });
+	}
+	// the broken ends stand at H * (0.42..0.64) (see Step in TallEdge); the lower figure is the safe one
+	if (bStepStart) { OutSteps.Add(FVector(-HalfT, SA, H * (0.42f + 0.22f * H01(Seed, 11)))); }
+	if (bStepEnd) { OutSteps.Add(FVector(L - SB, L + HalfT, H * (0.42f + 0.22f * H01(Seed, 13)))); }
+}
+
+void ADCHideoutBuilder::TallEdge(const FVector2D& A, const FVector2D& B, float H, const FGridStyle& St, int32 Seed, bool bStepStart, bool bStepEnd, uint8 OmitWindows)
 {
 	const float L = FVector2D::Distance(A, B);
 	const float T = GWallT, HalfT = GWallT * 0.5f;
@@ -361,14 +397,9 @@ void ADCHideoutBuilder::TallEdge(const FVector2D& A, const FVector2D& B, float H
 
 	// windows, kept clear of the broken ends
 	TArray<FOpening> Win;
-	const int32 NW = L > 540.f ? 2 : 1;
-	for (int32 k = 0; k < NW; ++k)
-	{
-		const float W = 100.f + H01(Seed, 3 + k) * 25.f;
-		const float C = L * (k + 0.5f) / NW + HS(Seed, 5 + k) * 30.f;
-		if (C - W * 0.5f < Main0 + 45.f || C + W * 0.5f > Main1 - 45.f) { continue; }
-		Win.Add({ C, W, 92.f + H01(Seed, 7 + k) * 10.f, FMath::Min(205.f, H - 42.f) });
-	}
+	TArray<FVector> Steps;
+	TallEdgePlan(L, H, Seed, bStepStart, bStepEnd, Win, Steps);
+	for (int32 k = Win.Num() - 1; k >= 0; --k) { if (OmitWindows & (1 << k)) { Win.RemoveAt(k); } } // furniture stands there
 
 	EdgeBox(A, B, -HalfT, L + HalfT, HalfT, 0.f, 16.f, T + 8.f, "StoneDark");                       // plinth course
 	EdgeWall(A, B, Main0, Main1, HalfT, 0.f, H, T, Win, St.Outer);                                   // masonry

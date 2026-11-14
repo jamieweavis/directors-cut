@@ -461,10 +461,44 @@ bool ADCRoomModule::ContainsPoint2D(const FVector& P, float Tolerance) const
 	return P.X >= B.Min.X - Tolerance && P.X <= B.Max.X + Tolerance && P.Y >= B.Min.Y - Tolerance && P.Y <= B.Max.Y + Tolerance;
 }
 
+bool ADCRoomModule::IsFloorBlocked(const FVector& P, float Pad) const
+{
+	if (Footprints.Num() == 0) { return false; }
+	const FVector L3 = GetActorTransform().InverseTransformPositionNoScale(P);
+	const FVector2D L(L3.X, L3.Y);
+	for (const FFootprint& F : Footprints)
+	{
+		const float R = FMath::DegreesToRadians(F.Yaw);
+		const FVector2D X(FMath::Cos(R), FMath::Sin(R)), Y(-X.Y, X.X);
+		const FVector2D D = L - F.Centre;
+		if (FMath::Abs(FVector2D::DotProduct(D, X)) < F.Half.X + Pad && FMath::Abs(FVector2D::DotProduct(D, Y)) < F.Half.Y + Pad) { return true; }
+	}
+	return false;
+}
+
+bool ADCRoomModule::IsWalkBlocked(const FVector& A, const FVector& B, float Pad, float EndSkip) const
+{
+	if (Footprints.Num() == 0) { return false; }
+	const float Len = FVector::Dist2D(A, B);
+	if (Len <= EndSkip * 2.f) { return false; }
+	const int32 N = FMath::CeilToInt((Len - EndSkip * 2.f) / 15.f);
+	for (int32 i = 0; i <= N; ++i)
+	{
+		const float T = (EndSkip + (Len - EndSkip * 2.f) * i / FMath::Max(1, N)) / Len;
+		if (IsFloorBlocked(FMath::Lerp(A, B, T), Pad)) { return true; }
+	}
+	return false;
+}
+
 void ADCRoomModule::NotifyGeometryRebuilt()
 {
 	if (BuildLabel) { BuildLabel->DestroyComponent(); BuildLabel = nullptr; } // recreated over the new floor
 	if (bRevealing) { return; }
+	// freshly generated level dressing must follow the current level
+	const bool bHasLevel = CurrentState == EDCRoomState::Built || (CurrentState == EDCRoomState::Building && CurrentLevel >= 1);
+	SetGroupVisible(DCGroups::Level1, bHasLevel && CurrentLevel >= 1);
+	SetGroupVisible(DCGroups::Level2, bHasLevel && CurrentLevel >= 2);
+	SetGroupVisible(DCGroups::Level3, bHasLevel && CurrentLevel >= 3);
 	if (GroupHasContent(DCGroups::Building)) { ClearTempScaffold(); }
 	SetGroupVisible(DCGroups::Building, CurrentState == EDCRoomState::Building);
 	if (CurrentState == EDCRoomState::Building && !GroupHasContent(DCGroups::Building) && TempScaffold.Num() == 0) { SpawnFallbackScaffold(); }
