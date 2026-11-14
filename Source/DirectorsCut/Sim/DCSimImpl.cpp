@@ -853,7 +853,7 @@ void FDCSimImpl::EndRun(S& Sim, bool bWon, const FString& Reason)
 	Sim.Phase = bWon ? EDCGamePhase::Won : EDCGamePhase::GameOver;
 	Sim.EndReason = Reason;
 	const FDCRunSummary Sum = Sim.GetRunSummary();
-	if (Sim.bSaveEnabled) { UGameplayStatics::DeleteGameInSlot(Sim.GetSlotName(), 0); }
+	Sim.RecordFinishedRun(); // keeps the slot (marked finished) + one leaderboard record
 	Sim.bSaveDirty = false;
 	Sim.MarkChanged();
 	UE_LOG(LogDC, Display, TEXT("[Sim] run ended: %s (%s) day %d, %d successes, cash %d"), bWon ? TEXT("WON") : TEXT("GAME OVER"), *Reason, Sum.DaysSurvived, Sum.MissionsSucceeded, Sim.Cash);

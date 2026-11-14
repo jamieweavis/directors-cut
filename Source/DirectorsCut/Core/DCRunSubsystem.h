@@ -9,7 +9,7 @@
 //  - Clock: hour = StartHour + RunTime * GameMinutesPerSecond / 60 (default 1 game minute per real second, so a day is
 //    24 real minutes). Payday (upkeep) is charged at every dawn (DawnHour).
 //  - Saving: autosave every AutosaveInterval s, on every mission start/complete/build, and on Deinitialize.
-//    Closing the game freezes time: Continue restores RunTime exactly (no offline progress). GameOver/Won delete the save.
+//    Closing the game freezes time: Continue restores RunTime exactly (no offline progress). GameOver/Won keep the save, marked finished.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -258,5 +258,26 @@ private:
 	void ResetRunState();
 	void MarkChanged();
 	void FlushChanged();
-	FString GetSlotName() const;
+
+	// ── save slots + leaderboard (v3) ──
+	int32 CurrentSlot = -1;               // slot the loaded run saves to
+	FGuid RunId;                          // unique per run; dedupes leaderboard records across slot copies
+	mutable TArray<FDCSaveSlotInfo> SlotCache;   // headers of all slots (refreshed on save/delete, not per frame)
+	mutable bool bSlotCacheValid = false;
+	mutable bool bLegacyChecked = false;
+	mutable TArray<FDCRunRecord> LeaderboardCache;
+	mutable TArray<FGuid> LeaderboardIds;  // parallel to LeaderboardCache
+	mutable bool bLeaderboardLoaded = false;
+
+	FString GetSlotPrefix() const;        // "DCRun" (or the test override)
+	FString GetSlotName(int32 Slot) const;
+	FString GetLeaderboardSlotName() const;
+	bool IsFinished() const { return Phase == EDCGamePhase::GameOver || Phase == EDCGamePhase::Won; }
+	void EnsureSlotCache() const;
+	void MigrateLegacySave() const;
+	FDCSaveSlotInfo MakeSlotInfo(int32 Slot) const;  // from the in-memory run
+	bool WriteSlot(int32 Slot);           // writes the in-memory run (active or finished) to Slot
+	bool ApplySave(const class UDCSaveGame& SG);
+	void EnsureLeaderboard() const;
+	void RecordFinishedRun();             // EndRun: writes the slot as finished + one leaderboard record
 };
