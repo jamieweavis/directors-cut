@@ -220,8 +220,8 @@ void ADCDayNight::Apply(float H, float DeltaSeconds)
 		{ 0.0f,  FLinearColor(0.12f, 0.18f, 0.40f) },
 		{ 4.6f,  FLinearColor(0.13f, 0.18f, 0.40f) },
 		{ 5.6f,  FLinearColor(0.42f, 0.36f, 0.62f) },
-		{ 6.5f,  FLinearColor(0.95f, 0.60f, 0.48f) },
-		{ 8.0f,  FLinearColor(0.92f, 0.85f, 0.78f) },
+		{ 6.5f,  FLinearColor(0.85f, 0.62f, 0.58f) },
+		{ 8.0f,  FLinearColor(0.85f, 0.85f, 0.85f) },
 		{ 11.f,  FLinearColor(0.78f, 0.86f, 1.00f) },
 		{ 15.f,  FLinearColor(0.80f, 0.86f, 0.98f) },
 		{ 17.6f, FLinearColor(1.00f, 0.80f, 0.60f) },
@@ -231,7 +231,7 @@ void ADCDayNight::Apply(float H, float DeltaSeconds)
 	};
 	const FLinearColor SkyCol = Track(SkyKeys, H);
 	Sky->SetLightColor(SkyCol);
-	Sky->SetIntensity(FMath::Lerp(SkyNight, SkyDay, FMath::Pow(SunA, 0.5f)) + SkyNight * 1.6f * Twilight);
+	Sky->SetIntensity(FMath::Lerp(SkyNight, SkyDay, FMath::Pow(SunA, 0.5f)) + SkyNight * 3.f * Twilight);
 	const float WinStrength = FMath::Lerp(0.12f, 1.1f, FMath::Pow(SunA, 0.45f));
 	for (UMaterialInstanceDynamic* W : WindowMats)
 	{
@@ -295,7 +295,7 @@ void ADCDayNight::Apply(float H, float DeltaSeconds)
 	if (Post)
 	{
 		const float W = FMath::Pow(SunA, 0.5f);
-		Post->Settings.AutoExposureBias = FMath::Lerp(EVNight, EVDay, W) + 0.35f * Twilight;
+		Post->Settings.AutoExposureBias = FMath::Lerp(EVNight, EVDay, W) + 0.6f * Twilight;
 		Post->Settings.bOverride_WhiteTemp = true;
 		Post->Settings.WhiteTemp = FMath::Lerp(6300.f, 6500.f, W);
 		Post->Settings.BloomIntensity = FMath::Lerp(0.9f, 0.45f, W);
@@ -305,8 +305,8 @@ void ADCDayNight::Apply(float H, float DeltaSeconds)
 	static const TArray<TPair<float, FLinearColor>> HazeKeys = {
 		{ 0.0f,  FLinearColor(0.035f, 0.05f, 0.09f) },
 		{ 4.8f,  FLinearColor(0.04f, 0.055f, 0.10f) },
-		{ 6.2f,  FLinearColor(0.45f, 0.38f, 0.40f) },
-		{ 8.0f,  FLinearColor(0.42f, 0.45f, 0.45f) },
+		{ 6.2f,  FLinearColor(0.36f, 0.34f, 0.42f) },
+		{ 8.0f,  FLinearColor(0.38f, 0.42f, 0.46f) },
 		{ 12.f,  FLinearColor(0.30f, 0.38f, 0.42f) },
 		{ 17.5f, FLinearColor(0.42f, 0.36f, 0.26f) },
 		{ 19.6f, FLinearColor(0.42f, 0.25f, 0.22f) },
@@ -317,15 +317,15 @@ void ADCDayNight::Apply(float H, float DeltaSeconds)
 	if (HeightFog)
 	{
 		static const TArray<TPair<float, float>> MistKeys = {
-			{ 0.f, 0.22f }, { 4.5f, 0.3f }, { 6.3f, 0.5f }, { 8.2f, 0.12f }, { 10.f, 0.f }, { 18.8f, 0.f }, { 20.8f, 0.14f }, { 23.f, 0.22f } };
+			{ 0.f, 0.12f }, { 4.5f, 0.16f }, { 6.0f, 0.2f }, { 7.4f, 0.05f }, { 8.2f, 0.02f }, { 10.f, 0.f }, { 18.8f, 0.f }, { 20.8f, 0.08f }, { 23.f, 0.12f } };
 		static const TArray<TPair<float, float>> HazeDensityKeys = {
-			{ 0.f, 0.006f }, { 5.5f, 0.012f }, { 7.5f, 0.012f }, { 11.f, 0.006f }, { 17.f, 0.008f }, { 19.5f, 0.012f }, { 21.5f, 0.006f } };
+			{ 0.f, 0.005f }, { 5.5f, 0.008f }, { 7.5f, 0.008f }, { 11.f, 0.005f }, { 17.f, 0.006f }, { 19.5f, 0.009f }, { 21.5f, 0.005f } };
 		// inscattering is a luminance: scale the haze albedo by roughly how much light is around
-		const float Ambient = 0.06f * SunI + 0.5f * MoonI + 0.35f * Twilight + 0.25f;
+		const float Ambient = 0.035f * SunI + 0.5f * MoonI + 0.35f * Twilight + 0.25f;
 		HeightFog->SetFogInscatteringColor(HazeColor * Ambient);
 		HeightFog->SetFogDensity(Track(HazeDensityKeys, H));
 		HeightFog->SetSecondFogDensity(Track(MistKeys, H));
 		const float Gold = bDay ? FMath::Clamp(1.f - SunA * 2.2f, 0.f, 1.f) : 0.f;
-		HeightFog->SetDirectionalInscatteringColor(FLinearColor(1.f, 0.55f, 0.25f) * (0.02f * SunI * Gold));
+		HeightFog->SetDirectionalInscatteringColor(FLinearColor(1.f, 0.55f, 0.25f) * (0.006f * SunI * Gold));
 	}
 }

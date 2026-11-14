@@ -33,8 +33,9 @@ namespace
 	}
 
 	// field rectangles (across the lane)
-	const FBox2D SoilField(FVector2D(-7200.f, -8400.f), FVector2D(-1100.f, -4250.f));
-	const FBox2D StubbleField(FVector2D(1100.f, -8400.f), FVector2D(7200.f, -4250.f));
+	// field rectangles (across the lane, measured from it)
+	const FBox2D SoilField(FVector2D(-7200.f, DCSite::LaneY - 5100.f), FVector2D(-1100.f, DCSite::LaneY - 950.f));
+	const FBox2D StubbleField(FVector2D(1100.f, DCSite::LaneY - 5100.f), FVector2D(7200.f, DCSite::LaneY - 950.f));
 	constexpr float FenceY = DCSite::LaneY + 380.f;   // post-and-rail fence on the house side of the lane
 	constexpr float BoundaryY = DCSite::LaneY - 430.f;// stone wall / hedgerow on the field side
 	constexpr float PoleY = DCSite::LaneY - 330.f;    // telegraph poles on the far verge
@@ -104,12 +105,16 @@ void ADCLandscape::BuildTerrain()
 	Skin("Drive", FBox2D(FVector2D(DriveX - (DriveW + 160.f) * 0.5f, LaneY + LaneW * 0.5f - 40.f), FVector2D(DriveX + (DriveW + 160.f) * 0.5f, YardRect().Min.Y + 40.f)), GroundTop + 0.7f);
 	Skin("Gravel", YardRect().ExpandBy(70.f), GroundTop + 0.8f);
 	// footpaths: house -> campfire -> pond, yard -> house front
-	const FVector2D Door(-1350.f, -700.f);
-	Strip("Path", Door, FVector2D(-1850.f, -620.f), 120.f, GroundTop + 0.65f);
-	Strip("Path", FVector2D(-1850.f, -620.f), FireC + FVector2D(150.f, -30.f), 120.f, GroundTop + 0.65f);
-	Strip("Path", FireC + FVector2D(-120.f, 200.f), FVector2D(-2650.f, 500.f), 100.f, GroundTop + 0.65f);
-	Strip("Path", FVector2D(-2650.f, 500.f), FVector2D(-2900.f, 1250.f), 100.f, GroundTop + 0.65f);
-	Strip("Path", FVector2D(-1050.f, -1720.f), FVector2D(-1400.f, -1000.f), 110.f, GroundTop + 0.65f);
+	const FBox2D Comp = CompoundRect();
+	const FVector2D Door(Comp.Min.X - 20.f, FireC.Y - 150.f);
+	const FVector2D Bend((Door.X + FireC.X) * 0.5f, FireC.Y - 110.f);
+	const FVector2D PondEdge(PondC.X + PondR.X * 0.35f, PondC.Y - PondR.Y * 1.05f);
+	const FVector2D PondMid(FireC.X - 350.f, (FireC.Y + PondEdge.Y) * 0.5f);
+	Strip("Path", Door, Bend, 120.f, GroundTop + 0.65f);
+	Strip("Path", Bend, FireC + FVector2D(150.f, -30.f), 120.f, GroundTop + 0.65f);
+	Strip("Path", FireC + FVector2D(-120.f, 200.f), PondMid, 100.f, GroundTop + 0.65f);
+	Strip("Path", PondMid, PondEdge, 100.f, GroundTop + 0.65f);
+	Strip("Path", FVector2D(YardRect().Min.X + 120.f, YardRect().Max.Y + 30.f), FVector2D(Comp.Min.X - 60.f, Comp.Min.Y + 250.f), 110.f, GroundTop + 0.65f);
 	// pond: muddy rim + water
 	Slab("Mud", Disc, FVector(PondC.X, PondC.Y, GroundTop + 0.9f), FVector(PondR.X * 1.22f / 50.f, PondR.Y * 1.25f / 50.f, 1.f), 8.f);
 	Slab("Water", Disc, FVector(PondC.X, PondC.Y, GroundTop + 1.6f), FVector(PondR.X / 50.f, PondR.Y / 50.f, 1.f), 8.f);
@@ -173,7 +178,7 @@ void ADCLandscape::BuildVegetation()
 	{
 		const FVector2D P = LawnC + FVector2D(R.FRandRange(-1.f, 1.f) * LawnR.X, R.FRandRange(-1.f, 1.f) * LawnR.Y);
 		if (!InEllipse(P, LawnC, LawnR, 0.95f) || Blocked(P, 30.f, true)) { continue; }
-		if (P.X < -1300.f && P.X > -2600.f && P.Y < 0.f && P.Y > -800.f) { continue; } // keep the fire path clear-ish
+		if (P.X < CompoundRect().Min.X && P.X > FireC.X - 300.f && FMath::Abs(P.Y - FireC.Y) < 400.f) { continue; } // keep the fire path clear-ish
 		Add("Tuft2", "GrassLush", FTransform(FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f), FVector(P.X, P.Y, GroundTop), FVector(0.6f, 0.6f, R.FRandRange(0.1f, 0.18f))), false);
 	}
 
@@ -200,7 +205,7 @@ void ADCLandscape::BuildVegetation()
 	// a few flowers in the lawn edge near the fire / pond path
 	for (int32 k = 0; k < 40; ++k)
 	{
-		const FVector2D P(-2650.f + R.FRandRange(-500.f, 350.f), 600.f + R.FRandRange(-700.f, 700.f));
+		const FVector2D P = FMath::Lerp(FireC, PondC, 0.5f) + FVector2D(R.FRandRange(-450.f, 350.f), R.FRandRange(-600.f, 600.f));
 		if (Blocked(P, 20.f, true)) { continue; }
 		Add("Flowers0", Petals[k % 4], FTransform(FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f), FVector(P.X, P.Y, GroundTop), FVector(0.9f, 0.9f, 0.6f)), false);
 	}
@@ -310,7 +315,7 @@ void ADCLandscape::BuildTrees()
 	auto Clear = [&](const FVector2D& P, float M) { return !Blocked(P, M, false) && !BuildingClearRect().ExpandBy(M).IsInside(P) && !InEllipse(P, LawnC, LawnR, 1.0f); };
 
 	// woodland stand behind the house (+X+Y), mixed with pines and a few autumn trees
-	const FVector2D Wood(4300.f, 4600.f);
+	const FVector2D Wood(BuildingClearRect().Max.X + 2500.f, BuildingClearRect().Max.Y + 2600.f);
 	int32 Placed = 0;
 	for (int32 i = 0; i < 400 && Placed < 46; ++i)
 	{
@@ -326,7 +331,7 @@ void ADCLandscape::BuildTrees()
 	struct FSpec { float X, Y, H; int32 K; };
 	const FSpec Specs[] = {
 		{ -3900.f,  2900.f, 1150.f, 0 },  // big tree over the pond
-		{ -3300.f, -1450.f,  900.f, 1 },  // autumn tree by the campfire meadow
+		{ -4600.f, -1900.f,  900.f, 1 },  // autumn tree out in the meadow
 		{  2700.f, -1300.f,  980.f, 0 },  // beside the yard
 		{  2600.f,   900.f, 1050.f, 1 },
 		{ -1900.f,  3300.f,  950.f, 0 },
@@ -336,7 +341,12 @@ void ADCLandscape::BuildTrees()
 		{ -4300.f, -2200.f,  850.f, 0 },
 		{  3600.f, -2400.f,  900.f, 1 },
 	};
-	for (int32 i = 0; i < UE_ARRAY_COUNT(Specs); ++i) { Tree(FVector(Specs[i].X, Specs[i].Y, GroundTop), Specs[i].H, Specs[i].K, 300 + i); }
+	for (int32 i = 0; i < UE_ARRAY_COUNT(Specs); ++i)
+	{
+		const FVector2D P(Specs[i].X * 0.8f, Specs[i].Y * 0.8f); // laid out for the first site plan; the house shrank
+		if (!Clear(P, 150.f)) { continue; }
+		Tree(FVector(P.X, P.Y, GroundTop), Specs[i].H, Specs[i].K, 300 + i);
+	}
 	// bushes round the meadow edge
 	for (int32 i = 0, N = 0; i < 300 && N < 40; ++i)
 	{
@@ -531,11 +541,12 @@ void ADCLandscape::BuildGarden()
 
 	// festoon poles around the yard (outside the yard rect, nothing tall inside it)
 	const float Ys[2] = { YardRect().Min.Y - 80.f, YardRect().Max.Y - 30.f };
-	const float Xs[4] = { YardRect().Min.X - 90.f, -700.f, 520.f, YardRect().Max.X + 90.f };
+	const FBox2D Yd = YardRect();
+	const float Xs[4] = { Yd.Min.X - 90.f, FMath::Lerp(Yd.Min.X, Yd.Max.X, 0.3f), FMath::Lerp(Yd.Min.X, Yd.Max.X, 0.68f), Yd.Max.X + 90.f };
 	for (float Y : Ys) { for (float X : Xs) { Add("Post", "TimberV", FTransform(FRotator(R.FRandRange(-2.f, 2.f), 0.f, R.FRandRange(-2.f, 2.f)), FVector(X, Y, GroundTop - 15.f), FVector(0.13f, 0.13f, 3.55f))); } }
 
 	// floodlight on a pole at the yard's back corner, aimed into the yard
-	const FVector FP(YardRect().Max.X + 170.f, YardRect().Max.Y + 10.f, GroundTop);
+	const FVector FP(FMath::Max(YardRect().Max.X, BuildingClearRect().Max.X) + 60.f, YardRect().Max.Y - 40.f, GroundTop);
 	Add("Post", "Timber", FTransform(FRotator::ZeroRotator, FP, FVector(0.18f, 0.18f, 5.1f)));
 	const FVector Lamp = FP + FVector(-35.f, -35.f, 490.f);
 	Box("Metal", Lamp, FVector(34.f, 26.f, 22.f), FRotator(-35.f, -135.f, 0.f));
@@ -639,7 +650,8 @@ void ADCLandscape::BuildNightLights()
 
 	// festoon strings: front row, back row and a zig-zag across the yard
 	const float Ys[2] = { YardRect().Min.Y - 80.f, YardRect().Max.Y - 30.f };
-	const float Xs[4] = { YardRect().Min.X - 90.f, -700.f, 520.f, YardRect().Max.X + 90.f };
+	const FBox2D Yd = YardRect();
+	const float Xs[4] = { Yd.Min.X - 90.f, FMath::Lerp(Yd.Min.X, Yd.Max.X, 0.3f), FMath::Lerp(Yd.Min.X, Yd.Max.X, 0.68f), Yd.Max.X + 90.f };
 	const float PoleTop = 325.f;
 	TArray<TPair<FVector, FVector>> Spans;
 	for (int32 r = 0; r < 2; ++r) { for (int32 i = 0; i < 3; ++i) { Spans.Add({ FVector(Xs[i], Ys[r], PoleTop), FVector(Xs[i + 1], Ys[r], PoleTop) }); } }
@@ -666,7 +678,7 @@ void ADCLandscape::BuildNightLights()
 	const float GateHalf = 260.f;
 	const FVector LanternPos[4] = {
 		FVector(DriveX - GateHalf, FenceY, 155.f), FVector(DriveX + GateHalf, FenceY, 155.f),
-		FVector(-1720.f, FenceY, 135.f), FVector(1580.f, FenceY, 135.f) };
+		FVector(YardRect().Min.X - 650.f, FenceY, 135.f), FVector(YardRect().Max.X + 650.f, FenceY, 135.f) };
 	for (const FVector& L : LanternPos)
 	{
 		Box("Metal", L + FVector(0, 0, 18.f), FVector(20.f, 20.f, 5.f));
@@ -676,16 +688,16 @@ void ADCLandscape::BuildNightLights()
 	}
 
 	// campfire: the one shadowed night light
-	NightPoint(FVector(FireC.X, FireC.Y, 75.f), FLinearColor(1.f, 0.45f, 0.12f), 420.f, 1500.f, true, 0.35f);
+	NightPoint(FVector(FireC.X, FireC.Y, 120.f), FLinearColor(1.f, 0.36f, 0.07f), 260.f, 1300.f, true, 0.35f);
 	// pond: a soft teal glow just above the water
-	NightPoint(FVector(PondC.X, PondC.Y, 70.f), FLinearColor(0.1f, 0.85f, 0.75f), 40.f, 900.f);
+	NightPoint(FVector(PondC.X, PondC.Y, 70.f), FLinearColor(0.1f, 0.85f, 0.75f), 22.f, 900.f);
 
 	// fireflies: drifting emissive motes over the meadow + pond, a handful carry tiny lights
 	for (int32 i = 0; i < 170; ++i)
 	{
 		FVector2D P;
 		if (i < 90) { const float A = R.FRandRange(0.f, 2.f * PI); P = PondC + FVector2D(FMath::Cos(A), FMath::Sin(A)) * R.FRandRange(300.f, 1700.f); }
-		else { P = FVector2D(R.FRandRange(-4500.f, -1800.f), R.FRandRange(-2000.f, 4000.f)); }
+		else { P = FVector2D(R.FRandRange(BuildingClearRect().Min.X - 3000.f, BuildingClearRect().Min.X - 300.f), R.FRandRange(YardRect().Min.Y, BuildingClearRect().Max.Y + 2500.f)); }
 		const float S = R.FRandRange(0.08f, 0.12f);
 		Add("Sphere", "Firefly", FTransform(FRotator::ZeroRotator, FVector(P.X, P.Y, R.FRandRange(25.f, 170.f)), FVector(S)), false);
 	}
@@ -702,6 +714,7 @@ void ADCLandscape::BuildNightLights()
 		L->SetLightColor(FLinearColor(0.7f, 1.f, 0.25f));
 		L->AttenuationRadius = 200.f;
 		L->SourceRadius = 2.f;
+		L->SetVolumetricScatteringIntensity(0.f);
 		L->SetCastShadows(false);
 		L->bAffectTranslucentLighting = false;
 		L->SetVisibility(false);

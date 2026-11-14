@@ -57,6 +57,14 @@ void ADCLandscape::BuildLandscape()
 	if (bBuilt) { return; }
 	bBuilt = true;
 	const double T0 = FPlatformTime::Seconds();
+	// garden layout derived from the site contract (the keep-clear zone + yard)
+	{
+		const FBox2D Clear = DCSite::BuildingClearRect();
+		LawnC = Clear.GetCenter();
+		LawnR = Clear.GetExtent() + FVector2D(600.f, 520.f);
+		FireC = FVector2D(Clear.Min.X - 450.f, FMath::Lerp(DCSite::YardRect().Max.Y, Clear.Max.Y, 0.32f));
+		PondC = FVector2D(Clear.Min.X - 1350.f, Clear.Max.Y - 150.f);
+	}
 	BuildLightingAndPost();
 	InitAssets();
 	BuildTerrain();
@@ -359,7 +367,7 @@ UPointLightComponent* ADCLandscape::NightPoint(const FVector& P, const FLinearCo
 	L->SourceRadius = 4.f;
 	L->SetCastShadows(bShadow);
 	L->bAffectTranslucentLighting = false;
-	L->SetVolumetricScatteringIntensity(bShadow ? 1.f : 0.6f);
+	L->SetVolumetricScatteringIntensity(0.f); // per-light volumetric injection is the night-time cost
 	L->SetVisibility(false);
 	L->RegisterComponent();
 	AddInstanceComponent(L);
@@ -494,7 +502,7 @@ void ADCLandscape::Tick(float DeltaSeconds)
 	{
 		if (NightGlowMIDs[i]) { NightGlowMIDs[i]->SetScalarParameterValue("Strength", NightGlowBase[i] * (0.02f + 0.98f * NightK)); }
 	}
-	if (WaterMID) { WaterMID->SetScalarParameterValue("Glow", 0.35f * NightK); }
+	if (WaterMID) { WaterMID->SetScalarParameterValue("Glow", 0.18f * NightK); }
 	if (FireflyMID) { FireflyMID->SetScalarParameterValue("Strength", 40.f * NightK); }
 	for (const FFirefly& F : Fireflies)
 	{
@@ -540,8 +548,8 @@ void ADCLandscape::TickShots()
 		FVector Pivot = B.GetCenter(); Pivot.Z = 0.f;
 		float Dist = B.GetExtent().Size2D() / FMath::Tan(FMath::DegreesToRadians(9.f)) * 0.82f;
 		if (Frame == TEXT("far")) { Dist *= 1.3f; Pivot += FVector(1500.f, 1500.f, 0.f); }
-		else if (Frame == TEXT("close")) { Dist *= 0.38f; Pivot = FVector(-1500.f, -1400.f, 0.f); }
-		else if (Frame == TEXT("pond")) { Dist *= 0.3f; Pivot = FVector(-2800.f, 1300.f, 0.f); }
+		else if (Frame == TEXT("close")) { Dist *= 0.4f; Pivot = FVector((DCSite::YardRect().Min.X + FireC.X) * 0.5f, (DCSite::YardRect().Max.Y + FireC.Y) * 0.5f, 0.f); }
+		else if (Frame == TEXT("pond")) { Dist *= 0.3f; Pivot = FVector(PondC.X, PondC.Y, 0.f); }
 		const FRotator Rot(-35.f, 45.f, 0.f);
 		ShotCam->SetActorLocationAndRotation(Pivot - Rot.Vector() * Dist, Rot);
 		if (PC) { PC->SetViewTarget(ShotCam); }
