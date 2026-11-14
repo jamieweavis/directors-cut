@@ -29,7 +29,7 @@ public:
 	/** Closest the camera may get (scroll / focus). */
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float MinDistance = 2600.f;
 	/** Max zoom-out as a multiple of the overview distance. */
-	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float MaxDistanceOverOverview = 1.3f;
+	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float MaxDistanceOverOverview = 2.6f;
 	/** Smooth time (s) for focus/reset dollies and pan/zoom. */
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float FocusSmoothTime = 0.45f;
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float PanSmoothTime = 0.10f;
@@ -68,6 +68,9 @@ public:
 	float GetOverviewDistance() const { return OverviewDistance; }
 	float GetCurrentDistance() const { return CurDistance; }
 	FBox GetBounds() const { return Bounds; }
+	/** The box the overview framing fits (house + yard). Pan clamping still uses SetBounds (the whole site). Invalid = use the bounds. */
+	void SetFraming(const FBox& WorldFraming);
+	FVector GetOverviewPivot() const { return OverviewPivot; }
 
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -75,6 +78,7 @@ protected:
 	virtual void Tick(float DeltaSeconds) override;
 	void ApplyRig();
 	FBox Bounds = FBox(FVector(-2000), FVector(2000));
+	FBox Framing = FBox(ForceInit);
 
 	enum class EMode : uint8 { Overview, Focus, Free };
 	EMode Mode = EMode::Overview;

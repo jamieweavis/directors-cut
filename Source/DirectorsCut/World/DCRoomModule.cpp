@@ -4,6 +4,7 @@
 #include "World/DCPlayerController.h"
 #include "Core/DCWorldTags.h"
 #include "Core/DCAssetPaths.h"
+#include "Core/DCSettings.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/LightComponent.h"
@@ -160,7 +161,7 @@ void ADCRoomModule::PlayReveal(int32 NewLevel)
 	else if (TempScaffold.Num() == 0) { SpawnFallbackScaffold(); }
 	CurrentState = EDCRoomState::Building;
 
-	if (bRevealMovesCamera)
+	if (bRevealMovesCamera && !DCSettings::ReduceMotion())
 	{
 		if (ADCCameraRig* Rig = FindRig(GetWorld()))
 		{
@@ -334,6 +335,7 @@ void ADCRoomModule::Tick(float DeltaSeconds)
 		const float T = (RevealTime - RL.Start) / LightRamp;
 		float I = 0.f;
 		if (T <= 0.f) { I = 0.f; }
+		else if (T < 0.65f && DCSettings::ReduceFlashing()) { I = RL.Target * FMath::Lerp(0.f, 0.8f, T / 0.65f); } // smooth fade, no flicker
 		else if (T < 0.65f)
 		{
 			const float N = FMath::PerlinNoise1D(RevealTime * 22.f + RL.Seed);

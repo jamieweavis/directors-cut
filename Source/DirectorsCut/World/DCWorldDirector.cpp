@@ -6,6 +6,12 @@
 #include "World/DCCriminalSpawnZone.h"
 #include "World/DCGarageDoor.h"
 #include "World/DCStation.h"
+#include "World/DCVehicle.h"
+#include "Core/DCSiteLayout.h"
+#include "Core/DCAssetPaths.h"
+#include "Engine/StaticMeshActor.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Core/DCRunSubsystem.h"
 #include "Core/DCUISubsystem.h"
 #include "Core/DCDevTools.h"
@@ -72,6 +78,7 @@ void ADCWorldDirector::EndPlay(const EEndPlayReason::Type Reason)
 		Run->OnCriminalHired.Remove(HHired);
 	}
 	if (UDCUISubsystem* UI = UDCUISubsystem::Get(this)) { UI->OnPanelChanged.Remove(HPanel); }
+	ClearCars();
 	Super::EndPlay(Reason);
 }
 
@@ -147,23 +154,70 @@ ADCGarageDoor* ADCWorldDirector::GetMissionDoor() const
 	return GetStreetDoor();
 }
 
-// ─── Room graph ──────────────────────────────────────────────────────────────
+// ─── Navigation: room graph + outside ────────────────────────────────────────
+
+bool ADCWorldDirector::IsWalkable(const ADCRoomModule* R) const
+{
+	if (!R) { return false; }
+	if (UDCDevTools::IsBuildAll()) { return true; }
+	return R->IsUsable() && !RevealQueue.Contains(R->RoomType);
+}
+
+bool ADCWorldDirector::IsSolidOutdoors(const ADCRoomModule* R) const
+{
+	// Anything standing on the plot: finished wings, frames under construction, a wing mid-reveal.
+	if (!R) { return false; }
+	if (UDCDevTools::IsBuildAll()) { return true; }
+	return R->GetState() != EDCRoomState::Locked || R->IsRevealPlaying() || RevealQueue.Contains(R->RoomType);
+}
+
+uint32 ADCWorldDirector::ComputeNavSignature() const
+{
+	uint32 H = 0x9E37u + Rooms.Num();
+	for (int32 i = 0; i < Rooms.Num(); ++i)
+	{
+		const ADCRoomModule* R = Rooms[i].Get();
+		H = HashCombineFast(H, (IsWalkable(R) ? 1u : 0u) | (IsSolidOutdoors(R) ? 2u : 0u) | (R && R->IsRevealPlaying() ? 4u : 0u));
+	}
+	return H;
+}
+
+void ADCWorldDirector::EnsureNav()
+{
+	const uint32 Sig = ComputeNavSignature();
+	if (!bNavBuilt || Sig != NavSignature) { BuildNav(); }
+}
+
+int32 ADCWorldDirector::NavRoomAt(const FVector& P) const
+{
+	for (int32 i = 0; i < Rooms.Num(); ++i)
+	{
+		const ADCRoomModule* R = Rooms[i].Get();
+		if (!R || !IsWalkable(R)) { continue; }
+		const FBox B = R->GetWorldBounds();
+		if (P.X >= B.Min.X - 1.f && P.X <= B.Max.X + 1.f && P.Y >= B.Min.Y - 1.f && P.Y <= B.Max.Y + 1.f) { return i; }
+	}
+	return INDEX_NONE;
+}
 
 void ADCWorldDirector::BuildNav()
 {
 	bNavBuilt = true;
+	NavSignature = ComputeNavSignature();
 	Portals.Reset();
+	Exits.Reset();
 	UWorld* W = GetWorld();
 	if (!W) { return; }
 	FCollisionQueryParams Q(SCENE_QUERY_STAT(DCNav), false);
 
+	// Doorways between built rooms.
 	for (int32 i = 0; i < Rooms.Num(); ++i)
 	{
 		for (int32 j = i + 1; j < Rooms.Num(); ++j)
 		{
 			const ADCRoomModule* RA = Rooms[i].Get();
 			const ADCRoomModule* RB = Rooms[j].Get();
-			if (!RA || !RB) { continue; }
+			if (!IsWalkable(RA) || !IsWalkable(RB)) { continue; }
 			const FBox A = RA->GetWorldBounds(), B = RB->GetWorldBounds();
 			// Shared wall: along Y at a fixed X, or along X at a fixed Y.
 			for (int32 Axis = 0; Axis < 2; ++Axis)
@@ -199,41 +253,90 @@ void ADCWorldDirector::BuildNav()
 				Portal.InA.Z = RA->GetActorLocation().Z;
 				Portal.InB.Z = RB->GetActorLocation().Z;
 				Portals.Add(Portal);
-				UE_LOG(LogDC, Log, TEXT("WorldDirector nav: %s <-> %s doorway %.0f cm at %s (wall hits %d/%d)"),
+				UE_LOG(LogDC, Verbose, TEXT("WorldDirector nav: %s <-> %s doorway %.0f cm at %s (wall hits %d/%d)"),
 					DC::RoomName(RA->RoomType), DC::RoomName(RB->RoomType), BestLen * Step, *P.ToCompactString(), Hits, Samples);
 			}
 		}
 	}
+
+	// Ways out: the collapsed -X / -Y sides of each built room, wherever no other wing stands against them.
+	const FBox2D Walk = DCSite::OutdoorWalkRect();
+	for (int32 i = 0; i < Rooms.Num(); ++i)
+	{
+		const ADCRoomModule* R = Rooms[i].Get();
+		if (!IsWalkable(R)) { continue; }
+		const FBox B = R->GetWorldBounds();
+		for (int32 Fix = 0; Fix < 2; ++Fix) // 0: the -X side (runs along Y), 1: the -Y side (runs along X)
+		{
+			const int32 Run = 1 - Fix;
+			const float Line = B.Min[Fix];
+			TArray<FVector2D> Blocked;
+			for (int32 j = 0; j < Rooms.Num(); ++j)
+			{
+				const ADCRoomModule* O = Rooms[j].Get();
+				if (j == i || !IsSolidOutdoors(O)) { continue; }
+				const FBox OB = O->GetWorldBounds();
+				if (FMath::Abs(OB.Max[Fix] - Line) > 6.f) { continue; }
+				const float Lo = FMath::Max(OB.Min[Run], B.Min[Run]), Hi = FMath::Min(OB.Max[Run], B.Max[Run]);
+				if (Hi > Lo) { Blocked.Add(FVector2D(Lo, Hi)); }
+			}
+			Blocked.Sort([](const FVector2D& A, const FVector2D& C) { return A.X < C.X; });
+			TArray<FVector2D> Free;
+			float Cur = B.Min[Run];
+			for (const FVector2D& Bl : Blocked) { if (Bl.X > Cur) { Free.Add(FVector2D(Cur, Bl.X)); } Cur = FMath::Max(Cur, Bl.Y); }
+			if (B.Max[Run] > Cur) { Free.Add(FVector2D(Cur, B.Max[Run])); }
+			for (const FVector2D& F : Free)
+			{
+				const float Lo = F.X + 90.f, Hi = F.Y - 90.f;
+				if (Hi - Lo < 0.f) { continue; }
+				const int32 Count = (Hi - Lo) > 600.f ? 3 : 1;
+				for (int32 k = 0; k < Count; ++k)
+				{
+					const float T = Count == 1 ? (Lo + Hi) * 0.5f : FMath::Lerp(Lo, Hi, (k + 0.5f) / Count);
+					FExit E;
+					E.Room = i;
+					E.In = FVector::ZeroVector; E.In[Fix] = Line + 70.f; E.In[Run] = T;
+					E.Out = FVector::ZeroVector; E.Out[Fix] = Line - 85.f; E.Out[Run] = T;
+					E.In.Z = E.Out.Z = R->GetActorLocation().Z;
+					if (!Walk.IsInside(FVector2D(E.Out.X, E.Out.Y))) { continue; }
+					Exits.Add(E);
+				}
+			}
+		}
+	}
+	UE_LOG(LogDC, Log, TEXT("WorldDirector nav: %d doorways, %d ways out"), Portals.Num(), Exits.Num());
 }
 
-void ADCWorldDirector::PlanPath(const FVector& From, const FVector& To, TArray<FVector>& Out)
+void ADCWorldDirector::RoomDistances(int32 S, TArray<float>& Dist, TArray<int32>& Prev, TArray<int32>& Via) const
 {
-	if (!bNavBuilt) { BuildNav(); }
-	const int32 S = RoomIndexAt(From), G = RoomIndexAt(To);
-	if (S == INDEX_NONE || G == INDEX_NONE || S == G) { Out.Add(To); return; }
 	const int32 N = Rooms.Num();
-	TArray<float> Dist; Dist.Init(1e9f, N);
-	TArray<int32> Prev; Prev.Init(INDEX_NONE, N);
-	TArray<int32> Via; Via.Init(INDEX_NONE, N);
+	Dist.Init(1e9f, N); Prev.Init(INDEX_NONE, N); Via.Init(INDEX_NONE, N);
+	if (!Dist.IsValidIndex(S)) { return; }
 	TArray<bool> Done; Done.Init(false, N);
 	Dist[S] = 0.f;
 	for (int32 Iter = 0; Iter < N; ++Iter)
 	{
 		int32 U = INDEX_NONE;
 		for (int32 k = 0; k < N; ++k) { if (!Done[k] && Dist[k] < 1e8f && (U == INDEX_NONE || Dist[k] < Dist[U])) { U = k; } }
-		if (U == INDEX_NONE || U == G) { break; }
+		if (U == INDEX_NONE) { break; }
 		Done[U] = true;
 		for (int32 pi = 0; pi < Portals.Num(); ++pi)
 		{
 			const FPortal& Pt = Portals[pi];
 			if (Pt.A != U && Pt.B != U) { continue; }
 			const int32 V = Pt.A == U ? Pt.B : Pt.A;
-			// Locked rooms are a last resort (walking past dust sheets beats walking through walls).
-			const float Cost = (V == G || IsRoomUsable(Rooms[V].Get())) ? 1.f : 6.f;
+			const float Cost = 600.f;
 			if (Dist[U] + Cost < Dist[V]) { Dist[V] = Dist[U] + Cost; Prev[V] = U; Via[V] = pi; }
 		}
 	}
-	if (Prev[G] == INDEX_NONE) { Out.Add(To); return; } // disconnected: best effort
+}
+
+bool ADCWorldDirector::PlanRooms(int32 S, int32 G, const FVector& To, TArray<FVector>& Out) const
+{
+	if (S == G) { Out.Add(To); return true; }
+	TArray<float> Dist; TArray<int32> Prev, Via;
+	RoomDistances(S, Dist, Prev, Via);
+	if (!Prev.IsValidIndex(G) || Prev[G] == INDEX_NONE) { return false; }
 	TArray<int32> Chain;
 	for (int32 V = G; V != S; V = Prev[V]) { Chain.Insert(V, 0); }
 	int32 Cur = S;
@@ -246,6 +349,158 @@ void ADCWorldDirector::PlanPath(const FVector& From, const FVector& To, TArray<F
 		Cur = V;
 	}
 	Out.Add(To);
+	return true;
+}
+
+namespace
+{
+	/** True if segment A-B passes through the open box. */
+	bool SegmentHitsBox(const FVector2D& A, const FVector2D& B, const FBox2D& Box)
+	{
+		float T0 = 0.f, T1 = 1.f;
+		const FVector2D D = B - A;
+		for (int32 Ax = 0; Ax < 2; ++Ax)
+		{
+			const float Mn = Box.Min[Ax], Mx = Box.Max[Ax], P = A[Ax], Dd = D[Ax];
+			if (FMath::Abs(Dd) < 1e-4f) { if (P <= Mn || P >= Mx) { return false; } continue; }
+			float Ta = (Mn - P) / Dd, Tb = (Mx - P) / Dd;
+			if (Ta > Tb) { Swap(Ta, Tb); }
+			T0 = FMath::Max(T0, Ta); T1 = FMath::Min(T1, Tb);
+			if (T0 >= T1) { return false; }
+		}
+		return true;
+	}
+	bool StrictlyInside(const FBox2D& B, const FVector2D& P) { return P.X > B.Min.X && P.X < B.Max.X && P.Y > B.Min.Y && P.Y < B.Max.Y; }
+}
+
+void ADCWorldDirector::PlanOutdoor(const FVector& From, const FVector& To, TArray<FVector>& Out) const
+{
+	// Obstacles: standing wings (generous margin) and parked cars (tight, so crews can step between them).
+	TArray<FBox2D> Obs;
+	for (const TWeakObjectPtr<ADCRoomModule>& RW : Rooms)
+	{
+		const ADCRoomModule* R = RW.Get();
+		if (!IsSolidOutdoors(R)) { continue; }
+		const FBox B = R->GetWorldBounds();
+		Obs.Add(FBox2D(FVector2D(B.Min.X, B.Min.Y), FVector2D(B.Max.X, B.Max.Y)).ExpandBy(55.f));
+	}
+	for (const FCarSlot& S : Slots)
+	{
+		const ADCVehicle* C = S.Car.Get();
+		if (C && C->IsParked()) { Obs.Add(C->GetFootprint().ExpandBy(12.f)); }
+	}
+	const FVector2D A2(From.X, From.Y), B2(To.X, To.Y);
+	// Obstacles we start/end inside (stepping out of a doorway) don't block.
+	TArray<bool> Ignore; Ignore.Init(false, Obs.Num());
+	for (int32 i = 0; i < Obs.Num(); ++i) { Ignore[i] = StrictlyInside(Obs[i].ExpandBy(-4.f), A2) || StrictlyInside(Obs[i].ExpandBy(-4.f), B2); }
+	auto Clear = [&](const FVector2D& P, const FVector2D& Q)
+	{
+		for (int32 i = 0; i < Obs.Num(); ++i) { if (!Ignore[i] && SegmentHitsBox(P, Q, Obs[i].ExpandBy(-4.f))) { return false; } }
+		return true;
+	};
+	if (Clear(A2, B2)) { Out.Add(To); return; }
+
+	TArray<FVector2D> Nodes;
+	Nodes.Add(A2); Nodes.Add(B2);
+	const FBox2D Walk = DCSite::OutdoorWalkRect().ExpandBy(40.f);
+	for (const FBox2D& O : Obs)
+	{
+		for (int32 c = 0; c < 4; ++c)
+		{
+			const FVector2D P((c & 1) ? O.Max.X + 2.f : O.Min.X - 2.f, (c & 2) ? O.Max.Y + 2.f : O.Min.Y - 2.f);
+			if (!Walk.IsInside(P)) { continue; }
+			bool bInside = false;
+			for (const FBox2D& O2 : Obs) { if (StrictlyInside(O2, P)) { bInside = true; break; } }
+			if (!bInside) { Nodes.Add(P); }
+		}
+	}
+	const int32 N = Nodes.Num();
+	TArray<float> Dist; Dist.Init(1e12f, N);
+	TArray<int32> Prev; Prev.Init(INDEX_NONE, N);
+	TArray<bool> Done; Done.Init(false, N);
+	Dist[0] = 0.f;
+	for (int32 Iter = 0; Iter < N; ++Iter)
+	{
+		int32 U = INDEX_NONE;
+		for (int32 k = 0; k < N; ++k) { if (!Done[k] && Dist[k] < 1e11f && (U == INDEX_NONE || Dist[k] < Dist[U])) { U = k; } }
+		if (U == INDEX_NONE || U == 1) { break; }
+		Done[U] = true;
+		for (int32 V = 0; V < N; ++V)
+		{
+			if (Done[V] || V == U) { continue; }
+			const float D = Dist[U] + FVector2D::Distance(Nodes[U], Nodes[V]);
+			if (D >= Dist[V] || !Clear(Nodes[U], Nodes[V])) { continue; }
+			Dist[V] = D; Prev[V] = U;
+		}
+	}
+	if (Prev[1] == INDEX_NONE) { Out.Add(To); return; } // boxed in: best effort
+	TArray<FVector> Chain;
+	for (int32 V = Prev[1]; V != 0 && V != INDEX_NONE; V = Prev[V]) { Chain.Insert(FVector(Nodes[V].X, Nodes[V].Y, To.Z), 0); }
+	Out.Append(Chain);
+	Out.Add(To);
+}
+
+void ADCWorldDirector::PlanPath(const FVector& From, const FVector& To, TArray<FVector>& Out)
+{
+	EnsureNav();
+	const int32 S = NavRoomAt(From), G = NavRoomAt(To);
+	if (S != INDEX_NONE && S == G) { Out.Add(To); return; }
+	if (S != INDEX_NONE && G != INDEX_NONE && PlanRooms(S, G, To, Out)) { return; }
+	if (S == INDEX_NONE && G == INDEX_NONE) { PlanOutdoor(From, To, Out); return; }
+	if (Exits.Num() == 0) { Out.Add(To); return; } // no way out known: best effort
+
+	// Via the outside: leave through the best open side, walk around, come in through the best open side.
+	TArray<float> DistS, DistG; TArray<int32> Tmp1, Tmp2;
+	if (S != INDEX_NONE) { RoomDistances(S, DistS, Tmp1, Tmp2); }
+	if (G != INDEX_NONE) { RoomDistances(G, DistG, Tmp1, Tmp2); }
+	int32 ExA = INDEX_NONE, ExB = INDEX_NONE;
+	if (S != INDEX_NONE)
+	{
+		float Best = 1e12f;
+		for (int32 e = 0; e < Exits.Num(); ++e)
+		{
+			const float C = DistS[Exits[e].Room] + FVector::Dist2D(From, Exits[e].In) * (Exits[e].Room == S ? 1.f : 0.f) + FVector::Dist2D(Exits[e].Out, To);
+			if (DistS[Exits[e].Room] < 1e8f && C < Best) { Best = C; ExA = e; }
+		}
+	}
+	const FVector Mid = ExA != INDEX_NONE ? Exits[ExA].Out : From;
+	if (G != INDEX_NONE)
+	{
+		float Best = 1e12f;
+		for (int32 e = 0; e < Exits.Num(); ++e)
+		{
+			const float C = DistG[Exits[e].Room] + FVector::Dist2D(Mid, Exits[e].Out) + FVector::Dist2D(Exits[e].In, To) * (Exits[e].Room == G ? 1.f : 0.f);
+			if (DistG[Exits[e].Room] < 1e8f && C < Best) { Best = C; ExB = e; }
+		}
+	}
+	if ((S != INDEX_NONE && ExA == INDEX_NONE) || (G != INDEX_NONE && ExB == INDEX_NONE)) { Out.Add(To); return; }
+	if (ExA != INDEX_NONE)
+	{
+		PlanRooms(S, Exits[ExA].Room, Exits[ExA].In, Out);
+		Out.Add(Exits[ExA].Out);
+	}
+	if (ExB != INDEX_NONE)
+	{
+		PlanOutdoor(Mid, Exits[ExB].Out, Out);
+		Out.Add(Exits[ExB].In);
+		PlanRooms(Exits[ExB].Room, G, To, Out);
+	}
+	else { PlanOutdoor(Mid, To, Out); }
+}
+
+FVector ADCWorldDirector::DriveMouth()
+{
+	return FVector(DCSite::DriveX, DCSite::YardRect().Min.Y + 20.f, 0.f);
+}
+
+void ADCWorldDirector::LaneWalkPoints(TArray<FVector>& Out, bool bLeaving) const
+{
+	// From the bottom of the driveway along the house-side verge of the lane, towards +X (where cars go too).
+	const float VergeY = DCSite::LaneY + DCSite::LaneW * 0.5f + 40.f;
+	const FVector Bottom(DCSite::DriveX + 60.f, VergeY, 0.f);
+	const FVector Far(DCSite::DriveX + 1300.f, VergeY, 0.f);
+	if (bLeaving) { Out.Add(Bottom); Out.Add(Far); }
+	else { Out.Add(Far); Out.Add(Bottom); }
 }
 
 // ─── Idle life ───────────────────────────────────────────────────────────────
@@ -516,30 +771,61 @@ void ADCWorldDirector::OnRunStateChanged()
 	if (const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this)) { LastRunTime = Run->GetRunTime(); }
 	SyncRooms();
 	SyncPawns();
+	SyncCars(false); // a Garage/Office upgrade or perk raised the mission cap: a new car drives in
 }
 
 void ADCWorldDirector::OnMissionStarted(const FDCMission& Mission)
 {
-	ADCGarageDoor* Door = GetMissionDoor();
-	float Delay = 0.2f;
-	for (int32 Id : Mission.CrewIds)
+	if (SlotOfMission(Mission.Id) != INDEX_NONE || Walkers.Contains(Mission.Id)) { return; }
+	int32 Free = INDEX_NONE;
+	for (int32 i = 0; i < Slots.Num(); ++i)
 	{
-		if (ADCCriminalPawn* P = FindPawn(Id)) { P->Depart(Door, Delay, false); Delay += 0.7f; }
+		const ADCVehicle* C = Slots[i].Car.Get();
+		if (Slots[i].Phase == ECarPhase::Parked && C && C->IsParked()) { Free = i; break; }
 	}
+	if (Free == INDEX_NONE)
+	{
+		// More jobs than cars: this crew sets off on foot down the driveway.
+		Walkers.Add(Mission.Id, Mission.CrewIds);
+		float Delay = 0.2f;
+		for (int32 Id : Mission.CrewIds)
+		{
+			ADCCriminalPawn* P = FindPawn(Id);
+			if (P && !P->IsAway()) { WalkOffDownLane(P, Delay, false); Delay += 0.6f; }
+		}
+		UE_LOG(LogDC, Log, TEXT("WorldDirector: mission %d has no free car, crew walk"), Mission.Id);
+		return;
+	}
+	FCarSlot& S = Slots[Free];
+	S.MissionId = Mission.Id;
+	S.Crew = Mission.CrewIds;
+	SetPhase(S, ECarPhase::Boarding);
+	float Delay = 0.15f;
+	for (int32 Seat = 0; Seat < S.Crew.Num(); ++Seat)
+	{
+		ADCCriminalPawn* P = FindPawn(S.Crew[Seat]);
+		if (!P || P->IsAway()) { continue; }
+		TArray<FVector> Route;
+		PlanPath(P->GetFeet(), DCSite::BoardingPoint(Free, Seat), Route);
+		P->WalkOutAlong(Route, Delay, false);
+		Delay += 0.45f;
+	}
+	UE_LOG(LogDC, Log, TEXT("WorldDirector: mission %d -> car %d, crew %d boarding"), Mission.Id, Free, S.Crew.Num());
 }
 
 void ADCWorldDirector::OnMissionCompleted(const FDCMissionReport& Report)
 {
-	ADCGarageDoor* Door = GetMissionDoor();
-	float Delay = 0.5f;
+	// Cars bring the survivors home (TickCars); the arrested never come back.
 	for (const FDCCrewMemberResult& M : Report.Members)
 	{
-		ADCCriminalPawn* P = FindPawn(M.CriminalId);
-		if (!P) { continue; }
-		if (M.bArrested) { P->MarkLeaveForever(); continue; } // never comes back (SyncPawns removes it)
-		P->ReturnHome(Door, Delay);
-		Delay += 0.8f;
+		if (!M.bArrested) { continue; }
+		if (ADCCriminalPawn* P = FindPawn(M.CriminalId))
+		{
+			if (P->IsWalkingOut()) { P->CancelWalkOut(); } // caught before the car even left: SyncPawns walks them off
+			else { P->MarkLeaveForever(); }
+		}
 	}
+	TickWalkers();
 }
 
 void ADCWorldDirector::OnRoomChanged(const FDCRoom& Room)
@@ -572,7 +858,7 @@ void ADCWorldDirector::OnCriminalHired(const FDCCriminal& C)
 	if (ADCCriminalPawn* Existing = FindPawn(C.Id))
 	{
 		Existing->SetAway();
-		Existing->ReturnHome(GetStreetDoor(), 0.4f);
+		WalkInFromLane(Existing, 0.4f);
 		return;
 	}
 	if (Pawns.Num() < MaxPawns) { SpawnPawn(C, true); }
@@ -590,6 +876,320 @@ void ADCWorldDirector::OnPanelChanged(EDCPanel Panel)
 	}
 }
 
+// ─── Cars & mission choreography ─────────────────────────────────────────────
+
+ADCVehicle* ADCWorldDirector::GetCar(int32 Slot) const
+{
+	return Slots.IsValidIndex(Slot) ? Slots[Slot].Car.Get() : nullptr;
+}
+
+ADCVehicle* ADCWorldDirector::SpawnCar(int32 Slot)
+{
+	UWorld* W = GetWorld();
+	if (!W) { return nullptr; }
+	FActorSpawnParameters SP;
+	SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ADCVehicle* Car = W->SpawnActor<ADCVehicle>(ADCVehicle::StaticClass(), DCSite::ParkingSlot(Slot), SP);
+	if (!Car) { return nullptr; }
+	const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
+	Car->Setup(Slot + (Run ? (Run->GetSeed() & 3) : 0));
+	return Car;
+}
+
+void ADCWorldDirector::ClearCars()
+{
+	for (FCarSlot& S : Slots) { if (ADCVehicle* C = S.Car.Get()) { C->Destroy(); } }
+	Slots.Reset();
+	Walkers.Reset();
+}
+
+void ADCWorldDirector::SetPhase(FCarSlot& S, ECarPhase Phase)
+{
+	S.Phase = Phase;
+	S.PhaseTime = 0.f;
+	S.Timer = 0.f;
+}
+
+void ADCWorldDirector::SyncCars(bool bInstant)
+{
+	const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
+	if (!Run || !Run->HasActiveRun()) { return; }
+	const int32 Want = FMath::Clamp(Run->GetMaxActiveMissions(), 1, DCSite::MaxParkingSlots);
+	while (Slots.Num() < Want)
+	{
+		const int32 I = Slots.Num();
+		FCarSlot& S = Slots.AddDefaulted_GetRef();
+		S.Car = SpawnCar(I);
+		if (ADCVehicle* C = S.Car.Get())
+		{
+			if (bInstant) { C->ParkAt(DCSite::ParkingSlot(I)); SetPhase(S, ECarPhase::Parked); }
+			else
+			{
+				C->DriveIn(I);
+				SetPhase(S, ECarPhase::Arriving);
+				UE_LOG(LogDC, Log, TEXT("WorldDirector: new car for slot %d drives in"), I);
+			}
+		}
+	}
+	// Fewer slots (shouldn't happen): retire trailing idle cars.
+	while (Slots.Num() > Want && Slots.Last().Phase == ECarPhase::Parked)
+	{
+		if (ADCVehicle* C = Slots.Last().Car.Get()) { C->Destroy(); }
+		Slots.Pop();
+	}
+}
+
+int32 ADCWorldDirector::SlotOfMission(int32 MissionId) const
+{
+	for (int32 i = 0; i < Slots.Num(); ++i) { if (Slots[i].MissionId == MissionId && Slots[i].Phase != ECarPhase::Parked) { return i; } }
+	return INDEX_NONE;
+}
+
+bool ADCWorldDirector::IsPawnTracked(int32 CriminalId) const
+{
+	for (const FCarSlot& S : Slots)
+	{
+		if (S.Phase == ECarPhase::Parked || S.Phase == ECarPhase::Arriving) { continue; }
+		if (S.Phase == ECarPhase::Unloading)
+		{
+			const int32 Idx = S.Riders.IndexOfByKey(CriminalId);
+			if (Idx != INDEX_NONE && Idx >= S.NextRider) { return true; }
+			continue;
+		}
+		if (S.Crew.Contains(CriminalId)) { return true; }
+	}
+	for (const TPair<int32, TArray<int32>>& W : Walkers) { if (W.Value.Contains(CriminalId)) { return true; } }
+	return false;
+}
+
+void ADCWorldDirector::AssignRunningMissionsInstant()
+{
+	// Loaded save / new world with missions already out: their cars are away, their crews with them.
+	const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
+	if (!Run) { return; }
+	TArray<const FDCMission*> Running;
+	for (const FDCMission& M : Run->GetMissions()) { if (M.bInProgress) { Running.Add(&M); } }
+	Running.Sort([](const FDCMission& A, const FDCMission& B) { return A.Id < B.Id; });
+	for (const FDCMission* M : Running)
+	{
+		int32 Free = INDEX_NONE;
+		for (int32 i = 0; i < Slots.Num(); ++i) { if (Slots[i].Phase == ECarPhase::Parked && Slots[i].Car.IsValid()) { Free = i; break; } }
+		for (int32 Id : M->CrewIds) { if (ADCCriminalPawn* P = FindPawn(Id)) { P->SetAway(); } }
+		if (Free == INDEX_NONE) { Walkers.Add(M->Id, M->CrewIds); continue; }
+		FCarSlot& S = Slots[Free];
+		S.MissionId = M->Id;
+		S.Crew = M->CrewIds;
+		SetPhase(S, ECarPhase::Away);
+		S.Car->SetGone();
+	}
+}
+
+void ADCWorldDirector::WalkInFromLane(ADCCriminalPawn* P, float Delay)
+{
+	if (!P) { return; }
+	TArray<FVector> Lane; LaneWalkPoints(Lane, false);
+	TArray<FVector> Route;
+	for (int32 i = 1; i < Lane.Num(); ++i) { Route.Add(Lane[i]); }
+	Route.Add(DriveMouth());
+	PlanPath(DriveMouth(), PickSpawnPoint(P), Route);
+	P->WalkInAlong(Lane[0], Route, Delay);
+}
+
+void ADCWorldDirector::WalkOffDownLane(ADCCriminalPawn* P, float Delay, bool bForever)
+{
+	if (!P) { return; }
+	TArray<FVector> Route;
+	PlanPath(P->GetFeet(), DriveMouth(), Route);
+	LaneWalkPoints(Route, true);
+	P->WalkOutAlong(Route, Delay, bForever);
+}
+
+void ADCWorldDirector::TickWalkers()
+{
+	const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
+	if (!Run) { return; }
+	for (auto It = Walkers.CreateIterator(); It; ++It)
+	{
+		const FDCMission* M = Run->FindMission(It->Key);
+		if (M && M->bInProgress) { continue; }
+		float Delay = 0.3f;
+		for (int32 Id : It->Value)
+		{
+			ADCCriminalPawn* P = FindPawn(Id);
+			const FDCCriminal* C = Run->FindCriminal(Id);
+			if (!P || !C || P->IsLeavingForever()) { continue; }
+			if (P->IsWalkingOut()) { P->CancelWalkOut(); continue; }
+			if (P->IsAway()) { WalkInFromLane(P, Delay); Delay += 0.9f; }
+		}
+		It.RemoveCurrent();
+	}
+}
+
+void ADCWorldDirector::TickCars(float Dt)
+{
+	const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
+	if (!Run || !Run->HasActiveRun()) { return; }
+	for (int32 SI = 0; SI < Slots.Num(); ++SI)
+	{
+		FCarSlot& S = Slots[SI];
+		ADCVehicle* Car = S.Car.Get();
+		S.PhaseTime += Dt;
+		if (!Car)
+		{
+			// Lost the car somehow: respawn it parked.
+			S.Car = SpawnCar(SI);
+			Car = S.Car.Get();
+			if (!Car) { continue; }
+			Car->ParkAt(DCSite::ParkingSlot(SI));
+		}
+		const FDCMission* M = S.MissionId != INDEX_NONE ? Run->FindMission(S.MissionId) : nullptr;
+		const bool bRunning = M && M->bInProgress;
+		switch (S.Phase)
+		{
+		case ECarPhase::Arriving:
+			if (Car->IsParked()) { SetPhase(S, ECarPhase::Parked); }
+			break;
+
+		case ECarPhase::Boarding:
+		{
+			if (!bRunning)
+			{
+				// Done (or cancelled) before the car left: everyone back inside, car stays.
+				float Delay = 0.2f;
+				for (int32 Seat = 0; Seat < S.Crew.Num(); ++Seat)
+				{
+					ADCCriminalPawn* P = FindPawn(S.Crew[Seat]);
+					if (!P || P->IsLeavingForever() || !Run->FindCriminal(S.Crew[Seat])) { continue; }
+					if (P->IsWalkingOut()) { P->CancelWalkOut(); }
+					else if (P->IsAway())
+					{
+						const FVector BP = DCSite::BoardingPoint(SI, Seat);
+						TArray<FVector> Route; PlanPath(BP, PickSpawnPoint(P), Route);
+						P->WalkInAlong(BP, Route, Delay);
+						Delay += 0.5f;
+					}
+				}
+				Car->SetDoorsOpen(false);
+				S.MissionId = INDEX_NONE;
+				S.Crew.Reset();
+				SetPhase(S, ECarPhase::Parked);
+				UE_LOG(LogDC, Log, TEXT("WorldDirector: slot %d mission ended before departure, crew turn back"), SI);
+				break;
+			}
+			int32 Aboard = 0;
+			bool bDoor[2] = { false, false };
+			for (int32 Seat = 0; Seat < S.Crew.Num(); ++Seat)
+			{
+				ADCCriminalPawn* P = FindPawn(S.Crew[Seat]);
+				if (!P || P->IsAway() || P->WantsDestroy()) { ++Aboard; continue; }
+				if (!P->IsWalkingOut()) { continue; }
+				if (FVector::Dist2D(P->GetFeet(), DCSite::BoardingPoint(SI, Seat)) < 230.f) { bDoor[Seat % 2] = true; }
+			}
+			// Seat side -1 (world -X) is the car's left: the car faces -Y.
+			if (bDoor[0]) { Car->SetDoorsOpen(true, -1); }
+			if (bDoor[1]) { Car->SetDoorsOpen(true, 1); }
+			const bool bAll = Aboard >= S.Crew.Num();
+			if (bAll || S.PhaseTime > 45.f)
+			{
+				if (!bAll) { for (int32 Id : S.Crew) { if (ADCCriminalPawn* P = FindPawn(Id)) { P->SetAway(); } } }
+				S.Timer += Dt;
+				if (S.Timer > 0.35f) { Car->SetDoorsOpen(false); }
+				if (S.Timer > 1.0f)
+				{
+					Car->DriveAway(SI);
+					SetPhase(S, ECarPhase::Departing);
+					UE_LOG(LogDC, Log, TEXT("WorldDirector: slot %d drives off (mission %d)"), SI, S.MissionId);
+				}
+			}
+			break;
+		}
+
+		case ECarPhase::Departing:
+			if (Car->IsGone()) { SetPhase(S, ECarPhase::Away); }
+			break;
+
+		case ECarPhase::Away:
+		{
+			// Leave so the car parks about when the job finishes.
+			const double RealLeft = bRunning ? Run->GetMissionTimeRemaining(S.MissionId) / FMath::Max(0.01f, Run->GetTimeScale()) : 0.0;
+			if (!bRunning || RealLeft <= ADCVehicle::EstimateDriveInSeconds())
+			{
+				Car->DriveIn(SI);
+				SetPhase(S, ECarPhase::Returning);
+				UE_LOG(LogDC, Log, TEXT("WorldDirector: slot %d heading home (mission %d, %.1fs left)"), SI, S.MissionId, RealLeft);
+			}
+			break;
+		}
+
+		case ECarPhase::Returning:
+			if (Car->IsParked() && !bRunning)
+			{
+				S.Riders.Reset();
+				for (int32 Id : S.Crew)
+				{
+					const FDCCriminal* C = Run->FindCriminal(Id);
+					ADCCriminalPawn* P = FindPawn(Id);
+					if (C && P && !P->IsLeavingForever() && P->IsAway()) { S.Riders.Add(Id); }
+				}
+				S.NextRider = 0;
+				SetPhase(S, ECarPhase::Unloading);
+				S.Timer = 0.45f;
+			}
+			break;
+
+		case ECarPhase::Unloading:
+		{
+			S.Timer -= Dt;
+			if (S.NextRider < S.Riders.Num())
+			{
+				if (S.Timer <= 0.f)
+				{
+					const int32 Id = S.Riders[S.NextRider];
+					const int32 Seat = FMath::Max(0, S.Crew.IndexOfByKey(Id));
+					Car->SetDoorsOpen(true, Seat % 2 == 0 ? -1 : 1);
+					if (ADCCriminalPawn* P = FindPawn(Id))
+					{
+						const FVector BP = DCSite::BoardingPoint(SI, Seat);
+						TArray<FVector> Route; PlanPath(BP, PickSpawnPoint(P), Route);
+						P->WalkInAlong(BP, Route, 0.25f);
+					}
+					++S.NextRider;
+					S.Timer = 0.6f;
+				}
+			}
+			else if (S.Timer <= -0.6f)
+			{
+				Car->SetDoorsOpen(false);
+				S.MissionId = INDEX_NONE;
+				S.Crew.Reset();
+				S.Riders.Reset();
+				SetPhase(S, ECarPhase::Parked);
+			}
+			break;
+		}
+
+		case ECarPhase::Parked:
+		default:
+			break;
+		}
+	}
+	// Retire extra idle slots if the cap ever shrinks.
+	SyncCars(false);
+}
+
+void ADCWorldDirector::LogSlots(const TCHAR* Tag) const
+{
+	static const TCHAR* Names[] = { TEXT("Parked"), TEXT("Boarding"), TEXT("Departing"), TEXT("Away"), TEXT("Returning"), TEXT("Unloading"), TEXT("Arriving") };
+	for (int32 i = 0; i < Slots.Num(); ++i)
+	{
+		const FCarSlot& S = Slots[i];
+		const ADCVehicle* C = S.Car.Get();
+		UE_LOG(LogDC, Display, TEXT("[WorldTest] %s slot %d %s mission %d crew %d car %s %s"), Tag, i, Names[(int32)S.Phase], S.MissionId, S.Crew.Num(),
+			C ? (C->IsParked() ? TEXT("parked") : C->IsGone() ? TEXT("gone") : TEXT("driving")) : TEXT("none"), C ? *C->GetActorLocation().ToCompactString() : TEXT(""));
+	}
+	for (const TPair<int32, TArray<int32>>& W : Walkers) { UE_LOG(LogDC, Display, TEXT("[WorldTest] %s on foot: mission %d crew %d"), Tag, W.Key, W.Value.Num()); }
+}
+
 // ─── Sync ────────────────────────────────────────────────────────────────────
 
 void ADCWorldDirector::ResetForNewRun()
@@ -605,6 +1205,8 @@ void ADCWorldDirector::ResetForNewRun()
 
 	for (ADCCriminalPawn* P : Pawns) { if (P) { P->Destroy(); } }
 	Pawns.Reset();
+	ClearCars();
+	bNavBuilt = false;
 	RevealQueue.Reset();
 	RevealingRoom = nullptr;
 	SeenMissionIds.Reset();
@@ -618,6 +1220,8 @@ void ADCWorldDirector::ResetForNewRun()
 		if (Pawns.Num() >= MaxPawns) { break; }
 		SpawnPawn(C, false);
 	}
+	SyncCars(true);
+	AssignRunningMissionsInstant();
 	UE_LOG(LogDC, Log, TEXT("WorldDirector: run synced (seed %d, t=%.0f, %02.0fh), %d pawns"), LastSeed, LastRunTime, Run->GetHourOfDay(), Pawns.Num());
 }
 
@@ -649,7 +1253,7 @@ ADCCriminalPawn* ADCWorldDirector::SpawnPawn(const FDCCriminal& C, bool bWalkIn)
 	if (bWalkIn)
 	{
 		P->SetAway();
-		P->ReturnHome(GetStreetDoor(), 0.4f);
+		WalkInFromLane(P, 0.4f); // new recruit: walks up the driveway
 	}
 	else if (C.Status == EDCCriminalStatus::OnMission)
 	{
@@ -669,7 +1273,7 @@ void ADCWorldDirector::SyncPawns()
 	if (!Run || !Run->HasActiveRun()) { return; }
 	const TArray<FDCCriminal>& Roster = Run->GetRoster();
 
-	// Gone from the roster: dismissed (walks out of the street door) or arrested (never comes back).
+	// Gone from the roster: dismissed (walks off down the driveway) or arrested (never comes back).
 	for (int32 i = Pawns.Num() - 1; i >= 0; --i)
 	{
 		ADCCriminalPawn* P = Pawns[i];
@@ -678,7 +1282,7 @@ void ADCWorldDirector::SyncPawns()
 		if (bInRoster) { continue; }
 		if (P->IsAway()) { P->Destroy(); Pawns.RemoveAt(i); continue; }
 		if (P->GetMode() == EDCPawnMode::WalkOut) { P->MarkLeaveForever(); continue; }
-		if (!P->IsLeavingForever()) { P->Depart(GetStreetDoor(), 0.f, true); }
+		if (!P->IsLeavingForever()) { WalkOffDownLane(P, 0.f, true); }
 	}
 
 	for (const FDCCriminal& C : Roster)
@@ -690,10 +1294,21 @@ void ADCWorldDirector::SyncPawns()
 			continue;
 		}
 		P->UpdateFromCriminal(C);
+		if (IsPawnTracked(C.Id)) { continue; } // a car / walk-off owns this one
 		// Self-heal against missed events: on a job but still idling -> leave; back but still away -> come home.
 		const bool bOnJob = C.Status == EDCCriminalStatus::OnMission;
-		if (bOnJob && P->GetMode() == EDCPawnMode::Wander) { P->Depart(GetMissionDoor(), 0.2f, false); }
-		else if (!bOnJob && P->IsAway() && !P->IsLeavingForever()) { P->ReturnHome(GetMissionDoor(), 0.5f); }
+		if (bOnJob && P->GetMode() == EDCPawnMode::Wander)
+		{
+			const FDCMission* Job = nullptr;
+			for (const FDCMission& M : Run->GetMissions()) { if (M.bInProgress && M.CrewIds.Contains(C.Id)) { Job = &M; break; } }
+			if (Job && SlotOfMission(Job->Id) == INDEX_NONE && !Walkers.Contains(Job->Id)) { OnMissionStarted(*Job); }
+			if (!IsPawnTracked(C.Id) || P->GetMode() == EDCPawnMode::Wander)
+			{
+				if (Job) { Walkers.FindOrAdd(Job->Id).AddUnique(C.Id); }
+				WalkOffDownLane(P, 0.2f, false);
+			}
+		}
+		else if (!bOnJob && P->IsAway() && !P->IsLeavingForever()) { WalkInFromLane(P, 0.5f); }
 	}
 }
 
@@ -752,14 +1367,22 @@ void ADCWorldDirector::UpdateBounds()
 	FBox B(ForceInit);
 	for (const TWeakObjectPtr<ADCRoomModule>& R : Rooms)
 	{
-		if (R.IsValid() && (R->GetState() != EDCRoomState::Locked || R->IsRevealPlaying())) { B += R->GetWorldBounds(); }
+		if (R.IsValid() && (R->GetState() != EDCRoomState::Locked || R->IsRevealPlaying() || UDCDevTools::IsBuildAll())) { B += R->GetWorldBounds(); }
 	}
 	if (!B.IsValid)
 	{
 		for (const TWeakObjectPtr<ADCRoomModule>& R : Rooms) { if (R.IsValid()) { B += R->GetWorldBounds(); } }
 	}
 	if (!B.IsValid) { return; }
-	Rig->SetBounds(B);
+	// Frame the house and the yard (so the cars are in shot); pan anywhere over the site.
+	const FBox2D Y = DCSite::YardRect();
+	FBox Frame = B;
+	Frame += FVector(Y.Min.X, Y.Min.Y, 0.f);
+	Frame += FVector(Y.Max.X, Y.Max.Y, 0.f);
+	FBox Pan = DCSite::CameraBounds();
+	Pan += B;
+	Rig->SetFraming(Frame);
+	Rig->SetBounds(Pan);
 	if (!bBoundsInitialized)
 	{
 		bBoundsInitialized = true;
@@ -793,7 +1416,7 @@ void ADCWorldDirector::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	if (Rooms.Num() == 0) { GatherWorld(); if (Rooms.Num()) { UpdateBounds(); } }
-	if (!bNavBuilt && Rooms.Num()) { BuildNav(); }
+	if (Rooms.Num()) { EnsureNav(); }
 
 	// One full reveal at a time.
 	ADCRoomModule* Revealing = RevealingRoom.Get();
@@ -825,6 +1448,7 @@ void ADCWorldDirector::Tick(float DeltaSeconds)
 		if (P->WantsDestroy()) { P->Destroy(); Pawns.RemoveAt(i); continue; }
 	}
 	UpdateDoors(DeltaSeconds);
+	TickCars(DeltaSeconds);
 
 	SlowTick += DeltaSeconds;
 	if (SlowTick >= 0.25f)
@@ -833,6 +1457,7 @@ void ADCWorldDirector::Tick(float DeltaSeconds)
 		UpdateBuildTimers();
 		UpdateStations();
 		UpdateClockLife();
+		TickWalkers();
 	}
 	if (bWorldTest) { TickWorldTest(DeltaSeconds); }
 }
@@ -873,116 +1498,203 @@ void ADCWorldDirector::TickWorldTest(float Dt)
 		Rig->Camera->PostProcessSettings.AutoExposureBias = EV;
 	}
 	if (TestTime < StepAt) { return; }
+	// Perk offers pause the clock: take the first one so scripted time skips keep working.
+	while (Run->HasPendingPerkOffer()) { const TArray<FDCPerk> O = Run->GetPerkOffer(); if (O.Num() == 0) { break; } Run->PickPerk(O[0].Id); }
 	auto Next = [this](double Wait) { StepAt = TestTime + Wait; ++TestStep; };
 	auto Focus = [&](EDCRoomType T, float Zoom) { if (ADCRoomModule* M = FindRoom(T)) { Rig->FocusOn(M->GetFocusPoint(), Zoom); } };
+	auto FocusYard = [&](float Zoom) { const FVector2D C = DCSite::YardRect().GetCenter(); Rig->FocusOn(FVector(C.X, C.Y - 150.f, 0.f), Zoom); };
 	auto SkipTo = [Run](float Hour) { const float DeltaH = FMath::Fmod(Hour - Run->GetHourOfDay() + 24.f, 24.f); Run->AdvanceTime(DeltaH * 60.0 / FMath::Max(0.01f, Run->GetGameMinutesPerSecond())); };
-	auto Build = [this, Run](EDCRoomType T)
+	auto Build = [Run](EDCRoomType T)
 	{
 		const bool bOk = Run->BuildRoom(T);
 		const FDCRoom R = Run->GetRoom(T);
-		UE_LOG(LogDC, Display, TEXT("[WorldTest] BuildRoom %s: %d (state %d level %d, %.0fs, cash $%d)"), DC::RoomName(T), bOk ? 1 : 0, (int32)R.State, R.Level, R.BuildEndsAt - R.BuildStartedAt, Run->GetCash());
+		UE_LOG(LogDC, Display, TEXT("[WorldTest] BuildRoom %s: %d (state %d level %d, %.0fs, cash $%d, max active %d)"), DC::RoomName(T), bOk ? 1 : 0, (int32)R.State, R.Level, R.BuildEndsAt - R.BuildStartedAt, Run->GetCash(), Run->GetMaxActiveMissions());
 		return bOk;
 	};
 	auto FinishBuild = [Run]() { for (const FDCRoom& R : Run->GetRooms()) { if (R.State == EDCRoomState::Building) { Run->AdvanceTime(R.BuildEndsAt - Run->GetRunTime() + 0.05); } } };
-
-	switch (TestStep)
+	auto Shortest = [Run]()
 	{
-	case 0: if (TestTime >= 6.0) { LogPawns(TEXT("start")); TestShot(TEXT("t_start")); Next(1.0); } break;
-	// Build the Bunkroom: scaffolding + timer for the whole build, then the reveal.
-	case 1: Build(EDCRoomType::Lounge); Run->AdvanceTime(12.0); Focus(EDCRoomType::Lounge, 0.45f); Next(2.5); break;
-	case 2: TestShot(TEXT("t_building")); Next(0.5); break;
-	case 3: FinishBuild(); Rig->ResetFocus(); Next(0.9); break;
-	case 4: TestShot(TEXT("t_reveal_a")); Next(1.2); break;
-	case 5: TestShot(TEXT("t_reveal_b")); Next(3.0); break;
-	case 6:
+		double S = 1e9;
+		for (const FDCMission& M : Run->GetMissions()) { if (M.bInProgress) { S = FMath::Min(S, M.EndsAt - Run->GetRunTime()); } }
+		return S;
+	};
+	auto StartAll = [Run, &Shortest](int32 Limit)
+	{
+		int32 Started = 0;
+		for (const FDCMission& M : Run->GetMissions())
 		{
-			TestShot(TEXT("t_after_reveal")); LogPawns(TEXT("after_reveal"));
-			// Hire the cheapest recruit: walks in through the street door.
-			const FDCCriminal* Cheapest = nullptr;
-			for (const FDCCriminal& C : Run->GetRecruits()) { if (!Cheapest || C.HireCost < Cheapest->HireCost) { Cheapest = &C; } }
-			if (Cheapest) { FString E; const int32 Id = Cheapest->Id; const bool bOk = Run->Hire(Id, &E); UE_LOG(LogDC, Display, TEXT("[WorldTest] Hire %d: %d %s (cash $%d)"), Id, bOk ? 1 : 0, *E, Run->GetCash()); }
-			Next(1.5);
+			if (Started >= Limit) { break; }
+			if (M.bInProgress || Run->GetActiveMissionCount() >= Run->GetMaxActiveMissions()) { continue; }
+			if (Run->StartMission(Run->SuggestPlan(M.Id))) { ++Started; }
 		}
-		break;
-	// Garage, so crews use the roller door.
-	case 7: Build(EDCRoomType::Garage); FinishBuild(); Next(5.0); break;
-	// Start every staffable mission: crews walk (staggered) to the garage and leave.
-	case 8:
+		UE_LOG(LogDC, Display, TEXT("[WorldTest] started %d missions (active %d / max %d), shortest %.0fs"), Started, Run->GetActiveMissionCount(), Run->GetMaxActiveMissions(), Shortest());
+		return Started;
+	};
+	auto GiveCash = [Run]()
+	{
+		// Builds need cash + successes: run jobs instantly until the early wings unlock.
+		for (int32 k = 0; k < 40 && Run->GetPhase() == EDCGamePhase::Playing && (Run->GetCash() < 11000 || Run->GetMissionsSucceeded() < 6); ++k)
 		{
-			int32 Started = 0;
-			double Shortest = 1e9;
+			while (Run->HasPendingPerkOffer()) { const TArray<FDCPerk> O = Run->GetPerkOffer(); if (O.Num() == 0) { break; } Run->PickPerk(O[0].Id); }
 			for (const FDCMission& M : Run->GetMissions())
 			{
 				if (M.bInProgress || Run->GetActiveMissionCount() >= Run->GetMaxActiveMissions()) { continue; }
-				if (Run->StartMission(Run->SuggestPlan(M.Id))) { ++Started; }
+				const FDCCrewPlan P = Run->SuggestPlan(M.Id);
+				if (Run->PreviewPlan(P).bValid && Run->PreviewPlan(P).SuccessChance >= 0.6f) { Run->StartMission(P); }
 			}
-			for (const FDCMission& M : Run->GetMissions()) { if (M.bInProgress) { Shortest = FMath::Min(Shortest, M.EndsAt - Run->GetRunTime()); } }
-			UE_LOG(LogDC, Display, TEXT("[WorldTest] started %d missions (active %d), shortest %.0fs"), Started, Run->GetActiveMissionCount(), Shortest);
-			Focus(EDCRoomType::Garage, 0.3f);
-			StepAt = TestTime + 1.2; ++TestStep;
-			// The shortest finishes while its crew is still walking out: the return must queue.
-			if (Shortest < 1e8) { Run->AdvanceTime(Shortest + 0.5); }
-			LogPawns(TEXT("departing"));
+			Run->AdvanceTime(150.0);
+		}
+	};
+
+	switch (TestStep)
+	{
+	case 0:
+		if (TestActors.Num() == 0)
+		{
+			// No landscape yet (pre-merge worktree): lay a plain ground so outdoor shots read.
+			FHitResult Hit;
+			if (!GetWorld()->LineTraceSingleByChannel(Hit, FVector(0, DCSite::YardRect().GetCenter().Y, 500), FVector(0, DCSite::YardRect().GetCenter().Y, -500), ECC_WorldStatic))
+			{
+				FActorSpawnParameters GP; GP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+				if (AStaticMeshActor* G = GetWorld()->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), FTransform(FRotator::ZeroRotator, FVector(0, 0, -3), FVector(400, 400, 1)), GP))
+				{
+					G->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+					G->GetStaticMeshComponent()->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, DCPaths::Plane));
+					if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, DCPaths::MatSurface))
+					{
+						UMaterialInstanceDynamic* D = UMaterialInstanceDynamic::Create(M, G);
+						D->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(0.09f, 0.11f, 0.06f));
+						D->SetScalarParameterValue(TEXT("Roughness"), 0.95f);
+						G->GetStaticMeshComponent()->SetMaterial(0, D);
+					}
+					TestActors.Add(G);
+				}
+			}
+			TestActors.Add(this);
+		}
+		if (TestTime >= 6.0) { LogPawns(TEXT("start")); LogSlots(TEXT("start")); TestShot(TEXT("t_start")); Next(0.5); }
+		break;
+	case 1:
+		GiveCash();
+		while (Run->HasPendingPerkOffer()) { const TArray<FDCPerk> O = Run->GetPerkOffer(); if (O.Num() == 0) { break; } Run->PickPerk(O[0].Id); }
+		SkipTo(9.5f);
+		if (UDCUISubsystem* UI = UDCUISubsystem::Get(this)) { UI->ClosePanel(); }
+		UE_LOG(LogDC, Display, TEXT("[WorldTest] grind: cash $%d, successes %d, roster %d"), Run->GetCash(), Run->GetMissionsSucceeded(), Run->GetRoster().Num());
+		// Showroom: fill the other bays so every body style / paint is in one shot.
+		for (int32 i = Slots.Num(); i < DCSite::MaxParkingSlots; ++i)
+		{
+			if (ADCVehicle* C = SpawnCar(i)) { C->ParkAt(DCSite::ParkingSlot(i)); TestActors.Add(C); if (i == 3) { C->SetDoorsOpen(true); } }
+		}
+		FocusYard(0.45f);
+		Next(2.5);
+		break;
+	case 2: TestShot(TEXT("t_car_lineup")); Rig->FocusOn(DCSite::ParkingSlot(3).GetLocation(), 1.f); Next(2.5); break;
+	// First build of a wing: timber frame + scaffold for the whole build, then the reveal.
+	case 3:
+		TestShot(TEXT("t_car_close"));
+		Build(EDCRoomType::Lounge); Run->AdvanceTime(12.0); Focus(EDCRoomType::Lounge, 0.45f); Next(2.5); break;
+	case 4: for (const TWeakObjectPtr<AActor>& A : TestActors) { if (ADCVehicle* C = Cast<ADCVehicle>(A.Get())) { C->Destroy(); } }
+		TestShot(TEXT("t_building")); Next(0.5); break;
+	case 5: FinishBuild(); Rig->ResetFocus(); Next(0.9); break;
+	case 6: TestShot(TEXT("t_reveal_a")); Next(1.2); break;
+	case 7: TestShot(TEXT("t_reveal_b")); Next(3.0); break;
+	case 8:
+		{
+			TestShot(TEXT("t_after_reveal")); LogPawns(TEXT("after_reveal"));
+			// Hire the cheapest recruit: walks up the driveway.
+			const FDCCriminal* Cheapest = nullptr;
+			for (const FDCCriminal& C : Run->GetRecruits()) { if (!Cheapest || C.HireCost < Cheapest->HireCost) { Cheapest = &C; } }
+			if (Cheapest) { FString E; const int32 Id = Cheapest->Id; const bool bOk = Run->Hire(Id, &E); UE_LOG(LogDC, Display, TEXT("[WorldTest] Hire %d: %d %s (cash $%d)"), Id, bOk ? 1 : 0, *E, Run->GetCash()); }
+			FocusYard(0.3f);
+			Next(6.0);
 		}
 		break;
-	case 9: TestShot(TEXT("t_departing")); Next(2.5); break;
-	case 10: TestShot(TEXT("t_departing_b")); LogPawns(TEXT("departing_b")); Next(6.0); break;
-	case 11: LogPawns(TEXT("away")); Run->AdvanceTime(1300.0); Next(2.0); break;
-	case 12: TestShot(TEXT("t_returning")); LogPawns(TEXT("returning")); Next(5.0); break;
-	case 13: TestShot(TEXT("t_returned")); LogPawns(TEXT("returned")); Next(0.5); break;
+	case 9: TestShot(TEXT("t_hire_walkin")); LogPawns(TEXT("hire")); Next(0.5); break;
+	// Garage: raises the mission cap, so a new car drives in along the lane and parks.
+	case 10: if (!Build(EDCRoomType::Garage)) { GiveCash(); Build(EDCRoomType::Garage); } FinishBuild(); FocusYard(0.3f); Next(4.0); break;
+	case 11: TestShot(TEXT("t_new_car_arriving")); LogSlots(TEXT("new_car")); Next(8.0); break;
+	case 12: TestShot(TEXT("t_new_car_parked")); LogSlots(TEXT("new_car_parked")); Next(0.5); break;
+	// Missions: crews walk to the cars, get in, drive off.
+	case 13: StartAll(99); FocusYard(0.25f); LogSlots(TEXT("started")); Next(3.0); break;
+	case 14: TestShot(TEXT("t_walk_to_car")); LogPawns(TEXT("walking")); Next(3.5); break;
+	case 15: TestShot(TEXT("t_boarding")); LogSlots(TEXT("boarding")); LogPawns(TEXT("boarding")); Next(3.0); break;
+	case 16: TestShot(TEXT("t_driving_off")); LogSlots(TEXT("driving")); Next(3.0); break;
+	case 17: TestShot(TEXT("t_driving_lane")); Next(4.0); break;
+	case 18:
+		{
+			TestShot(TEXT("t_cars_gone")); LogSlots(TEXT("gone")); LogPawns(TEXT("away"));
+			// Bring the shortest job to its last seconds: its car heads home and parks about when it ends.
+			const double S = Shortest();
+			if (S < 1e8 && S > 6.0) { Run->AdvanceTime(S - 6.0); }
+			Next(4.0);
+		}
+		break;
+	case 19: TestShot(TEXT("t_car_returning")); LogSlots(TEXT("returning")); Next(4.0); break;
+	case 20: TestShot(TEXT("t_car_parking")); LogSlots(TEXT("parking")); Next(3.0); break;
+	case 21: TestShot(TEXT("t_unloading")); LogSlots(TEXT("unloading")); LogPawns(TEXT("unloading")); Next(3.0); break;
+	case 22: TestShot(TEXT("t_walk_in")); LogPawns(TEXT("walk_in")); Run->AdvanceTime(1300.0); Next(16.0); break;
+	case 23: TestShot(TEXT("t_all_back")); LogSlots(TEXT("all_back")); LogPawns(TEXT("all_back")); Next(0.5); break;
+	// A job that finishes while its crew is still walking to the car: they turn round, the car stays.
+	case 24: StartAll(1); Next(2.0); break;
+	case 25: { const double S = Shortest(); if (S < 1e8) { Run->AdvanceTime(S + 0.5); } LogSlots(TEXT("early_done")); Next(2.5); } break;
+	case 26: TestShot(TEXT("t_turnaround")); LogSlots(TEXT("turnaround")); LogPawns(TEXT("turnaround")); Next(6.0); break;
 	// Office upgrade: quick reveal of the new level.
-	case 14:
+	case 27:
 		Focus(EDCRoomType::Office, 0.35f);
 		bTestFakeUpgrade = !Build(EDCRoomType::Office);
 		if (bTestFakeUpgrade)
 		{
-			// Not enough cash in the stub economy: drive the room visuals directly (same calls as the real events).
 			if (ADCRoomModule* M = FindRoom(EDCRoomType::Office)) { M->ApplyState(EDCRoomState::Building, 1); M->SetBuildProgress(0.4f, 42.0, 2); }
 		}
 		else { Run->AdvanceTime(5.0); }
 		Next(2.0);
 		break;
-	case 15:
+	case 28:
 		TestShot(TEXT("t_upgrading"));
 		if (bTestFakeUpgrade) { if (ADCRoomModule* M = FindRoom(EDCRoomType::Office)) { M->PlayUpgradeReveal(2); } }
 		else { FinishBuild(); }
 		Next(0.5);
 		break;
-	case 16: TestShot(TEXT("t_upgrade_reveal")); Next(2.0); break;
-	// Dismiss one, hire one (street door).
-	case 17:
+	case 29: TestShot(TEXT("t_upgrade_reveal")); Next(2.0); break;
+	// Dismiss one: walks off down the driveway.
+	case 30:
 		for (const FDCCriminal& C : Run->GetRoster()) { if (C.IsAvailable()) { UE_LOG(LogDC, Display, TEXT("[WorldTest] dismiss %d"), C.Id); Run->Dismiss(C.Id); break; } }
-		Focus(EDCRoomType::Office, 0.4f);
-		Next(2.0);
+		Rig->FocusOn(FVector(0.f, DCSite::YardRect().GetCenter().Y, 0.f), 0.2f);
+		Next(6.0);
 		break;
-	case 18: TestShot(TEXT("t_dismissed")); LogPawns(TEXT("dismissed")); Next(4.0); break;
-	case 19:
+	case 31: TestShot(TEXT("t_dismissed")); LogPawns(TEXT("dismissed")); Next(4.0); break;
+	case 32:
 		for (ADCCriminalPawn* P : Pawns) { if (P && !P->IsHidden() && P->GetMode() == EDCPawnMode::Wander) { Run->OnCriminalLevelUp.Broadcast(P->GetCriminalId(), 5); Rig->FocusOn(P->GetActorLocation(), 0.85f); break; } }
 		Next(0.6);
 		break;
-	case 20: TestShot(TEXT("t_levelup")); Next(0.5); break;
-	// Night: most crew go to bed in the bunkroom, a couple stay up.
-	case 21: SkipTo(22.5f); Rig->ResetFocus(); UE_LOG(LogDC, Display, TEXT("[WorldTest] hour %.1f night %d"), Run->GetHourOfDay(), Run->IsNight() ? 1 : 0); Next(14.0); break;
-	case 22: TestShot(TEXT("t_night_wide")); Focus(EDCRoomType::Lounge, 0.55f); Next(2.0); break;
-	case 23: TestShot(TEXT("t_night_bunks")); LogPawns(TEXT("night")); Next(0.5); break;
-	case 24: SkipTo(8.f); Rig->ResetFocus(); Next(10.0); break;
-	case 25: TestShot(TEXT("t_morning")); LogPawns(TEXT("morning")); Next(0.5); break;
+	case 33: TestShot(TEXT("t_levelup")); Next(0.5); break;
+	// Night: most crew go to bed in the bunkroom; a night job drives off with its headlights on.
+	case 34: SkipTo(22.5f); if (!Run->IsNight()) { SkipTo(22.5f); } Rig->ResetFocus(); UE_LOG(LogDC, Display, TEXT("[WorldTest] hour %.1f night %d"), Run->GetHourOfDay(), Run->IsNight() ? 1 : 0); Next(12.0); break;
+	case 35: TestShot(TEXT("t_night_wide")); Focus(EDCRoomType::Lounge, 0.55f); Next(2.0); break;
+	case 36: TestShot(TEXT("t_night_bunks")); LogPawns(TEXT("night")); StartAll(1); FocusYard(0.2f); Next(13.0); break;
+	case 37: TestShot(TEXT("t_night_car")); LogSlots(TEXT("night")); Next(2.0); break;
+	case 38: TestShot(TEXT("t_night_car_b")); Next(0.5); break;
+	case 39: SkipTo(8.f); Rig->ResetFocus(); Next(10.0); break;
+	case 40: TestShot(TEXT("t_morning")); LogPawns(TEXT("morning")); LogSlots(TEXT("morning")); Next(0.5); break;
+	// Zoomed right out over the landscape.
+	case 41: Rig->ResetFocus(); Rig->Zoom(-30.f); Next(2.5); break;
+	case 42: TestShot(TEXT("t_far")); Rig->ResetFocus(); Next(1.5); break;
 	// Station hover + click (camera focus, then the panel opens); badge on the board.
-	case 26:
+	case 43:
 		for (TActorIterator<ADCStation> It(GetWorld()); It; ++It)
 		{
 			if (It->StationType == EDCStationType::MissionBoard) { It->OnHoverBegin(); It->OnClicked(); break; }
 		}
 		Next(2.0);
 		break;
-	case 27: TestShot(TEXT("t_station_focus")); Next(0.5); break;
-	case 28:
+	case 44: TestShot(TEXT("t_station_focus")); Next(0.5); break;
+	case 45:
 		for (TActorIterator<ADCStation> It(GetWorld()); It; ++It) { It->OnHoverEnd(); }
 		if (UDCUISubsystem* UI = UDCUISubsystem::Get(this)) { UI->ClosePanel(); }
 		Next(2.0);
 		break;
-	case 29: TestShot(TEXT("t_station_closed")); LogPawns(TEXT("end")); Next(1.0); break;
-	case 30: UE_LOG(LogDC, Display, TEXT("[WorldTest] done")); if (GEngine) { GEngine->Exec(GetWorld(), TEXT("QUIT")); } ++TestStep; break;
+	case 46: TestShot(TEXT("t_station_closed")); LogPawns(TEXT("end")); Next(1.0); break;
+	case 47: UE_LOG(LogDC, Display, TEXT("[WorldTest] done")); if (GEngine) { GEngine->Exec(GetWorld(), TEXT("QUIT")); } ++TestStep; break;
 	default: break;
 	}
 }

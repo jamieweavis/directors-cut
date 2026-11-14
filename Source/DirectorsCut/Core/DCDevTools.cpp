@@ -5,6 +5,7 @@
 #include "World/DCCameraRig.h"
 #include "World/DCRoomModule.h"
 #include "World/DCCriminalPawn.h"
+#include "Core/DCSiteLayout.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -121,6 +122,19 @@ void UDCDevTools::PrepareShot(const FShot& Shot)
 	if (Rig)
 	{
 		if (Shot.Focus.Equals(TEXT("wide"), ESearchCase::IgnoreCase)) { Rig->ResetFocus(); }
+		else if (Shot.Focus.Equals(TEXT("yard"), ESearchCase::IgnoreCase))
+		{
+			// The parked cars, the driveway and the front of the house.
+			const FVector2D C = DCSite::YardRect().GetCenter();
+			Rig->FocusOn(FVector(C.X, C.Y - 150.f, 0.f), 0.3f);
+		}
+		else if (Shot.Focus.Equals(TEXT("house"), ESearchCase::IgnoreCase))
+		{
+			FBox B(ForceInit);
+			for (TActorIterator<ADCRoomModule> It(W); It; ++It) { if (It->GetState() != EDCRoomState::Locked || IsBuildAll()) { B += It->GetWorldBounds(); } }
+			Rig->FocusOn(B.IsValid ? B.GetCenter() * FVector(1, 1, 0) : FVector::ZeroVector, 0.25f);
+		}
+		else if (Shot.Focus.Equals(TEXT("far"), ESearchCase::IgnoreCase)) { Rig->ResetFocus(); Rig->Zoom(-30.f); }
 		else if (Shot.Focus.Equals(TEXT("crew"), ESearchCase::IgnoreCase))
 		{
 			// Close-up on a crew member (a sleeping one if any).

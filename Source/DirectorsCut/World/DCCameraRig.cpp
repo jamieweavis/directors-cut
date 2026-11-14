@@ -1,5 +1,6 @@
 #include "World/DCCameraRig.h"
 #include "Camera/CameraComponent.h"
+#include "Core/DCSettings.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
@@ -82,7 +83,7 @@ void ADCCameraRig::ApplyRig()
 void ADCCameraRig::RecomputeOverview()
 {
 	if (!Bounds.IsValid) { return; }
-	const FBox B = Bounds.ExpandBy(FVector(OverviewMargin, OverviewMargin, 0.f));
+	const FBox B = (Framing.IsValid ? Framing : Bounds).ExpandBy(FVector(OverviewMargin, OverviewMargin, 0.f));
 	const FRotationMatrix M(FRotator(Pitch, Yaw, 0.f));
 	const FVector F = M.GetUnitAxis(EAxis::X), R = M.GetUnitAxis(EAxis::Y), U = M.GetUnitAxis(EAxis::Z);
 	const FVector2D VP = GetViewportSize();
@@ -178,6 +179,21 @@ void ADCCameraRig::SetBounds(const FBox& WorldBounds)
 	if (!bInitialized) { SnapToTarget(); }
 }
 
+void ADCCameraRig::SetFraming(const FBox& WorldFraming)
+{
+	const bool bChanged = WorldFraming.IsValid != Framing.IsValid || (WorldFraming.IsValid && !Framing.Equals(WorldFraming, 1.f));
+	Framing = WorldFraming;
+	if (!bChanged) { return; }
+	RecomputeOverview();
+	if (Mode == EMode::Overview && !bCinematic)
+	{
+		TargetPivot = OverviewPivot;
+		TargetDistance = OverviewDistance;
+		ActiveSmoothTime = FocusSmoothTime * 1.6f;
+	}
+	if (!bInitialized) { SnapToTarget(); }
+}
+
 void ADCCameraRig::BeginCinematic(const FVector& WorldPoint, float ZoomAlpha, float MaxSeconds)
 {
 	if (!bCinematic)
@@ -242,11 +258,12 @@ void ADCCameraRig::Tick(float DeltaSeconds)
 	DriftTime += Dt;
 	const FRotator Rot(Pitch, Yaw, 0.f);
 	const FRotationMatrix M(Rot);
-	const float Amp = CurDistance * DriftAmount;
+	const float Amp = DCSettings::ReduceMotion() ? 0.f : CurDistance * DriftAmount;
 	const float T = (float)DriftTime;
 	const FVector Drift = M.GetUnitAxis(EAxis::Y) * (FMath::Sin(T * UE_TWO_PI / 11.f) * Amp)
 		+ M.GetUnitAxis(EAxis::Z) * (FMath::Sin(T * UE_TWO_PI / 7.3f + 1.3f) * Amp * 0.6f);
-	const FRotator DriftRot(FMath::Sin(T * UE_TWO_PI / 13.f) * 0.12f, FMath::Sin(T * UE_TWO_PI / 17.f + 0.7f) * 0.18f, 0.f);
+	const float RotAmp = DCSettings::ReduceMotion() ? 0.f : 1.f;
+	const FRotator DriftRot(FMath::Sin(T * UE_TWO_PI / 13.f) * 0.12f * RotAmp, FMath::Sin(T * UE_TWO_PI / 17.f + 0.7f) * 0.18f * RotAmp, 0.f);
 
 	Camera->SetRelativeLocation(-Rot.Vector() * CurDistance + Drift);
 	Camera->SetRelativeRotation(Rot + DriftRot);

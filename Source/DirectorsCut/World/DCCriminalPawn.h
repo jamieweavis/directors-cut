@@ -54,6 +54,14 @@ public:
 	/** Reappear at Door (after Delay) and walk back in. If still walking out, queues the return. */
 	void ReturnHome(ADCGarageDoor* Door, float Delay);
 	void PlayLevelUp(int32 NewLevel);
+
+	/** Walk this floor path (no door), then vanish (into a car / off down the lane). bForever = destroy on arrival. */
+	void WalkOutAlong(const TArray<FVector>& FloorPath, float Delay, bool bForever);
+	/** Appear at Start (floor) after Delay (if away) and walk FloorPath back to idle life. */
+	void WalkInAlong(const FVector& Start, const TArray<FVector>& FloorPath, float Delay);
+	/** Abort a walk-out: stop where we are and go back to idling (the director routes us inside). */
+	void CancelWalkOut();
+	bool IsWalkingOut() const { return Mode == EDCPawnMode::WalkOut; }
 	/** Hide immediately (on a job, or a recruit that will walk in through the door). */
 	void SetAway();
 
