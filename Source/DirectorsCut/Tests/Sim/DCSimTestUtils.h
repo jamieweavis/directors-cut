@@ -27,6 +27,9 @@ struct FDCSimTestAccess
 	static TArray<FDCRoom>& Rooms(UDCRunSubsystem& S) { return S.Rooms; }
 	static double& NextPostAt(UDCRunSubsystem& S) { return S.NextPostAt; }
 	static int32 NewId(UDCRunSubsystem& S) { return S.NextId++; }
+	static void RecordFinished(UDCRunSubsystem& S) { S.RecordFinishedRun(); }
+	static FString SlotName(const UDCRunSubsystem& S, int32 Slot) { return S.GetSlotName(Slot); }
+	static FString LeaderboardSlot(const UDCRunSubsystem& S) { return S.GetLeaderboardSlotName(); }
 
 	static void SetRoom(UDCRunSubsystem& S, EDCRoomType T, int32 Level)
 	{

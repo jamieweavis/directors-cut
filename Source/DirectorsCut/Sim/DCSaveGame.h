@@ -12,7 +12,8 @@ class DIRECTORSCUT_API UDCSaveGame : public USaveGame
 	GENERATED_BODY()
 
 public:
-	static constexpr int32 CurrentVersion = 1;
+	static constexpr int32 CurrentVersion = 2;   // v2: slots, finished runs, RunId (v1 still loads)
+	static constexpr int32 MinVersion = 1;
 
 	UPROPERTY() int32 Version = CurrentVersion;
 	UPROPERTY() int32 Seed = 0;
@@ -45,4 +46,24 @@ public:
 	UPROPERTY() int32 PendingPerkOffers = 0;
 	UPROPERTY() bool bArrestPreventUsed = false;
 	UPROPERTY() TMap<int32, double> ArrestedAt;
+
+	// v2
+	UPROPERTY() FGuid RunId;
+	UPROPERTY() FDateTime SavedAt;          // UTC
+	UPROPERTY() bool bFinished = false;     // game over or won: loads read-only into the end phase
+	UPROPERTY() bool bWon = false;
+	UPROPERTY() FString EndReason;
+	UPROPERTY() FDCRunSummary Summary;      // as shown at the end (informational; GetRunSummary recomputes it)
+};
+
+/** Persistent leaderboard of finished runs (slot "DCLeaderboard"). */
+UCLASS()
+class DIRECTORSCUT_API UDCLeaderboardSave : public USaveGame
+{
+	GENERATED_BODY()
+
+public:
+	static constexpr int32 MaxRecords = 50;
+	UPROPERTY() TArray<FDCRunRecord> Records;
+	UPROPERTY() TArray<FGuid> RunIds;        // parallel to Records (dedupe)
 };
