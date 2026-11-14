@@ -68,6 +68,12 @@ TSharedRef<SWidget> SDCRoot::BuildRootContent()
 			SNew(SBox).Visibility_Lambda(HudVis)[BuildDock()]
 		]
 
+		// ── HUD: crew list (bottom-left, clear of the dock) ──
+		+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(FMargin(20.f, 0.f, 0.f, 18.f))
+		[
+			SNew(SBox).Visibility_Lambda(HudVis)[BuildHudCrew()]
+		]
+
 		// ── Panel (right-docked, slides in) ──
 		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Fill).Padding(FMargin(20.f, 82.f, 20.f, 104.f))
 		[
@@ -628,6 +634,7 @@ void SDCRoot::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime
 		NextSigCheck = T + 0.2;
 		const uint32 Chip = ComputeChipSignature();
 		if (Chip != LastChipSig) { LastChipSig = Chip; RebuildChips(); }
+		TickHudCrew();
 		const bool bMouseDown = FSlateApplication::IsInitialized() && FSlateApplication::Get().GetPressedMouseButtons().Num() > 0;
 		if (Current != EDCPanel::None && !bMouseDown && Current != EDCPanel::Title)
 		{

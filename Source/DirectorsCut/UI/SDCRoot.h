@@ -153,6 +153,17 @@ private:
 	int32 GearSel = INDEX_NONE;
 	int32 DismissArmed = INDEX_NONE;
 
+	// HUD crew list, bottom-left (SDCHudCrew.cpp)
+	TSharedPtr<SVerticalBox> HudCrewBox;
+	uint32 LastHudCrewSig = 0;
+	float HudCrewScroll = 0.f;
+	TSharedRef<SWidget> BuildHudCrew();
+	/** Called from Tick's signature check: rebuilds the rows when the roster changes. */
+	void TickHudCrew();
+	void RebuildHudCrew();
+	uint32 ComputeHudCrewSignature() const;
+	TSharedRef<SWidget> HudCrewRow(const FDCCriminal& C);
+
 	// Panels (SDCPanelMeta.cpp)
 	TSharedRef<SWidget> BuildBuild();
 	TSharedRef<SWidget> RoomTile(const FDCRoom& R);
