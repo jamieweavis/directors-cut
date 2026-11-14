@@ -114,7 +114,7 @@ struct FDCBalance
 	int32 UpkeepPerCriminal = 300;
 
 	int32 RecruitBoardSize = 3;
-	float RecruitRefreshSec = 480.f;
+	float RecruitRefreshSec = 240.f;
 	int32 RecruitRefreshCost = 400, RecruitCostBase = 1200, RecruitCostPerLevel = 500;
 	TArray<float> QualityCostMult = { 1.f, 1.8f, 3.f };
 	TArray<TArray<float>> QualityOdds;

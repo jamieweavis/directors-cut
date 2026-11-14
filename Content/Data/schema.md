@@ -117,7 +117,7 @@ When an effect appears more than once, it **stacks**: chance effects add; `*Mult
   "levels": { "max": 10, "xpBase": 100, "xpExp": 1.4 },
   "loyalty": { "start": 60, "successFair": 5, "greedy": -8, "injury": -3, "min": 0, "max": 100, "quitBelow": 10 },
   "upkeep": { "perCriminalPerDay": 300 },
-  "recruits": { "boardSize": 4, "refreshSec": 480, "refreshCost": 400,
+  "recruits": { "boardSize": 4, "refreshSec": 240, "refreshCost": 400,
                 "costBase": 1200, "costPerLevel": 500, "qualityCostMult": [1.0, 1.8, 3.0],
                 "qualityOdds": [[0.8,0.18,0.02],[0.6,0.32,0.08],[0.45,0.4,0.15],[0.3,0.45,0.25]] },  // by unlocked tier
   "quality": { "abilities": [1, 1, 2], "traits": [1, 2, 3], "negativeTraitChance": [0.35, 0.2, 0.1] },

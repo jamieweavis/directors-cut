@@ -41,7 +41,7 @@
   "upkeep": {"perCriminalPerDay": 550},
   "recruits": {
     "boardSize": 4,
-    "refreshSec": 480,
+    "refreshSec": 240,
     "refreshCost": 400,
     "costBase": 1200,
     "costPerLevel": 500,
