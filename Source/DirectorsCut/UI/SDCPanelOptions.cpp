@@ -275,7 +275,6 @@ void SDCRoot::ApplyPlayerSettings(bool bRebuild)
 	if (FSlateApplication::IsInitialized())
 	{
 		FSlateApplication& App = FSlateApplication::Get();
-		App.SetApplicationScale(FMath::Clamp(DCSettings::UIScale(), 0.8f, 1.5f));
 		if (FSlateRenderer* Rend = App.GetRenderer())
 		{
 			const int32 Mode = DCSettings::ColorVisionMode();
@@ -572,7 +571,7 @@ TSharedRef<SWidget> SDCRoot::OptGraphics()
 				[G]() { for (int32 i = 0; i < 6; ++i) { if (FMath::IsNearlyEqual(G->ResScale, ResScales[i], 0.6f)) { return i; } } return -1; },
 				[G](int32 i) { G->ResScale = ResScales[i]; }), 360.f)]
 		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("activity"), TEXT("Show FPS"), TEXT("Small counter in the corner (applies now)"),
-			SwitchRight([]() { return DCSettings::ShowFPS(); }, [](bool b) { DCSettings::SetBool(TEXT("ShowFPS"), b); }))]
+			SwitchRight([]() { return DCSettings::ShowFPS(); }, [](bool b) { DCSettings::SetBool(TEXT("ShowFPS"), b); DCUI::RefreshPrefs(); }))]
 		+ SVerticalBox::Slot().AutoHeight()[Section(TEXT("Quality"))]
 		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("layers"), TEXT("Overall quality"), TEXT("Sets everything below; tweak any line to go custom"),
 			SNew(SVerticalBox)

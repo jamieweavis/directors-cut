@@ -4,6 +4,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "InputCoreTypes.h"
 #include "Misc/CommandLine.h"
+#include "Widgets/Layout/SDPIScaler.h"
 #include "DirectorsCut.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -19,7 +20,7 @@ void SDCRoot::Construct(const FArguments& InArgs)
 
 	bFakeData = !UE_BUILD_SHIPPING && FParse::Param(FCommandLine::Get(), TEXT("DCUIFakeData"));
 	DCUI::RefreshPrefs();
-	ChildSlot[BuildRootContent()];
+	ChildSlot[SNew(SDPIScaler).DPIScale_Lambda([]() { return Prefs().UIScale; })[BuildRootContent()]];
 
 	BindRun();
 	if (const UDCRunSubsystem* R = Run()) { DisplayCash = R->GetCash(); bCashInit = true; }
@@ -124,7 +125,7 @@ TSharedRef<SWidget> SDCRoot::BuildRootContent()
 		+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(FMargin(14.f, 0.f, 0.f, 12.f))
 		[
 			SNew(SBox)
-			.Visibility_Lambda([]() { return DCSettings::ShowFPS() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+			.Visibility_Lambda([]() { return Prefs().bShowFPS ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 			[
 				Pill(TxtA(TAttribute<FText>::CreateLambda([this]() { return FText::FromString(FString::Printf(TEXT("%d FPS  %.1f ms"), FMath::RoundToInt(FpsSmoothed), 1000.f / FMath::Max(1.f, FpsSmoothed))); }),
 					Mono(9.f), TAttribute<FSlateColor>::CreateLambda([this]() { return FSlateColor(FpsSmoothed >= 50.f ? Good : (FpsSmoothed >= 28.f ? Accent : Bad)); })),
@@ -139,7 +140,7 @@ void SDCRoot::RebuildAll()
 	// Palette / text size changed: every widget captured old colours and fonts at build time.
 	Toasts.Reset();
 	LastChipSig = 0;
-	ChildSlot[BuildRootContent()];
+	ChildSlot[SNew(SDPIScaler).DPIScale_Lambda([]() { return Prefs().UIScale; })[BuildRootContent()]];
 	if (IsModal(Current) && Current != EDCPanel::None) { ShownModal = Current; ModalSlot->SetContent(BuildPanel(Current)); }
 	else if (Current != EDCPanel::None) { Shown = Current; PanelSlot->SetContent(BuildPanel(Current)); }
 	if (Confirm.IsValid()) { ConfirmSlot->SetContent(BuildConfirm()); }

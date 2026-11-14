@@ -315,6 +315,8 @@ namespace DCUI
 		GPrefs.bReduceFlashing = DCSettings::ReduceFlashing();
 		GPrefs.bExpiryWarnings = DCSettings::ExpiryWarnings();
 		GPrefs.TextScale = FMath::Clamp(DCSettings::TextScale(), 0.8f, 1.4f);
+		GPrefs.UIScale = FMath::Clamp(DCSettings::UIScale(), 0.8f, 1.5f);
+		GPrefs.bShowFPS = DCSettings::ShowFPS();
 		if (bHC != GPrefs.bHighContrast)
 		{
 			GPrefs.bHighContrast = bHC;

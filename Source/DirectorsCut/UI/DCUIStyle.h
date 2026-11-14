@@ -49,6 +49,8 @@ namespace DCUI
 		bool bExpiryWarnings = true;
 		bool bHighContrast = false;
 		float TextScale = 1.f;
+		float UIScale = 1.f;
+		bool bShowFPS = false;
 	};
 	const FPrefs& Prefs();
 	/** Re-reads DCSettings into Prefs() and re-applies palette + text scale. Callers rebuild their widgets. */
