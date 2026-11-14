@@ -50,18 +50,13 @@ TSharedRef<SWidget> SDCRoot::BuildRootContent()
 	return SNew(SOverlay)
 		.Visibility(EVisibility::SelfHitTestInvisible)
 
-		// ── HUD: clock (top-left) + active chips ──
+		// ── HUD: active mission + build chips (top-left) ──
 		+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(FMargin(20.f, 20.f, 0.f, 0.f))
 		[
-			SNew(SBox).Visibility_Lambda(HudVis)
-			[
-				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()[BuildHudClock()]
-				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 12.f, 0.f, 0.f)[SAssignNew(ChipBox, SVerticalBox)]
-			]
+			SNew(SBox).Visibility_Lambda(HudVis)[SAssignNew(ChipBox, SVerticalBox)]
 		]
 
-		// ── HUD: stats (top-right) ──
+		// ── HUD: clock + payday + stats bar (top-right) ──
 		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(FMargin(0.f, 20.f, 20.f, 0.f))
 		[
 			SNew(SBox).Visibility_Lambda(HudVis)[BuildHudStats()]
@@ -705,8 +700,9 @@ void SDCRoot::Toast(const FString& Msg, FName IconName, bool bWarn)
 
 TSharedRef<SWidget> SDCRoot::BuildHudClock()
 {
+	// Clock + day + payday group; BuildHudStats() frames it inside the top-right bar.
 	auto R = [this]() { return Run(); };
-	auto Sep = []() { return SNew(SBox).Padding(FMargin(14.f, 4.f)).HeightOverride(30.f)[VLine(Line)]; };
+	auto Sep = []() { return SNew(SBox).Padding(FMargin(12.f, 4.f)).HeightOverride(26.f)[VLine(Line)]; };
 
 	TSharedRef<SWidget> Clock = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 10.f, 0.f)
@@ -759,15 +755,10 @@ TSharedRef<SWidget> SDCRoot::BuildHudClock()
 			]
 		];
 
-	TSharedRef<SWidget> W = SNew(SBorder)
-		.BorderImage(Box(GlassSoft, 12.f, Line, 1.f))
-		.Padding(FMargin(10.f, 8.f, 16.f, 8.f))
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Clock]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Sep()]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Payday]
-		];
+	TSharedRef<SWidget> W = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Clock]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Sep()]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Payday];
 	W->SetToolTip(TipWidget(
 		SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()[Txt(TEXT("Payday at dawn"), Font(11.f, EW::SemiBold), Text)]
@@ -827,9 +818,11 @@ TSharedRef<SWidget> SDCRoot::BuildHudStats()
 
 	return SNew(SBorder)
 		.BorderImage(Box(GlassSoft, 12.f, Line, 1.f))
-		.Padding(FMargin(16.f, 6.f, 6.f, 6.f))
+		.Padding(FMargin(8.f, 6.f, 6.f, 6.f))
 		[
 			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[BuildHudClock()]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Sep()]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Cash]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Sep()]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Crew]
