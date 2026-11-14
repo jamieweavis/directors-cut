@@ -12,6 +12,7 @@ class SBox;
 class SBorder;
 class SVerticalBox;
 class SScrollBox;
+class SDCHudNotify;
 
 class SDCRoot : public SCompoundWidget
 {
@@ -55,6 +56,7 @@ private:
 	TSharedPtr<SBox> ModalSlot;
 	TSharedPtr<SVerticalBox> ToastBox;
 	TSharedPtr<SVerticalBox> ChipBox;
+	TSharedPtr<SDCHudNotify> HudNotify;   // mission-result cards (SDCHudNotify.cpp)
 
 	EDCPanel Current = EDCPanel::None;
 	EDCPanel Shown = EDCPanel::None;   // the panel whose content is in PanelSlot (kept during fade-out)

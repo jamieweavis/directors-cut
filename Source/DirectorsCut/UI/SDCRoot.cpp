@@ -1,6 +1,7 @@
 // Director's Cut — SDCRoot: plumbing, HUD, dock, toasts, run events (Agent C).
 #include "UI/SDCRoot.h"
 #include "UI/SDCRootInternal.h"
+#include "UI/SDCHudNotify.h"
 #include "Framework/Application/SlateApplication.h"
 #include "InputCoreTypes.h"
 #include "Misc/CommandLine.h"
@@ -72,6 +73,17 @@ TSharedRef<SWidget> SDCRoot::BuildRootContent()
 		+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(FMargin(20.f, 0.f, 0.f, 18.f))
 		[
 			SNew(SBox).Visibility_Lambda(HudVis)[BuildHudCrew()]
+		]
+
+		// ── Mission-result cards (bottom-right, above the dock line; hold while a panel or modal covers them) ──
+		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Bottom).Padding(FMargin(0.f, 0.f, 20.f, 104.f))
+		[
+			SNew(SBox).Visibility_Lambda(HudVis)
+			[
+				SAssignNew(HudNotify, SDCHudNotify)
+				.Suspended_Lambda([this]() { return bPanelShown || bModalShown || bConfirmShown; })
+				.OnOpenReport([this](int32) { Open(EDCPanel::Reports); })
+			]
 		]
 
 		// ── Panel (right-docked, slides in) ──
@@ -221,11 +233,7 @@ void SDCRoot::UnbindRun()
 
 void SDCRoot::OnMissionCompleted(const FDCMissionReport& R)
 {
-	const bool bOk = R.Outcome == EDCMissionOutcome::Success;
-	FString Msg = FString::Printf(TEXT("%s · %s"), *R.Mission.DisplayName, DC::OutcomeName(R.Outcome));
-	if (bOk && R.DirectorTake > 0) { Msg += FString::Printf(TEXT("  +%s"), *Money(R.DirectorTake)); }
-	const FName Icon = bOk ? FName(TEXT("circle-check")) : (R.Outcome == EDCMissionOutcome::Busted ? FName(TEXT("siren")) : FName(TEXT("circle-x")));
-	Toast(Msg, Icon, !bOk);
+	if (HudNotify.IsValid()) { HudNotify->Push(R); }
 	const UDCRunSubsystem* Rs = Run();
 	const bool bLawyer = Rs && Rs->IsRoomBuilt(EDCRoomType::LawyerOffice);
 	for (const FDCCrewMemberResult& MR : R.Members)
@@ -927,7 +935,6 @@ TSharedRef<SWidget> SDCRoot::BuildDock()
 					const UDCRunSubsystem* X = R();
 					return (X && X->HasPendingPerkOffer()) || CanBuildSomething() ? 1 : 0;
 				}))]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("scroll-text"), TEXT("Reports"), TEXT("N"), EDCPanel::Reports, TAttribute<int32>::CreateLambda([R]() { const UDCRunSubsystem* X = R(); return X ? X->GetUnseenReportCount() : 0; }))]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(8.f, 10.f)[SNew(SBox).Visibility_Lambda(AnyRoomPanel)[VLine(Line)]]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[SNew(SBox).Visibility(Built(EDCRoomType::OpsRoom))[DockButton(DC::RoomIcon(EDCRoomType::OpsRoom), TEXT("Ops Room"), TEXT(""), EDCPanel::OpsRoom, Zero)]]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[SNew(SBox).Visibility(Built(EDCRoomType::Clinic))[DockButton(DC::RoomIcon(EDCRoomType::Clinic), TEXT("Clinic"), TEXT(""), EDCPanel::Clinic,
