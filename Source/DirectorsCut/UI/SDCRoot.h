@@ -38,6 +38,12 @@ public:
 
 	static bool IsModal(EDCPanel P);
 
+	/** Re-reads DCSettings and applies everything the UI owns (UI scale, colour vision, palette, text size, mute).
+	 *  bRebuild re-creates every widget (palette / text size changes). */
+	void ApplyPlayerSettings(bool bRebuild);
+	/** Dev screenshots (-DCUIView=...): open a sub-view of the current screen, e.g. "options.graphics", "slots.load". */
+	void SetDevView(const FString& View);
+
 private:
 	TWeakObjectPtr<UDCUISubsystem> Owner;
 	UDCRunSubsystem* Run() const;
@@ -100,7 +106,7 @@ private:
 	TSharedRef<SWidget> BuildHudClock();
 	TSharedRef<SWidget> BuildHudStats();
 	TSharedRef<SWidget> BuildDock();
-	TSharedRef<SWidget> DockButton(FName Icon, const FString& Name, const FString& Key, EDCPanel Panel, TAttribute<int32> BadgeCount, TAttribute<bool> Enabled = true);
+	TSharedRef<SWidget> DockButton(FName Icon, const FString& Name, const FString& Key, EDCPanel Panel, TAttribute<int32> BadgeCount, TAttribute<bool> Enabled = true, TFunction<double()> ExpiresIn = nullptr);
 	TSharedRef<SWidget> MissionChip(const FDCMission& M);
 	TSharedRef<SWidget> BuildChip(const FDCRoom& R);
 	TSharedRef<SWidget> BuildPanel(EDCPanel P);
@@ -158,6 +164,70 @@ private:
 	TSharedRef<SWidget> BuildEnd(bool bWon);
 	TSharedRef<SWidget> StatTile(FName Icon, const FString& Value, const FString& Caption, const FLinearColor& Col);
 	void NewRun();
+	void QuitGame();
+
+	// ── v3: options, save slots, leaderboard, confirm dialog (SDCPanelOptions.cpp) ──
+	TSharedRef<SWidget> BuildRootContent();
+	void RebuildAll();
+	enum class EView : uint8 { None, Options, SlotsNew, SlotsLoad, SlotsSave };
+	EView View = EView::None;
+	int32 OptTab = 0;                     // 0 audio, 1 graphics, 2 accessibility, 3 gameplay
+	void SetView(EView V);
+	/** The sub-view card (options / slots), or null when View == None. */
+	TSharedRef<SWidget> BuildView();
+	TSharedRef<SWidget> BuildOptions();
+	TSharedRef<SWidget> OptAudio();
+	TSharedRef<SWidget> OptGraphics();
+	TSharedRef<SWidget> OptAccess();
+	TSharedRef<SWidget> OptGameplay();
+	TSharedRef<SWidget> BuildSlots(EView Mode);
+	TSharedRef<SWidget> SlotCard(const FDCSaveSlotInfo& I, EView Mode);
+	void ActOnSlot(int32 Slot, EView Mode);
+	TSharedRef<SWidget> BuildLeaderboard();
+	TArray<FDCSaveSlotInfo> SlotInfos() const;
+	TArray<FDCRunRecord> LeaderboardRows() const;
+	bool bFakeData = false;               // dev-only (-DCUIFakeData): sample slots/leaderboard for screenshots
+
+	struct FConfirm
+	{
+		FString Title, Body, Yes, No;
+		FName Icon;
+		bool bDanger = false;
+		double Timeout = 0.0;             // > 0: auto-"No" after this many seconds (video mode keep/revert)
+		double T0 = 0.0;
+		TFunction<void()> OnYes, OnNo;
+	};
+	TSharedPtr<FConfirm> Confirm;
+	TSharedPtr<SBox> ConfirmSlot;
+	bool bConfirmShown = false;
+	double ConfirmFadeT0 = -10.0;
+	void Ask(const FString& Title, const FString& Body, FName Icon, const FString& Yes, TFunction<void()> OnYes, bool bDanger = false, double Timeout = 0.0, TFunction<void()> OnNo = nullptr);
+	void EndConfirm(bool bYes);
+	TSharedRef<SWidget> BuildConfirm();
+
+	struct FGfx;
+	TSharedPtr<FGfx> GfxPending;          // edited in the Graphics tab; applied with Apply
+	void LoadGfxPending();
+	void ApplyGfxPending();
+	bool IsGfxDirty() const;
+
+	// ── v3: expiry warnings ──
+	TSet<int32> WarnedMissions;
+	bool bWarnedRecruits = false;
+	struct FGhost { FDCMission M; int32 Index = 0; double T0 = 0.0; };
+	TArray<FGhost> Ghosts;                // expired postings fading out on the board
+	TArray<FDCMission> LastBoard;
+	double SoonestLeadExpiry() const;     // run seconds until the next board posting expires, -1 if none
+	double RecruitExpiry() const;         // run seconds until the recruit pool rolls over, -1 if empty
+	void TickExpiry();
+	TSharedRef<SWidget> UrgencyDot(TFunction<double()> SecondsLeft);
+
+	// ── v3: focus / fps ──
+	bool bAppWasActive = true;
+	double TitleT0 = -10.0;               // title fade-in start (kept across rebuilds)
+	float PendingUIScale = -1.f;          // UI scale while its slider is dragged (applied on release)
+	bool bClearBoardArmed = false;
+	float FpsSmoothed = 60.f;
 	bool bAbandonArmed = false;
 	FDCRunSummary EndSummary;
 	bool bHasEndSummary = false;

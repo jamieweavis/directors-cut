@@ -372,42 +372,62 @@ void SDCRoot::NewRun()
 	}
 }
 
+void SDCRoot::QuitGame()
+{
+	UObject* Ctx = GetContext();
+	UWorld* W = (Ctx && GEngine) ? GEngine->GetWorldFromContextObject(Ctx, EGetWorldErrorMode::ReturnNull) : nullptr;
+	UKismetSystemLibrary::QuitGame(W, W ? W->GetFirstPlayerController() : nullptr, EQuitPreference::Quit, false);
+}
+
 TSharedRef<SWidget> SDCRoot::BuildTitle()
 {
-	UDCRunSubsystem* R = Run();
-	const bool bSave = R && R->HasSave();
-	const double T0 = Now();
+	const double T0 = TitleT0;
 	auto Fade = [T0](float Delay) { return TAttribute<FLinearColor>::CreateLambda([T0, Delay]() { return FLinearColor(1, 1, 1, EaseOut((float)(Now() - T0 - Delay) / 0.5f)); }); };
 
-	auto MenuBtn = [](FName IconName, const FString& LabelText, TFunction<void()> OnClick, EBtn Kind)
+	// Slots: Continue = most recent unfinished run.
+	const TArray<FDCSaveSlotInfo> Infos = SlotInfos();
+	bool bAnyUsed = false;
+	const FDCSaveSlotInfo* Recent = nullptr;
+	for (const FDCSaveSlotInfo& I : Infos)
+	{
+		bAnyUsed |= I.bUsed;
+		if (I.bUsed && !I.bFinished && (!Recent || I.SavedAt > Recent->SavedAt)) { Recent = &I; }
+	}
+	if (const UDCRunSubsystem* R = Run(); R && !bFakeData)
+	{
+		const int32 MR = R->GetMostRecentSlot(true);
+		if (MR >= 0 && Infos.IsValidIndex(MR)) { Recent = &Infos[MR]; }
+	}
+	const int32 RecentSlot = Recent ? Recent->Slot : -1;
+	const FString RecentSub = Recent ? FString::Printf(TEXT("Slot %d · Day %d · %s"), Recent->Slot + 1, Recent->Day, *HourMin(Recent->Hour)) : FString();
+
+	auto MenuBtn = [](FName IconName, const FString& LabelText, const FString& Sub, TFunction<void()> OnClick, EBtn Kind, bool bEnabled)
 	{
 		const FLinearColor Fg = Kind == EBtn::Primary ? AccentInk : Text;
+		TSharedRef<SVerticalBox> L = SNew(SVerticalBox) + SVerticalBox::Slot().AutoHeight()[Txt(LabelText, Font(12.f, EW::SemiBold, 40), Fg)];
+		if (!Sub.IsEmpty()) { L->AddSlot().AutoHeight().Padding(0.f, 1.f, 0.f, 0.f)[Txt(Sub, Font(9.f, EW::Medium), A(Fg, 0.7f))]; }
 		return Button(
 			SNew(SBox).WidthOverride(260.f)
 			[
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 12.f, 0.f)[Icon(IconName, 14.f, Fg)]
-				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[Txt(LabelText, Font(12.f, EW::SemiBold, 40), Fg)]
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[L]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Icon(TEXT("chevron-right"), 12.f, A(Fg, 0.5f))]
-			], OnClick, Kind, true, nullptr, FMargin(18.f, 12.f));
+			], OnClick, Kind, bEnabled, nullptr, FMargin(18.f, Sub.IsEmpty() ? 12.f : 8.f));
 	};
 
 	TSharedRef<SVerticalBox> Menu = SNew(SVerticalBox);
-	if (bSave)
+	if (RecentSlot >= 0)
 	{
-		Menu->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 10.f)[MenuBtn(TEXT("play"), TEXT("Continue"), [this]()
-		{
-			UDCRunSubsystem* X = Run();
-			if (X && X->ContinueRun()) { Sfx(DCSfx::Confirm); Close(true); } else { Sfx(DCSfx::Error); Toast(TEXT("Couldn't load the save"), TEXT("triangle-alert"), true); }
-		}, EBtn::Primary)];
+		Menu->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 10.f)[MenuBtn(TEXT("play"), TEXT("Continue"), RecentSub, [this, RecentSlot]() { ActOnSlot(RecentSlot, EView::SlotsLoad); }, EBtn::Primary, true)];
 	}
-	Menu->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 10.f)[MenuBtn(TEXT("plus"), TEXT("New run"), [this]() { NewRun(); }, bSave ? EBtn::Secondary : EBtn::Primary)];
-	Menu->AddSlot().AutoHeight()[MenuBtn(TEXT("power"), TEXT("Quit"), [this]()
+	Menu->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 10.f)[MenuBtn(TEXT("plus"), TEXT("New run"), FString(), [this, bAnyUsed]()
 	{
-		UObject* Ctx = GetContext();
-		UWorld* W = (Ctx && GEngine) ? GEngine->GetWorldFromContextObject(Ctx, EGetWorldErrorMode::ReturnNull) : nullptr;
-		UKismetSystemLibrary::QuitGame(W, W ? W->GetFirstPlayerController() : nullptr, EQuitPreference::Quit, false);
-	}, EBtn::Ghost)];
+		if (bAnyUsed) { SetView(EView::SlotsNew); } else { ActOnSlot(0, EView::SlotsNew); }
+	}, RecentSlot >= 0 ? EBtn::Secondary : EBtn::Primary, true)];
+	Menu->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 10.f)[MenuBtn(TEXT("folder-open"), TEXT("Load"), FString(), [this]() { SetView(EView::SlotsLoad); }, EBtn::Secondary, bAnyUsed)];
+	Menu->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 10.f)[MenuBtn(TEXT("settings"), TEXT("Options"), FString(), [this]() { SetView(EView::Options); }, EBtn::Secondary, true)];
+	Menu->AddSlot().AutoHeight()[MenuBtn(TEXT("power"), TEXT("Quit"), FString(), [this]() { QuitGame(); }, EBtn::Ghost, true)];
 
 	// Smooth left-to-right shade: many thin slices with an eased falloff.
 	TSharedRef<SHorizontalBox> Shade = SNew(SHorizontalBox);
@@ -439,11 +459,26 @@ TSharedRef<SWidget> SDCRoot::BuildTitle()
 			[SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.3f))[Menu]]
 		]
 		+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(FMargin(120.f, 0.f, 0.f, 40.f))
-		[Txt(TEXT("EPIC MEGAJAM 2026"), Caps(8.f), TextFaint)];
+		[Txt(TEXT("EPIC MEGAJAM 2026"), Caps(8.f), TextFaint)]
+		// leaderboard of finished runs (right)
+		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 90.f, 40.f))
+		[
+			SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.4f))
+			.Visibility(View == EView::None ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed)
+			[BuildLeaderboard()]
+		]
+		// sub-view (options / slots) over a dimmed title
+		+ SOverlay::Slot()
+		[
+			SNew(SBorder).BorderImage(WhiteBrush()).BorderBackgroundColor(FLinearColor(0.01f, 0.012f, 0.016f, 0.62f)).Padding(0.f)
+			.Visibility(View == EView::None ? EVisibility::Collapsed : EVisibility::Visible)
+			[BuildView()]
+		];
 }
 
 TSharedRef<SWidget> SDCRoot::BuildPause()
 {
+	if (View != EView::None) { return BuildView(); }
 	UDCAudioSubsystem* Au = UDCAudioSubsystem::Get(GetContext());
 	auto VolRow = [Au](FName IconName, const FString& Name, EDCVolumeChannel Ch)
 	{
@@ -489,6 +524,13 @@ TSharedRef<SWidget> SDCRoot::BuildPause()
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 18.f)[HLine()]
 			+ SVerticalBox::Slot().AutoHeight()[TextButton(TEXT("play"), TEXT("Resume"), [this]() { Close(); }, EBtn::Primary, true, Tip(TEXT("Resume"), TEXT("Esc")), 12.f)]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f, 0.f, 0.f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 4.f, 0.f)[TextButton(TEXT("save"), TEXT("Save"), [this]() { SetView(EView::SlotsSave); }, EBtn::Secondary, true, Tip(TEXT("Save to a slot"), TEXT("The run also autosaves to its own slot as you play"), TEXT("save")), 10.5f)]
+				+ SHorizontalBox::Slot().FillWidth(1.f).Padding(4.f, 0.f)[TextButton(TEXT("folder-open"), TEXT("Load"), [this]() { SetView(EView::SlotsLoad); }, EBtn::Secondary, true, Tip(TEXT("Load a slot"), TEXT("This run is saved first"), TEXT("folder-open")), 10.5f)]
+				+ SHorizontalBox::Slot().FillWidth(1.f).Padding(4.f, 0.f, 0.f, 0.f)[TextButton(TEXT("settings"), TEXT("Options"), [this]() { SetView(EView::Options); }, EBtn::Secondary, true, Tip(TEXT("Options"), TEXT("Audio, graphics, accessibility, camera"), TEXT("settings")), 10.5f)]
+			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 22.f, 0.f, 12.f)[Label(TEXT("Audio"))]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 6.f)[VolRow(TEXT("volume-2"), TEXT("Master"), EDCVolumeChannel::Master)]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 6.f)[VolRow(TEXT("mouse-pointer-click"), TEXT("Effects"), EDCVolumeChannel::SFX)]
@@ -528,6 +570,7 @@ TSharedRef<SWidget> SDCRoot::StatTile(FName IconName, const FString& Value, cons
 
 TSharedRef<SWidget> SDCRoot::BuildEnd(bool bWon)
 {
+	if (View != EView::None) { return BuildView(); }
 	const UDCRunSubsystem* R = Run();
 	const FDCRunSummary S = bHasEndSummary ? EndSummary : (R ? R->GetRunSummary() : FDCRunSummary());
 	const FLinearColor Col = bWon ? Accent : Bad;
@@ -573,7 +616,9 @@ TSharedRef<SWidget> SDCRoot::BuildEnd(bool bWon)
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 8.f, 0.f)[TextButton(TEXT("plus"), TEXT("New run"), [this]() { NewRun(); }, EBtn::Primary, true, nullptr, 12.f)]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 8.f, 0.f)[TextButton(TEXT("plus"), TEXT("New run"), [this]() { SetView(EView::SlotsNew); }, EBtn::Primary, true, nullptr, 12.f)]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(0.f, 0.f, 8.f, 0.f)[TextButton(TEXT("save"), TEXT("Save this run"), [this]() { SetView(EView::SlotsSave); }, EBtn::Secondary, true,
+					Tip(TEXT("Save this run"), TEXT("Keep a copy of this finished run in a slot. It stays on the leaderboard either way."), TEXT("save")), 12.f)]
 				+ SHorizontalBox::Slot().AutoWidth()[TextButton(TEXT("house"), TEXT("Title"), [this]()
 				{
 					bHasEndSummary = false;

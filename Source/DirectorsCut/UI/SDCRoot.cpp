@@ -4,6 +4,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "InputCoreTypes.h"
 #include "Misc/CommandLine.h"
+#include "Widgets/Layout/SDPIScaler.h"
 #include "DirectorsCut.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -17,6 +18,18 @@ void SDCRoot::Construct(const FArguments& InArgs)
 	// The root covers the whole viewport: only its visible children may eat clicks, never the empty space.
 	SetVisibility(EVisibility::SelfHitTestInvisible);
 
+	bFakeData = !UE_BUILD_SHIPPING && FParse::Param(FCommandLine::Get(), TEXT("DCUIFakeData"));
+	DCUI::RefreshPrefs();
+	ChildSlot[SNew(SDPIScaler).DPIScale_Lambda([]() { return Prefs().UIScale; })[BuildRootContent()]];
+
+	BindRun();
+	if (const UDCRunSubsystem* R = Run()) { DisplayCash = R->GetCash(); bCashInit = true; }
+}
+
+SDCRoot::~SDCRoot() { UnbindRun(); }
+
+TSharedRef<SWidget> SDCRoot::BuildRootContent()
+{
 	auto PanelAlpha = [this]() -> float
 	{
 		const float T = (float)(Now() - PanelT0);
@@ -27,11 +40,14 @@ void SDCRoot::Construct(const FArguments& InArgs)
 		const float T = (float)(Now() - ModalT0);
 		return bModalShown ? EaseOut(T / 0.2f) : 1.f - EaseOut(T / 0.14f);
 	};
+	auto ConfirmAlpha = [this]() -> float
+	{
+		const float T = (float)(Now() - ConfirmFadeT0);
+		return bConfirmShown ? EaseOut(T / 0.16f) : 1.f - EaseOut(T / 0.12f);
+	};
 	auto HudVis = [this]() { return (HasRun() && IsPlaying() && Current != EDCPanel::Title) ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; };
 
-	ChildSlot
-	[
-		SNew(SOverlay)
+	return SNew(SOverlay)
 		.Visibility(EVisibility::SelfHitTestInvisible)
 
 		// ── HUD: clock (top-left) + active chips ──
@@ -64,7 +80,7 @@ void SDCRoot::Construct(const FArguments& InArgs)
 			.BorderImage(NoBrush())
 			.Padding(0.f)
 			.ColorAndOpacity_Lambda([PanelAlpha]() { return FLinearColor(1, 1, 1, PanelAlpha()); })
-			.RenderTransform_Lambda([PanelAlpha]() { return TOptional<FSlateRenderTransform>(FSlateRenderTransform(FVector2f((1.f - PanelAlpha()) * 28.f, 0.f))); })
+			.RenderTransform_Lambda([PanelAlpha]() { return TOptional<FSlateRenderTransform>(FSlateRenderTransform(FVector2f((1.f - PanelAlpha()) * (Prefs().bReduceMotion ? 0.f : 28.f), 0.f))); })
 			.Visibility_Lambda([this, PanelAlpha]() { return bPanelShown ? EVisibility::SelfHitTestInvisible : (PanelAlpha() > 0.01f ? EVisibility::HitTestInvisible : EVisibility::Collapsed); })
 			[
 				SAssignNew(PanelSlot, SBox).WidthOverride_Lambda([this]() { return FOptionalSize(PanelWidth(Shown)); })
@@ -90,13 +106,47 @@ void SDCRoot::Construct(const FArguments& InArgs)
 		[
 			SAssignNew(ToastBox, SVerticalBox).Visibility(EVisibility::HitTestInvisible)
 		]
-	];
 
-	BindRun();
-	if (const UDCRunSubsystem* R = Run()) { DisplayCash = R->GetCash(); bCashInit = true; }
+		// ── Confirm dialog (above everything but toasts) ──
+		+ SOverlay::Slot()
+		[
+			SNew(SBorder)
+			.BorderImage(WhiteBrush())
+			.BorderBackgroundColor_Lambda([ConfirmAlpha]() { return FLinearColor(0.01f, 0.012f, 0.016f, 0.6f * ConfirmAlpha()); })
+			.Padding(0.f)
+			.ColorAndOpacity_Lambda([ConfirmAlpha]() { return FLinearColor(1, 1, 1, ConfirmAlpha()); })
+			.Visibility_Lambda([this, ConfirmAlpha]() { return bConfirmShown ? EVisibility::Visible : (ConfirmAlpha() > 0.01f ? EVisibility::HitTestInvisible : EVisibility::Collapsed); })
+			[
+				SAssignNew(ConfirmSlot, SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
+			]
+		]
+
+		// ── FPS readout (Options > Graphics > Show FPS) ──
+		+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(FMargin(14.f, 0.f, 0.f, 12.f))
+		[
+			SNew(SBox)
+			.Visibility_Lambda([]() { return Prefs().bShowFPS ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+			[
+				Pill(TxtA(TAttribute<FText>::CreateLambda([this]() { return FText::FromString(FString::Printf(TEXT("%d FPS  %.1f ms"), FMath::RoundToInt(FpsSmoothed), 1000.f / FMath::Max(1.f, FpsSmoothed))); }),
+					Mono(9.f), TAttribute<FSlateColor>::CreateLambda([this]() { return FSlateColor(FpsSmoothed >= 50.f ? Good : (FpsSmoothed >= 28.f ? Accent : Bad)); })),
+					A(GlassSoft, 0.8f), FMargin(8.f, 3.f), Line)
+			]
+		];
+
 }
 
-SDCRoot::~SDCRoot() { UnbindRun(); }
+void SDCRoot::RebuildAll()
+{
+	// Palette / text size changed: every widget captured old colours and fonts at build time.
+	Toasts.Reset();
+	LastChipSig = 0;
+	ChildSlot[SNew(SDPIScaler).DPIScale_Lambda([]() { return Prefs().UIScale; })[BuildRootContent()]];
+	if (IsModal(Current) && Current != EDCPanel::None) { ShownModal = Current; ModalSlot->SetContent(BuildPanel(Current)); }
+	else if (Current != EDCPanel::None) { Shown = Current; PanelSlot->SetContent(BuildPanel(Current)); }
+	if (Confirm.IsValid()) { ConfirmSlot->SetContent(BuildConfirm()); }
+	LastSig = ComputeSignature();
+}
+
 
 UDCRunSubsystem* SDCRoot::Run() const
 {
@@ -205,9 +255,10 @@ void SDCRoot::OnRunEnded(const FDCRunSummary& S, bool bWon)
 
 void SDCRoot::OnPhaseChanged(EDCGamePhase P)
 {
-	if (P == EDCGamePhase::Title) { if (Current != EDCPanel::Title) { Open(EDCPanel::Title); } }
+	if (P == EDCGamePhase::Title) { bHasEndSummary = false; if (Current != EDCPanel::Title) { Open(EDCPanel::Title); } }
 	else if (P == EDCGamePhase::Playing)
 	{
+		bHasEndSummary = false;
 		if (Current == EDCPanel::Title || Current == EDCPanel::GameOver || Current == EDCPanel::Victory) { Close(true); }
 		bCashInit = false;
 		SeenMissionIds.Reset(); FirstSeenAt.Reset(); ReportAnimT0.Reset();
@@ -296,6 +347,8 @@ void SDCRoot::Open(EDCPanel P)
 		}
 	}
 	if (P == EDCPanel::Pause) { bAbandonArmed = false; }
+	if (P != Prev) { View = EView::None; bClearBoardArmed = false; }
+	if (P == EDCPanel::Title && Prev != EDCPanel::Title) { TitleT0 = Now(); }
 	if (P == EDCPanel::Reports || P == EDCPanel::Missions) { RecomputePlan(); }
 
 	SavedScroll.Reset();
@@ -359,6 +412,8 @@ void SDCRoot::Close(bool bForce)
 
 void SDCRoot::Back()
 {
+	if (Confirm.IsValid()) { EndConfirm(false); return; }
+	if (View != EView::None) { SetView(EView::None); return; }
 	if (Current == EDCPanel::None) { if (IsPlaying()) { Open(EDCPanel::Pause); } return; }
 	if (Current == EDCPanel::MissionPlanner) { Open(EDCPanel::Missions); return; }
 	if (Current == EDCPanel::Pause || !IsModal(Current)) { Close(); return; }
@@ -366,13 +421,13 @@ void SDCRoot::Back()
 
 bool SDCRoot::IsWorldBlocked() const
 {
-	if (bModalShown) { return true; }
+	if (bModalShown || bConfirmShown) { return true; }
 	return IsHovered();
 }
 
 bool SDCRoot::HandleHotkey(const FKey& Key)
 {
-	if (!IsPlaying() || (bModalShown && Current != EDCPanel::None)) { return false; }
+	if (!IsPlaying() || (bModalShown && Current != EDCPanel::None) || Confirm.IsValid()) { return false; }
 	EDCPanel P = EDCPanel::None;
 	if (Key == EKeys::C) { P = EDCPanel::Crew; }
 	else if (Key == EKeys::G) { P = EDCPanel::Workbench; }
@@ -553,6 +608,25 @@ void SDCRoot::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime
 	}
 
 	if (Current == EDCPanel::MissionPlanner) { RecomputePlan(); }
+
+	// FPS readout (smoothed so it's readable)
+	if (InDeltaTime > 0.f) { FpsSmoothed = FMath::Lerp(FpsSmoothed, 1.f / InDeltaTime, FMath::Min(1.f, InDeltaTime * 2.f)); }
+
+	// Pause when the window loses focus (Options > Accessibility).
+	if (FSlateApplication::IsInitialized())
+	{
+		const bool bActive = FSlateApplication::Get().IsActive();
+		if (!bActive && bAppWasActive && DCSettings::PauseOnFocusLoss() && IsPlaying() && R && !R->IsPaused() && !bModalShown)
+		{
+			Open(EDCPanel::Pause);
+		}
+		bAppWasActive = bActive;
+	}
+
+	// Timed confirm (graphics "keep these settings?") runs out = No.
+	if (Confirm.IsValid() && Confirm->Timeout > 0.0 && T - Confirm->T0 >= Confirm->Timeout) { EndConfirm(false); }
+
+	TickExpiry();
 
 	if (T >= NextSigCheck)
 	{
@@ -766,7 +840,31 @@ TSharedRef<SWidget> SDCRoot::BuildHudStats()
 		];
 }
 
-TSharedRef<SWidget> SDCRoot::DockButton(FName IconName, const FString& Name, const FString& Key, EDCPanel Panel, TAttribute<int32> BadgeCount, TAttribute<bool> Enabled)
+TSharedRef<SWidget> SDCRoot::UrgencyDot(TFunction<double()> SecondsLeft)
+{
+	// Countdown pill shown above a dock button while something behind it is about to expire (amber < 60 s, red < 20 s).
+	auto Col = [SecondsLeft]() { return UrgencyColor(SecondsLeft(), TextDim); };
+	auto Crit = [SecondsLeft]() { return Urgency(SecondsLeft()) == EUrgency::Critical; };
+	return SNew(SBorder)
+		.BorderImage(NoBrush())
+		.Padding(0.f)
+		.Visibility_Lambda([SecondsLeft]() { return (Prefs().bExpiryWarnings && Urgency(SecondsLeft()) != EUrgency::Calm) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+		.ColorAndOpacity_Lambda([Crit]() { return FLinearColor(1, 1, 1, Crit() ? 0.55f + 0.45f * Pulse(1.4f) : 1.f); })
+		[
+			SNew(SBorder)
+			.BorderImage_Lambda([Col]() { return Box(Hex(0x0E1115, 0.96f), -1.f, A(Col(), 0.8f), 1.f); })
+			.Padding(FMargin(5.f, 1.f, 6.f, 1.f))
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 3.f, 0.f)
+				[Icon(TEXT("hourglass"), 8.f, TAttribute<FSlateColor>::CreateLambda([Col]() { return FSlateColor(Col()); }))]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[TxtA(TAttribute<FText>::CreateLambda([SecondsLeft]() { return FText::FromString(DC::Clock(SecondsLeft())); }), Mono(8.5f), TAttribute<FSlateColor>::CreateLambda([Col]() { return FSlateColor(Col()); }))]
+			]
+		];
+}
+
+TSharedRef<SWidget> SDCRoot::DockButton(FName IconName, const FString& Name, const FString& Key, EDCPanel Panel, TAttribute<int32> BadgeCount, TAttribute<bool> Enabled, TFunction<double()> ExpiresIn)
 {
 	auto IsActive = [this, Panel]() { return Current == Panel || (Panel == EDCPanel::Missions && Current == EDCPanel::MissionPlanner); };
 	TSharedRef<SButton> B = SNew(SButton)
@@ -800,7 +898,8 @@ TSharedRef<SWidget> SDCRoot::DockButton(FName IconName, const FString& Name, con
 			.BorderImage_Lambda([IsActive]() { return IsActive() ? Box(A(Accent, 0.14f), 10.f, A(Accent, 0.5f), 1.f) : NoBrush(); })
 			.Padding(0.f)[B]
 		]
-		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(FMargin(0.f, -2.f, -2.f, 0.f))[Badge(BadgeCount, Accent)];
+		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(FMargin(0.f, -2.f, -2.f, 0.f))[Badge(BadgeCount, Accent)]
+		+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(FMargin(-12.f, -22.f, -12.f, 0.f))[ExpiresIn ? UrgencyDot(ExpiresIn) : SNullWidget::NullWidget];
 }
 
 TSharedRef<SWidget> SDCRoot::BuildDock()
@@ -819,10 +918,10 @@ TSharedRef<SWidget> SDCRoot::BuildDock()
 		.Padding(FMargin(6.f))
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("map"), TEXT("Missions"), TEXT("SPACE"), EDCPanel::Missions, TAttribute<int32>::CreateLambda([this]() { return NewPostingCount(); }))]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("map"), TEXT("Missions"), TEXT("SPACE"), EDCPanel::Missions, TAttribute<int32>::CreateLambda([this]() { return NewPostingCount(); }), true, [this]() { return SoonestLeadExpiry(); })]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("users"), TEXT("Crew"), TEXT("C"), EDCPanel::Crew, Zero)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("wrench"), TEXT("Gear"), TEXT("G"), EDCPanel::Workbench, Zero)]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("user-plus"), TEXT("Recruits"), TEXT("R"), EDCPanel::Recruits, Zero)]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("user-plus"), TEXT("Recruits"), TEXT("R"), EDCPanel::Recruits, Zero, true, [this]() { return RecruitExpiry(); })]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("hammer"), TEXT("Expand"), TEXT("B"), EDCPanel::Build, TAttribute<int32>::CreateLambda([this, R]()
 				{
 					const UDCRunSubsystem* X = R();
@@ -936,4 +1035,89 @@ TSharedRef<SWidget> SDCRoot::BuildChip(const FDCRoom& Room)
 		[TxtA(TAttribute<FText>::CreateLambda([R, Type]() { const UDCRunSubsystem* X = R(); return FText::FromString(X ? DC::Clock(X->GetRoom(Type).BuildEndsAt - X->GetRunTime()) : TEXT("")); }), Mono(12.f), FSlateColor(Text))];
 	return SNew(SBorder).BorderImage(Box(FLinearColor(0, 0, 0, 0.25f), 11.f)).Padding(0.f)
 		[Button(SNew(SBox).WidthOverride(272.f)[Content], [this]() { Open(EDCPanel::Build); }, EBtn::Card, true, Tip(TEXT("Under construction"), Name, TEXT("hammer"), Warn), FMargin(8.f, 7.f, 12.f, 7.f))];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Expiry warnings (v3): leads and the recruit pool escalate calm -> amber (< 60 s) -> red + pulse (< 20 s)
+// ─────────────────────────────────────────────────────────────────────────────
+
+double SDCRoot::SoonestLeadExpiry() const
+{
+	const UDCRunSubsystem* R = Run();
+	if (!R || !R->HasActiveRun()) { return -1.0; }
+	const double RT = R->GetRunTime();
+	double Best = -1.0;
+	for (const FDCMission& M : R->GetMissions())
+	{
+		if (M.bInProgress || M.ExpiresAt < 0.0) { continue; }
+		const double Left = FMath::Max(0.0, M.ExpiresAt - RT);
+		if (Best < 0.0 || Left < Best) { Best = Left; }
+	}
+	return Best;
+}
+
+double SDCRoot::RecruitExpiry() const
+{
+	const UDCRunSubsystem* R = Run();
+	if (!R || !R->HasActiveRun() || R->GetRecruits().Num() == 0) { return -1.0; }
+	return FMath::Max(0.0, R->GetRecruitRefreshIn());
+}
+
+void SDCRoot::TickExpiry()
+{
+	const UDCRunSubsystem* R = Run();
+	if (!R || !R->HasActiveRun() || R->GetPhase() != EDCGamePhase::Playing)
+	{
+		LastBoard.Reset(); Ghosts.Reset(); WarnedMissions.Reset(); bWarnedRecruits = false;
+		return;
+	}
+	const double RT = R->GetRunTime();
+	const bool bWarn = Prefs().bExpiryWarnings;
+	auto Chime = []()
+	{
+		if (UDCAudioSubsystem* Au = UDCAudioSubsystem::Get(GetContext())) { Au->PlaySFX(DCSfx::Error, 0.35f, 1.25f); }
+	};
+
+	// One toast + soft chime when a lead crosses the critical line.
+	TArray<FDCMission> Board;
+	for (const FDCMission& M : R->GetMissions())
+	{
+		if (M.bInProgress || M.bFinal) { continue; }
+		Board.Add(M);
+		if (M.ExpiresAt < 0.0) { continue; }
+		const double Left = M.ExpiresAt - RT;
+		if (Left > 0.0 && Left <= UrgentCritical && !WarnedMissions.Contains(M.Id))
+		{
+			WarnedMissions.Add(M.Id);
+			if (bWarn) { Toast(FString::Printf(TEXT("Lead expiring · %s"), *M.DisplayName), TEXT("hourglass"), true); Chime(); }
+		}
+	}
+
+	// Recruit pool rolls over.
+	const double RI = RecruitExpiry();
+	if (RI >= 0.0 && RI <= UrgentCritical)
+	{
+		if (!bWarnedRecruits)
+		{
+			bWarnedRecruits = true;
+			if (bWarn) { Toast(TEXT("Recruits moving on soon · hire now or lose them"), TEXT("user-round-x"), true); Chime(); }
+		}
+	}
+	else if (RI > UrgentCritical) { bWarnedRecruits = false; }
+
+	// Postings that left the board unstarted fade out in place instead of vanishing.
+	const double T = Now();
+	for (int32 i = 0; i < LastBoard.Num(); ++i)
+	{
+		const FDCMission& Old = LastBoard[i];
+		if (!R->FindMission(Old.Id) && Old.ExpiresAt >= 0.0 && RT >= Old.ExpiresAt - 1.0)
+		{
+			Ghosts.Add({ Old, i, T });
+			WarnedMissions.Remove(Old.Id);
+		}
+	}
+	LastBoard = MoveTemp(Board);
+	const int32 Before = Ghosts.Num();
+	Ghosts.RemoveAll([T](const FGhost& G) { return T - G.T0 > 1.0; });
+	if (Ghosts.Num() != Before && Current == EDCPanel::Missions) { Rebuild(); }
 }

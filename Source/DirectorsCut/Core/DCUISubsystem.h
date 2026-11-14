@@ -51,4 +51,5 @@ private:
 	TSharedPtr<class SDCRoot> Root;
 	TWeakObjectPtr<class UGameViewportClient> RootViewport;
 	TSharedPtr<class IInputProcessor> Hotkeys;
+	TArray<FString> DevViews;           // -DCUIView queue (dev screenshots)
 };
