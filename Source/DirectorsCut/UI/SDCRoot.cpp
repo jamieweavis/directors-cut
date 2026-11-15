@@ -358,7 +358,7 @@ void SDCRoot::Open(EDCPanel P)
 	if (P == EDCPanel::Pause) { bAbandonArmed = false; }
 	if (P != Prev) { View = EView::None; bClearBoardArmed = false; }
 	if (P == EDCPanel::Title && Prev != EDCPanel::Title) { TitleT0 = Now(); }
-	if (P == EDCPanel::PerkDraft && Prev != EDCPanel::PerkDraft) { PerkDraftT0 = Now(); }
+	if (P == EDCPanel::PerkDraft && Prev != EDCPanel::PerkDraft) { PerkDraftT0 = Now(); PerkSel = NAME_None; }
 	if (P == EDCPanel::Reports || P == EDCPanel::Missions) { RecomputePlan(); }
 
 	SavedScroll.Reset();

@@ -393,10 +393,9 @@ TSharedRef<SWidget> SDCRoot::BuildPerkDraft()
 			[
 				Button(Content, [this, Id]()
 				{
-					UDCRunSubsystem* X = Run();
-					if (X && X->PickPerk(Id)) { Sfx(DCSfx::Perk); Close(true); }
-					else { Sfx(DCSfx::Error); }
-				}, EBtn::Card, true, nullptr, FMargin(0.f))
+					if (PerkSel == Id) { return; }
+					PerkSel = Id; Sfx(DCSfx::Click); Rebuild();
+				}, PerkSel == Id ? EBtn::CardSelected : EBtn::Card, true, nullptr, FMargin(0.f))
 			]
 		];
 	}
@@ -408,6 +407,16 @@ TSharedRef<SWidget> SDCRoot::BuildPerkDraft()
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 14.f, 0.f, 4.f)[Txt(TEXT("Pick a perk"), Font(22.f, EW::SemiBold), Text)]
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 0.f, 0.f, 28.f)[Txt(TEXT("Your reputation is growing. Choose one."), Font(11.f), TextDim)]
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[Cards]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 28.f, 0.f, 0.f)
+			[
+				Offer.Num() ? TextButton(TEXT("check"), TEXT("Confirm"), [this]()
+				{
+					UDCRunSubsystem* X = Run();
+					if (X && PerkSel != NAME_None && X->PickPerk(PerkSel)) { PerkSel = NAME_None; Sfx(DCSfx::Perk); Close(true); }
+					else { Sfx(DCSfx::Error); }
+				}, EBtn::Primary, TAttribute<bool>::CreateLambda([this]() { return PerkSel != NAME_None; }), nullptr, 13.f)
+				: SNullWidget::NullWidget
+			]
 		];
 }
 

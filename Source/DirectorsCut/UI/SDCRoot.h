@@ -254,6 +254,7 @@ private:
 	bool bAppWasActive = true;
 	double TitleT0 = -10.0;               // title fade-in start (kept across rebuilds)
 	double PerkDraftT0 = -10.0;           // perk card fade-in start (kept across rebuilds)
+	FName PerkSel = NAME_None;            // perk card highlighted in the draft (confirmed separately)
 	float PendingUIScale = -1.f;          // UI scale while its slider is dragged (applied on release)
 	bool bClearBoardArmed = false;
 	float FpsSmoothed = 60.f;
