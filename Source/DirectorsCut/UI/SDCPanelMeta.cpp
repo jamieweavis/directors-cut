@@ -308,7 +308,7 @@ TSharedRef<SWidget> SDCRoot::BuildRoomPanel(EDCPanel P)
 		Body->AddSlot().AutoHeight()
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 6.f, 0.f)[StatTile(TEXT("map"), FString::FromInt(Board), TEXT("On the board"), Text)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 6.f, 0.f)[StatTile(TEXT("clipboard-list"), FString::FromInt(Board), TEXT("On the board"), Text)]
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(6.f, 0.f, 0.f, 0.f)
 			[
 				CardBox(SNew(SVerticalBox)
@@ -350,7 +350,7 @@ TSharedRef<SWidget> SDCRoot::BuildRoomPanel(EDCPanel P)
 					+ SVerticalBox::Slot().AutoHeight()[Txt(bFinal ? TEXT("It's on the board. Pull it off to win.") : TEXT("Five crew, twenty minutes. Win the run."), Font(9.5f), TextDim)]
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-				[bFinal ? TextButton(TEXT("map"), TEXT("Board"), [this]() { Open(EDCPanel::Missions); }, EBtn::Primary) : IconText(TEXT("trophy"), FString::Printf(TEXT("%d"), R->GetMissionsSucceeded()), Mono(11.f), TextDim, Text, 12.f, 5.f)],
+				[bFinal ? TextButton(TEXT("clipboard-list"), TEXT("Board"), [this]() { Open(EDCPanel::Missions); }, EBtn::Primary) : IconText(TEXT("trophy"), FString::Printf(TEXT("%d"), R->GetMissionsSucceeded()), Mono(11.f), TextDim, Text, 12.f, 5.f)],
 				FMargin(14.f), A(Accent, 0.3f))
 		];
 	}

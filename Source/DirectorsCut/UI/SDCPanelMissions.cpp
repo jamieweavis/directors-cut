@@ -281,7 +281,7 @@ TSharedRef<SWidget> SDCRoot::BuildMissions()
 		Body->AddSlot().AutoHeight().Padding(-6.f, -6.f, -6.f, 0.f)[Grid];
 	}
 
-	return Shell(TEXT("map"), TEXT("Missions"), Scroll(Body));
+	return Shell(TEXT("clipboard-list"), TEXT("Missions"), Scroll(Body));
 }
 
 TSharedRef<SWidget> SDCRoot::ActiveMissionRow(const FDCMission& M)
@@ -533,13 +533,13 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 	const FDCMission* MP = R ? R->FindMission(PlanMissionId) : nullptr;
 	if (!R || !MP)
 	{
-		return Shell(TEXT("map"), TEXT("Mission"),
+		return Shell(TEXT("clipboard-list"), TEXT("Mission"),
 			SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
 			[
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[Icon(TEXT("timer-off"), 32.f, TextFaint)]
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 12.f)[Txt(TEXT("This job is gone"), Font(12.f), TextDim)]
-				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[TextButton(TEXT("map"), TEXT("Board"), [this]() { Open(EDCPanel::Missions); })]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[TextButton(TEXT("clipboard-list"), TEXT("Board"), [this]() { Open(EDCPanel::Missions); })]
 			]);
 	}
 	const FDCMission M = *MP;
