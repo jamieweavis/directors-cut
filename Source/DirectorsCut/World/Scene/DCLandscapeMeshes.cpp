@@ -472,3 +472,327 @@ namespace DCLandMesh
 		return Loft(Outer, S, 3);
 	}
 }
+
+// =====================================================================================================================
+// Trees, shrubs and rocks: whole plants built as one mesh each (a handful of variants, instanced and scaled).
+// =====================================================================================================================
+
+namespace
+{
+	/** Tapered tube along a polyline with smooth radial normals. */
+	void TubePath(FBuilder& B, const TArray<FVector3f>& Pts, const TArray<float>& Rad, int32 Sides, int32 Group)
+	{
+		const FLinearColor Col(1.f, 0.f, 0.f, 1.f);
+		TArray<int32> Prev, Ring;
+		FVector3f Ref(1.f, 0.f, 0.f);
+		for (int32 k = 0; k < Pts.Num(); ++k)
+		{
+			const FVector3f Tan = (Pts[FMath::Min(k + 1, Pts.Num() - 1)] - Pts[FMath::Max(k - 1, 0)]).GetSafeNormal();
+			FVector3f X = (Ref - Tan * FVector3f::DotProduct(Ref, Tan)).GetSafeNormal();
+			if (X.IsNearlyZero()) { X = FVector3f::CrossProduct(Tan, FVector3f(0.f, 1.f, 0.f)).GetSafeNormal(); }
+			const FVector3f Y = FVector3f::CrossProduct(Tan, X);
+			Ref = X;
+			Ring.Reset();
+			for (int32 s = 0; s < Sides; ++s)
+			{
+				const float A = 2.f * PI * s / Sides;
+				const FVector3f D = X * FMath::Cos(A) + Y * FMath::Sin(A);
+				Ring.Add(B.V(Pts[k] + D * Rad[k], D, Col));
+			}
+			if (Prev.Num())
+			{
+				for (int32 s = 0; s < Sides; ++s)
+				{
+					const int32 s1 = (s + 1) % Sides;
+					B.Tri(Prev[s], Prev[s1], Ring[s1], Group);
+					B.Tri(Prev[s], Ring[s1], Ring[s], Group);
+				}
+			}
+			Prev = Ring;
+		}
+	}
+
+	/** One rounded lump of a canopy: centre, radius, vertical squash. */
+	struct FPuff { FVector3f C; float R; float ZS; };
+
+	struct FCanopy
+	{
+		TArray<FPuff> Puffs;
+		FVector3f Core = FVector3f::ZeroVector; // lighting centre: normals lean away from it so the crown shades as one volume
+		float CoreR = 300.f;
+		float ZMin = 0.f, ZMax = 1.f;
+		int32 Seed = 0;
+		float Wind = 1.f;
+
+		void Fit()
+		{
+			ZMin = 1e9f; ZMax = -1e9f;
+			for (const FPuff& Q : Puffs) { ZMin = FMath::Min(ZMin, Q.C.Z - Q.R * Q.ZS * 0.55f); ZMax = FMath::Max(ZMax, Q.C.Z + Q.R * Q.ZS); }
+		}
+		/** Surface point of puff i along unit direction D (lumpy, with a flattened underside). */
+		FVector3f Surface(int32 i, const FVector3f& D) const
+		{
+			const FPuff& Q = Puffs[i];
+			const float n = Noise3(D * 1.6f + FVector3f(i * 7.3f), Seed) * 0.65f + Noise3(D * 3.7f + FVector3f(i * 3.1f), Seed + 5) * 0.35f;
+			FVector3f L = D * Q.R * (1.f + 0.2f * (n * 2.f - 1.f));
+			L.Z = FMath::Max(L.Z * Q.ZS, -0.55f * Q.R * Q.ZS + 0.12f * L.Z);
+			return Q.C + L;
+		}
+		/** True if P lies inside another puff (Margin = how deep, as a fraction of its radius). */
+		bool Inside(const FVector3f& P, int32 Skip, float Margin) const
+		{
+			for (int32 k = 0; k < Puffs.Num(); ++k)
+			{
+				if (k == Skip) { continue; }
+				const FPuff& Q = Puffs[k];
+				FVector3f L = (P - Q.C) / Q.R;
+				L.Z /= Q.ZS;
+				if (L.Z > -0.5f && L.SizeSquared() < FMath::Square(1.f - Margin)) { return true; }
+			}
+			return false;
+		}
+		FVector3f Normal(const FVector3f& P, const FVector3f& D) const
+		{
+			return (D * 0.5f + (P - Core).GetSafeNormal() * 0.6f + FVector3f(0.f, 0.f, 0.18f)).GetSafeNormal();
+		}
+		FLinearColor Color(const FVector3f& P, const FVector3f& D) const
+		{
+			float h = FMath::Clamp((P.Z - ZMin) / FMath::Max(ZMax - ZMin, 1.f), 0.f, 1.f);
+			h = h * h * (3.f - 2.f * h);
+			const float Out = FMath::Clamp(FVector3f::Dist(P, Core) / CoreR, 0.f, 1.f);
+			return FLinearColor(FMath::Clamp(0.1f + 0.6f * h + 0.14f * D.Z, 0.03f, 0.82f), Wind * (0.25f + 0.75f * Out), 0.f, 1.f);
+		}
+
+		/** Puff shells (hidden inner faces dropped) + a coat of leaf cards (CardsAt200 = cards on a puff of radius 200). */
+		void Emit(FBuilder& B, int32 Subdiv, float CardsAt200, float CardSize, int32 Group)
+		{
+			Fit();
+			FRandomStream R(Seed * 31 + 7);
+			TArray<FVector3f> Vs; TArray<FIntVector> Ts;
+			Icosphere(Subdiv, Vs, Ts);
+			TArray<int32> Id; TArray<bool> In;
+			for (int32 i = 0; i < Puffs.Num(); ++i)
+			{
+				const FQuat4f Spin(FVector3f::UpVector, R.FRandRange(0.f, 2.f * PI));
+				Id.SetNum(Vs.Num()); In.SetNum(Vs.Num());
+				for (int32 k = 0; k < Vs.Num(); ++k)
+				{
+					const FVector3f D = Spin.RotateVector(Vs[k]);
+					const FVector3f P = Surface(i, D);
+					In[k] = Inside(P, i, 0.1f);
+					Id[k] = B.V(P, Normal(P, D), Color(P, D));
+				}
+				for (const FIntVector& T : Ts)
+				{
+					if (In[T.X] && In[T.Y] && In[T.Z]) { continue; }
+					B.Tri(Id[T.X], Id[T.Y], Id[T.Z], Group);
+				}
+				// leaf cards: little kites shingled over the lump, tips hanging down and out; they catch the light (brighter,
+				// some tinted towards the accent colour via vertex B) or sit in shade, and break up the silhouette
+				const int32 Cards = FMath::RoundToInt(CardsAt200 * FMath::Square(Puffs[i].R / 200.f));
+				for (int32 c = 0; c < Cards; ++c)
+				{
+					FVector3f D = FVector3f(R.VRand());
+					if (D.Z < -0.3f) { D.Z = -D.Z; }
+					const FVector3f P = Surface(i, D);
+					if (Inside(P, i, 0.02f)) { continue; }
+					FVector3f T1 = FVector3f::CrossProduct(FVector3f::UpVector, D).GetSafeNormal();
+					if (T1.IsNearlyZero()) { T1 = FVector3f(1.f, 0.f, 0.f); }
+					const FVector3f T2 = FVector3f::CrossProduct(D, T1); // up along the surface
+					const float Tilt = FMath::DegreesToRadians(R.FRandRange(14.f, 34.f) + (D.Z < 0.15f ? 16.f : 0.f));
+					const FVector3f Tip = (T2 * -FMath::Cos(Tilt) + D * FMath::Sin(Tilt)).GetSafeNormal();
+					const float L = CardSize * R.FRandRange(0.7f, 1.3f), W = L * R.FRandRange(0.5f, 0.7f);
+					const FVector3f O = P + D * (CardSize * 0.1f) + T1 * R.FRandRange(-0.2f, 0.2f) * L;
+					const FVector3f Nrm = Normal(P, D);
+					FLinearColor Col = Color(P, D);
+					const bool bLit = R.FRand() < 0.5f + 0.35f * D.Z;
+					Col.R = FMath::Clamp(Col.R + (bLit ? R.FRandRange(0.14f, 0.3f) : -R.FRandRange(0.06f, 0.16f)), 0.03f, 1.f);
+					Col.B = (bLit && R.FRand() < 0.55f) ? R.FRandRange(0.35f, 1.f) * FMath::Clamp(D.Z + 0.6f, 0.f, 1.f) : 0.f;
+					Col.G = FMath::Min(1.f, Col.G + 0.15f * Wind);
+					const int32 a = B.V(O - Tip * (L * 0.25f), Nrm, Col), b = B.V(O + Tip * (L * 0.3f) - T1 * (W * 0.5f), Nrm, Col);
+					const int32 t = B.V(O + Tip * L, Nrm, Col), d = B.V(O + Tip * (L * 0.3f) + T1 * (W * 0.5f), Nrm, Col);
+					B.Tri(a, b, t, Group); B.Tri(a, t, d, Group);
+				}
+			}
+		}
+	};
+}
+
+namespace DCLandMesh
+{
+	UStaticMesh* Broadleaf(UObject* Outer, int32 Seed, int32 Detail)
+	{
+		FRandomStream R(Seed);
+		FBuilder B;
+		const float BendA = R.FRandRange(0.f, 2.f * PI);
+		const FVector3f Bend(FMath::Cos(BendA), FMath::Sin(BendA), 0.f);
+		const float TrunkH = R.FRandRange(390.f, 460.f), TR = R.FRandRange(36.f, 44.f), Sway = R.FRandRange(14.f, 34.f);
+		// trunk: flared roots, a gentle S-bend, tapering into the crown
+		const float Us[] = { 0.f, 0.045f, 0.13f, 0.4f, 0.7f, 1.f, 1.25f };
+		const float Rs[] = { 2.0f, 1.4f, 1.08f, 0.94f, 0.82f, 0.7f, 0.4f };
+		TArray<FVector3f> Pts; TArray<float> Rad;
+		for (int32 k = 0; k < UE_ARRAY_COUNT(Us); ++k)
+		{
+			Pts.Add(Bend * (FMath::Sin(Us[k] * 2.6f) * Sway) + FVector3f(0.f, 0.f, -14.f + Us[k] * (TrunkH + 14.f)));
+			Rad.Add(TR * Rs[k]);
+		}
+		TubePath(B, Pts, Rad, Detail ? 9 : 6, 0);
+		const FVector3f Top = Pts[UE_ARRAY_COUNT(Us) - 2];
+
+		FCanopy Cn;
+		Cn.Seed = Seed;
+		Cn.Core = Top + FVector3f(0.f, 0.f, 150.f);
+		Cn.CoreR = 420.f;
+		Cn.Wind = 1.f;
+		const FVector3f Mid = Top + FVector3f(0.f, 0.f, 235.f) + Bend * 15.f;
+		Cn.Puffs.Add({ Mid, R.FRandRange(225.f, 255.f), 0.94f });
+		const int32 N = R.RandRange(5, 6);
+		const float A0 = R.FRandRange(0.f, 2.f * PI);
+		for (int32 i = 0; i < N; ++i)
+		{
+			const float A = A0 + (i + R.FRandRange(-0.25f, 0.25f)) * 2.f * PI / N;
+			const float D = R.FRandRange(165.f, 235.f);
+			const FPuff Q{ Mid + FVector3f(FMath::Cos(A) * D, FMath::Sin(A) * D, R.FRandRange(-105.f, 45.f)), R.FRandRange(140.f, 190.f), R.FRandRange(0.74f, 0.86f) };
+			Cn.Puffs.Add(Q);
+			// a limb reaching into every other lump
+			if (i % 2 == 0)
+			{
+				const FVector3f S0 = Pts[4], S2 = Q.C - FVector3f(0.f, 0.f, Q.R * 0.25f);
+				const FVector3f S1 = FMath::Lerp(S0, S2, 0.5f) + FVector3f(0.f, 0.f, -28.f);
+				TubePath(B, { S0, S1, S2 }, { TR * 0.5f, TR * 0.36f, TR * 0.16f }, Detail ? 6 : 4, 0);
+			}
+		}
+		Cn.Puffs.Add({ Mid + FVector3f(R.FRandRange(-60.f, 60.f), R.FRandRange(-60.f, 60.f), R.FRandRange(150.f, 185.f)), R.FRandRange(150.f, 180.f), 0.84f });
+		Cn.Emit(B, Detail ? 2 : 1, Detail ? 95.f : 12.f, Detail ? 62.f : 95.f, 1);
+		return B.Build(Outer, *FString::Printf(TEXT("DCBroadleaf_%d_%d"), Seed, Detail));
+	}
+
+	UStaticMesh* Pine(UObject* Outer, int32 Seed, int32 Detail)
+	{
+		FRandomStream R(Seed);
+		FBuilder B;
+		TubePath(B, { FVector3f(0, 0, -14), FVector3f(0, 0, 14), FVector3f(0, 0, 320), FVector3f(0, 0, 900) }, { 58.f, 36.f, 24.f, 5.f }, Detail ? 7 : 5, 0);
+		const int32 Tiers = Detail ? 6 : 4, Pn = Detail ? 11 : 8;
+		for (int32 t = 0; t < Tiers; ++t)
+		{
+			const float u = (float)t / (Tiers - 1);
+			const float Z0 = FMath::Lerp(175.f, 770.f, u), Rad = FMath::Lerp(262.f, 82.f, u) * R.FRandRange(0.94f, 1.07f);
+			const float ApexZ = (t == Tiers - 1) ? 1000.f : Z0 + FMath::Lerp(330.f, 250.f, u);
+			const float Yaw = R.FRandRange(0.f, 2.f * PI);
+			const int32 Apex = B.V(FVector3f(0, 0, ApexZ), FVector3f::UpVector, FLinearColor(0.42f, 0.1f, 0.f, 1.f));
+			const int32 Under = B.V(FVector3f(0, 0, Z0 + 55.f), -FVector3f::UpVector, FLinearColor(0.05f, 0.f, 0.f, 1.f));
+			TArray<int32> Rim, Mid, Low;
+			for (int32 s = 0; s < Pn * 2; ++s)
+			{
+				const bool bTip = (s % 2) == 0;
+				const float A = Yaw + PI * s / Pn + (bTip ? R.FRandRange(-0.08f, 0.08f) : 0.f);
+				const FVector3f D(FMath::Cos(A), FMath::Sin(A), 0.f);
+				const float Rr = Rad * (bTip ? R.FRandRange(0.9f, 1.1f) : R.FRandRange(0.6f, 0.7f));
+				const float Zr = Z0 + (bTip ? -R.FRandRange(16.f, 38.f) : 16.f);
+				const FVector3f Nrm = D * 0.75f + FVector3f(0.f, 0.f, 0.66f);
+				const FVector3f Pr = D * Rr + FVector3f(0, 0, Zr);
+				Rim.Add(B.V(Pr, Nrm, bTip ? FLinearColor(0.98f, 0.55f, 0.75f, 1.f) : FLinearColor(0.5f, 0.3f, 0.f, 1.f)));
+				// swooping profile: the half-way ring hangs below the straight cone line
+				Mid.Add(B.V(D * (Rr * 0.5f) + FVector3f(0, 0, FMath::Lerp(Zr, ApexZ, 0.36f)), Nrm, FLinearColor(bTip ? 0.66f : 0.46f, 0.2f, bTip ? 0.25f : 0.f, 1.f)));
+				Low.Add(B.V(Pr, -FVector3f::UpVector, FLinearColor(0.1f, 0.3f, 0.f, 1.f)));
+			}
+			for (int32 s = 0; s < Pn * 2; ++s)
+			{
+				const int32 s1 = (s + 1) % (Pn * 2);
+				B.Tri(Rim[s], Rim[s1], Mid[s1], 1); B.Tri(Rim[s], Mid[s1], Mid[s], 1);
+				B.Tri(Mid[s], Mid[s1], Apex, 1);
+				B.Tri(Low[s], Low[s1], Under, 1);
+			}
+		}
+		return B.Build(Outer, *FString::Printf(TEXT("DCPine_%d_%d"), Seed, Detail));
+	}
+
+	UStaticMesh* Shrub(UObject* Outer, int32 Seed, bool bFlowers)
+	{
+		FRandomStream R(Seed);
+		FBuilder B;
+		FCanopy Cn;
+		Cn.Seed = Seed;
+		Cn.Core = FVector3f(0.f, 0.f, 10.f);
+		Cn.CoreR = 135.f;
+		Cn.Wind = 0.6f;
+		Cn.Puffs.Add({ FVector3f(0.f, 0.f, 58.f), R.FRandRange(66.f, 76.f), 0.84f });
+		const int32 N = R.RandRange(4, 5);
+		const float A0 = R.FRandRange(0.f, 2.f * PI);
+		for (int32 i = 0; i < N; ++i)
+		{
+			const float A = A0 + (i + R.FRandRange(-0.3f, 0.3f)) * 2.f * PI / N;
+			const float D = R.FRandRange(48.f, 76.f), Rr = R.FRandRange(44.f, 60.f);
+			Cn.Puffs.Add({ FVector3f(FMath::Cos(A) * D, FMath::Sin(A) * D, Rr * 0.5f + R.FRandRange(0.f, 14.f)), Rr, 0.82f });
+		}
+		Cn.Puffs.Add({ FVector3f(R.FRandRange(-22.f, 22.f), R.FRandRange(-22.f, 22.f), R.FRandRange(92.f, 104.f)), R.FRandRange(40.f, 50.f), 0.85f });
+		Cn.Emit(B, 2, 330.f, 21.f, 0);
+		if (bFlowers)
+		{
+			const FLinearColor Col(1.f, 0.4f, 0.f, 1.f);
+			for (int32 f = 0; f < 34; ++f)
+			{
+				const int32 i = R.RandRange(0, Cn.Puffs.Num() - 1);
+				FVector3f D = FVector3f(R.VRand());
+				D.Z = FMath::Abs(D.Z) * 0.8f + 0.2f; D.Normalize();
+				const FVector3f P = Cn.Surface(i, D);
+				if (Cn.Inside(P, i, 0.f)) { continue; }
+				const FVector3f C = P + D * 5.f;
+				const float S = R.FRandRange(4.5f, 7.f);
+				const FVector3f Ax[6] = { {S,0,0}, {-S,0,0}, {0,S,0}, {0,-S,0}, {0,0,S * 0.7f}, {0,0,-S * 0.5f} };
+				const int32 Fc[8][3] = { {0,2,4},{2,1,4},{1,3,4},{3,0,4},{2,0,5},{1,2,5},{3,1,5},{0,3,5} };
+				for (const auto& fc : Fc)
+				{
+					const FVector3f Nrm = (Ax[fc[0]] + Ax[fc[1]] + Ax[fc[2]]).GetSafeNormal() * 0.5f + FVector3f::UpVector * 0.5f;
+					const int32 a = B.V(C + Ax[fc[0]], Nrm, Col), b = B.V(C + Ax[fc[1]], Nrm, Col), c = B.V(C + Ax[fc[2]], Nrm, Col);
+					B.Tri(a, b, c, 1);
+				}
+			}
+		}
+		return B.Build(Outer, *FString::Printf(TEXT("DCShrub_%d_%d"), Seed, bFlowers ? 1 : 0));
+	}
+
+	UStaticMesh* Rock(UObject* Outer, int32 Seed, const FVector& Shape, int32 Cuts, float Depth)
+	{
+		FRandomStream R(Seed);
+		TArray<FVector3f> Vs; TArray<FIntVector> Ts;
+		Icosphere(2, Vs, Ts);
+		const FVector3f Sh(Shape);
+		for (FVector3f& V : Vs) { V = V * Sh * 50.f; }
+		// chisel: slice the ellipsoid with random planes so it ends up as a few large flat faces with crisp edges
+		struct FCut { FVector3f N; float D; };
+		TArray<FCut> Planes;
+		for (int32 c = 0; c < Cuts; ++c)
+		{
+			const FVector3f N = FVector3f(R.VRand());
+			const float Reach = (N * Sh).Size() * 50.f; // how far the ellipsoid extends along N
+			Planes.Add({ N, Reach * R.FRandRange(1.f - Depth, 0.93f) });
+		}
+		for (int32 Pass = 0; Pass < 3; ++Pass)
+		{
+			for (const FCut& Cut : Planes)
+			{
+				for (FVector3f& V : Vs)
+				{
+					const float E = FVector3f::DotProduct(V, Cut.N) - Cut.D;
+					if (E > 0.f) { V -= Cut.N * E; }
+				}
+			}
+		}
+		FBuilder B;
+		const FLinearColor Col(1.f, 0.f, 0.f, 1.f);
+		for (const FIntVector& T : Ts)
+		{
+			const FVector3f A = Vs[T.X], Bb = Vs[T.Y], C = Vs[T.Z];
+			const FVector3f X = FVector3f::CrossProduct(Bb - A, C - A);
+			if (X.SizeSquared() < 0.01f) { continue; }
+			FVector3f Nrm = X.GetSafeNormal();
+			if (FVector3f::DotProduct(Nrm, A + Bb + C) < 0.f) { Nrm = -Nrm; }
+			// snap to the cutting plane this face lies on, so each chiselled face shades as one flat facet
+			for (const FCut& Cut : Planes) { if (FVector3f::DotProduct(Nrm, Cut.N) > 0.985f) { Nrm = Cut.N; break; } }
+			const int32 a = B.V(A, Nrm, Col), b = B.V(Bb, Nrm, Col), c = B.V(C, Nrm, Col);
+			B.Tri(a, b, c);
+		}
+		return B.Build(Outer, *FString::Printf(TEXT("DCRock_%d"), Seed));
+	}
+}

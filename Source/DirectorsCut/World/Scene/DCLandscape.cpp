@@ -185,14 +185,26 @@ void ADCLandscape::InitAssets()
 	MeshLib.Add("Tuft2", DCLandMesh::GrassTuft(this, 6, 0.2f, 37));
 	MeshLib.Add("Flowers0", DCLandMesh::FlowerHeads(this, 3));
 	MeshLib.Add("Flowers1", DCLandMesh::FlowerHeads(this, 8));
-	MeshLib.Add("Clump0", DCLandMesh::Blob(this, 2, 0.16f, false, 5, 1.f));
-	MeshLib.Add("Clump1", DCLandMesh::Blob(this, 2, 0.22f, false, 9, 1.f));
+	// whole plants (a few variants each; the outer belt uses the light "Far" versions)
+	MeshLib.Add("Tree0", DCLandMesh::Broadleaf(this, 101, 1));
+	MeshLib.Add("Tree1", DCLandMesh::Broadleaf(this, 211, 1));
+	MeshLib.Add("Tree2", DCLandMesh::Broadleaf(this, 337, 1));
+	MeshLib.Add("TreeFar0", DCLandMesh::Broadleaf(this, 101, 0));
+	MeshLib.Add("TreeFar1", DCLandMesh::Broadleaf(this, 211, 0));
+	MeshLib.Add("Pine0", DCLandMesh::Pine(this, 41, 1));
+	MeshLib.Add("Pine1", DCLandMesh::Pine(this, 59, 1));
+	MeshLib.Add("PineFar0", DCLandMesh::Pine(this, 41, 0));
+	MeshLib.Add("Shrub0", DCLandMesh::Shrub(this, 5, false));
+	MeshLib.Add("Shrub1", DCLandMesh::Shrub(this, 9, false));
+	MeshLib.Add("ShrubBloom", DCLandMesh::Shrub(this, 14, true));
 	MeshLib.Add("Hill", DCLandMesh::Blob(this, 3, 0.08f, false, 13, 0.f));
-	MeshLib.Add("Rock0", DCLandMesh::Blob(this, 1, 0.3f, true, 17, 0.f));
-	MeshLib.Add("Rock1", DCLandMesh::Blob(this, 1, 0.38f, true, 29, 0.f));
-	MeshLib.Add("Trunk", DCLandMesh::Tube(this, 7, 0.55f));
+	MeshLib.Add("Rock0", DCLandMesh::Rock(this, 17, FVector(1.f, 0.82f, 0.62f), 16, 0.4f));  // field stone
+	MeshLib.Add("Rock1", DCLandMesh::Rock(this, 29, FVector(1.f, 0.9f, 0.85f), 20, 0.38f));  // boulder
+	MeshLib.Add("Rock2", DCLandMesh::Rock(this, 43, FVector(1.1f, 0.8f, 0.4f), 13, 0.45f));  // slab
+	MeshLib.Add("Rock3", DCLandMesh::Rock(this, 61, FVector(0.8f, 0.75f, 1.f), 15, 0.42f));  // standing stone
+	MeshLib.Add("WallStone0", DCLandMesh::Rock(this, 71, FVector(1.f, 1.f, 1.f), 12, 0.45f)); // blocky (dry-stone wall)
+	MeshLib.Add("WallStone1", DCLandMesh::Rock(this, 83, FVector(1.f, 1.f, 1.f), 14, 0.5f));
 	MeshLib.Add("Post", DCLandMesh::Tube(this, 6, 0.9f));
-	MeshLib.Add("Skirt", DCLandMesh::Skirt(this, 9, 41));
 	MeshLib.Add("Disc", DCLandMesh::Disc(this, 40, 0.12f, 7));
 	MeshLib.Add("DiscRound", DCLandMesh::Disc(this, 40, 0.f, 1));
 
@@ -214,11 +226,14 @@ void ADCLandscape::InitAssets()
 	Foliage("PetalYellow", C(0.85f, 0.62f, 0.04f), C(0.95f, 0.80f, 0.10f), C(0.9f, 0.7f, 0.1f), 0.f, 4.f, 1.f);
 	Foliage("PetalViolet", C(0.35f, 0.15f, 0.65f), C(0.55f, 0.30f, 0.80f), C(0.5f, 0.2f, 0.7f), 0.f, 4.f, 1.f);
 	Foliage("PetalRed", C(0.75f, 0.06f, 0.05f), C(0.85f, 0.25f, 0.35f), C(0.8f, 0.1f, 0.1f), 0.f, 4.f, 1.f);
-	Foliage("LeafGreen", C(0.045f, 0.11f, 0.03f), C(0.10f, 0.16f, 0.04f), C(0.16f, 0.2f, 0.05f), 0.35f, 2.f, 0.3f);
-	Foliage("LeafDeep", C(0.03f, 0.08f, 0.03f), C(0.06f, 0.13f, 0.045f), C(0.08f, 0.13f, 0.04f), 0.2f, 2.f, 0.3f);
-	Foliage("LeafGold", C(0.30f, 0.17f, 0.03f), C(0.40f, 0.28f, 0.05f), C(0.5f, 0.2f, 0.03f), 0.3f, 2.f, 0.35f);
-	Foliage("LeafRust", C(0.30f, 0.08f, 0.03f), C(0.40f, 0.15f, 0.04f), C(0.45f, 0.25f, 0.05f), 0.3f, 2.f, 0.35f);
-	Foliage("Pine", C(0.02f, 0.07f, 0.04f), C(0.04f, 0.10f, 0.05f), C(0.04f, 0.08f, 0.04f), 0.f, 1.f, 0.25f);
+	Foliage("LeafGreen", C(0.045f, 0.11f, 0.03f), C(0.10f, 0.16f, 0.04f), C(0.16f, 0.2f, 0.05f), 0.35f, 2.f, 0.26f);
+	Foliage("LeafDeep", C(0.03f, 0.08f, 0.03f), C(0.06f, 0.13f, 0.045f), C(0.08f, 0.13f, 0.04f), 0.2f, 2.f, 0.26f);
+	Foliage("LeafGold", C(0.30f, 0.17f, 0.03f), C(0.40f, 0.28f, 0.05f), C(0.5f, 0.2f, 0.03f), 0.3f, 2.f, 0.26f);
+	Foliage("LeafRust", C(0.30f, 0.08f, 0.03f), C(0.40f, 0.15f, 0.04f), C(0.45f, 0.25f, 0.05f), 0.3f, 2.f, 0.26f);
+	Foliage("LeafFresh", C(0.07f, 0.15f, 0.03f), C(0.12f, 0.19f, 0.04f), C(0.24f, 0.27f, 0.06f), 0.3f, 2.f, 0.32f);
+	Foliage("Pine", C(0.02f, 0.07f, 0.04f), C(0.04f, 0.10f, 0.05f), C(0.08f, 0.16f, 0.07f), 0.f, 1.f, 0.25f);
+	Foliage("PineBlue", C(0.025f, 0.075f, 0.055f), C(0.04f, 0.10f, 0.07f), C(0.09f, 0.17f, 0.11f), 0.f, 1.f, 0.25f);
+	Foliage("Shrub", C(0.05f, 0.12f, 0.03f), C(0.09f, 0.17f, 0.04f), C(0.18f, 0.22f, 0.05f), 0.3f, 1.f, 0.3f);
 	Foliage("Hedge", C(0.035f, 0.10f, 0.025f), C(0.07f, 0.15f, 0.035f), C(0.12f, 0.14f, 0.04f), 0.3f, 1.f, 0.3f);
 
 	// ---- hard surfaces (M_DC_Proc)
@@ -226,6 +241,7 @@ void ADCLandscape::InitAssets()
 	Proc("Timber", 1, C(0.24f, 0.20f, 0.15f), C(0.12f, 0.10f, 0.08f), 0.85f, 1.f, 0.6f, 0.f);
 	Proc("TimberV", 1, C(0.24f, 0.20f, 0.15f), C(0.12f, 0.10f, 0.08f), 0.85f, 1.f, 0.6f, 1.f);
 	Proc("Stone", 3, C(0.34f, 0.33f, 0.30f), C(0.16f, 0.155f, 0.14f), 0.9f, 1.f, 0.8f);
+	Proc("StoneWarm", 3, C(0.38f, 0.34f, 0.27f), C(0.19f, 0.165f, 0.13f), 0.9f, 1.f, 0.8f);
 	Proc("StoneDark", 3, C(0.20f, 0.19f, 0.18f), C(0.09f, 0.09f, 0.085f), 0.9f, 1.f, 0.8f);
 	Proc("Hay", 12, C(0.52f, 0.40f, 0.15f), C(0.3f, 0.22f, 0.08f), 0.95f, 1.f, 0.3f);
 	Proc("BarnRed", 1, C(0.26f, 0.05f, 0.03f), C(0.14f, 0.03f, 0.02f), 0.8f, 1.f, 0.6f, 1.f);
@@ -247,15 +263,17 @@ void ADCLandscape::InitAssets()
 // Primitive helpers
 // =====================================================================================================================
 
-UInstancedStaticMeshComponent* ADCLandscape::Batch(FName MeshKey, FName MatKey, bool bShadow, bool bCollide)
+UInstancedStaticMeshComponent* ADCLandscape::Batch(FName MeshKey, FName MatKey, bool bShadow, bool bCollide, FName Mat1Key)
 {
-	const uint64 Key = ((uint64)GetTypeHash(MeshKey) << 32) ^ ((uint64)GetTypeHash(MatKey) << 1) ^ (bShadow ? 1ull : 0ull) ^ (bCollide ? 0x8000000000000000ull : 0ull);
+	uint64 Key = ((uint64)GetTypeHash(MeshKey) << 32) ^ ((uint64)GetTypeHash(MatKey) << 1) ^ (bShadow ? 1ull : 0ull) ^ (bCollide ? 0x8000000000000000ull : 0ull);
+	if (!Mat1Key.IsNone()) { Key ^= (uint64)GetTypeHash(Mat1Key) * 0x9E3779B97F4A7C15ull; }
 	if (TObjectPtr<UInstancedStaticMeshComponent>* F = Batches.Find(Key)) { return F->Get(); }
 	const TObjectPtr<UStaticMesh>* Mesh = MeshLib.Find(MeshKey);
 	if (!Mesh || !*Mesh) { return nullptr; }
 	UInstancedStaticMeshComponent* ISM = NewObject<UInstancedStaticMeshComponent>(this);
 	ISM->SetStaticMesh(*Mesh);
 	if (UMaterialInterface* Mat = M(MatKey)) { ISM->SetMaterial(0, Mat); }
+	if (UMaterialInterface* Mat1 = M(Mat1Key)) { ISM->SetMaterial(1, Mat1); }
 	ISM->SetMobility(EComponentMobility::Static);
 	ISM->SetCastShadow(bShadow);
 	ISM->bAffectDistanceFieldLighting = false;
@@ -281,6 +299,11 @@ UInstancedStaticMeshComponent* ADCLandscape::Batch(FName MeshKey, FName MatKey, 
 void ADCLandscape::Add(FName MeshKey, FName MatKey, const FTransform& T, bool bShadow)
 {
 	if (UInstancedStaticMeshComponent* ISM = Batch(MeshKey, MatKey, bShadow)) { ISM->AddInstance(T, true); }
+}
+
+void ADCLandscape::Add2(FName MeshKey, FName Mat0Key, FName Mat1Key, const FTransform& T, bool bShadow)
+{
+	if (UInstancedStaticMeshComponent* ISM = Batch(MeshKey, Mat0Key, bShadow, false, Mat1Key)) { ISM->AddInstance(T, true); }
 }
 
 void ADCLandscape::Box(FName MatKey, const FVector& Ctr, const FVector& Size, const FRotator& R, bool bShadow)
@@ -532,6 +555,8 @@ void ADCLandscape::TickShots()
 		FVector Pivot = B.GetCenter(); Pivot.Z = 0.f;
 		float Dist = B.GetExtent().Size2D() / FMath::Tan(FMath::DegreesToRadians(9.f)) * 0.82f;
 		if (Frame == TEXT("far")) { Dist *= 1.3f; Pivot += FVector(1500.f, 1500.f, 0.f); }
+		else if (Frame == TEXT("trees")) { Dist *= 0.3f; Pivot = FVector(2000.f, -900.f, 150.f); }   // specimen trees beside the yard
+		else if (Frame == TEXT("wall")) { Dist *= 0.22f; Pivot = FVector(-1500.f, DCSite::LaneY - 430.f, 0.f); } // dry-stone wall
 		else if (Frame == TEXT("close")) { Dist *= 0.4f; Pivot = FVector(DCSite::YardRect().GetCenter().X, DCSite::YardRect().Max.Y, 0.f); }
 		const FRotator Rot(-35.f, 45.f, 0.f);
 		ShotCam->SetActorLocationAndRotation(Pivot - Rot.Vector() * Dist, Rot);

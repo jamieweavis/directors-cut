@@ -71,8 +71,10 @@ protected:
 	bool bToonOn = false;
 
 	/** Instanced batch keyed by mesh + material (one ISM each). */
-	UInstancedStaticMeshComponent* Batch(FName MeshKey, FName MatKey, bool bShadow, bool bCollide = false);
+	UInstancedStaticMeshComponent* Batch(FName MeshKey, FName MatKey, bool bShadow, bool bCollide = false, FName Mat1Key = NAME_None);
 	void Add(FName MeshKey, FName MatKey, const FTransform& T, bool bShadow = true);
+	/** Two-slot meshes (whole trees: bark + foliage; flowering shrubs: leaves + blossom). */
+	void Add2(FName MeshKey, FName Mat0Key, FName Mat1Key, const FTransform& T, bool bShadow = true);
 	/** Engine-primitive helpers (cube/cylinder/sphere sized in cm, pivot centre). */
 	void Box(FName MatKey, const FVector& C, const FVector& Size, const FRotator& R = FRotator::ZeroRotator, bool bShadow = true);
 	void Rod(FName MatKey, const FVector& A, const FVector& B, float Thick, bool bShadow = true, bool bRound = false);

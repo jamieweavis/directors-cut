@@ -204,14 +204,31 @@ void ADCLandscape::BuildVegetation()
 			Add(k % 2 ? FName("Flowers0") : FName("Flowers1"), Pet, FTransform(FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f), FVector(P.X, P.Y, GroundTop), FVector(S, S, R.FRandRange(0.8f, 1.2f))), false);
 		}
 	}
-	// scattered field rocks
-	for (int32 i = 0, Placed = 0; i < 300 && Placed < 60; ++i)
+	// field stones: a main rock with a couple of chips beside it and long grass grown up round the base
+	const FName Rocks[4] = { "Rock0", "Rock1", "Rock2", "Rock3" };
+	const FName Stones[3] = { "Stone", "StoneWarm", "StoneDark" };
+	for (int32 i = 0, Placed = 0; i < 300 && Placed < 54; ++i)
 	{
 		const FVector2D P(R.FRandRange(-9000.f, 9000.f), R.FRandRange(-9000.f, 9000.f));
-		if (Blocked(P, 150.f, false) || BuildingClearRect().IsInside(P)) { continue; }
+		if (Blocked(P, 220.f, false) || BuildingClearRect().ExpandBy(150.f).IsInside(P)) { continue; }
 		++Placed;
-		const float S = R.FRandRange(0.4f, 1.6f);
-		Add(i % 2 ? FName("Rock0") : FName("Rock1"), i % 3 ? FName("Stone") : FName("StoneDark"), FTransform(FRotator(R.FRandRange(-12.f, 12.f), R.FRandRange(0.f, 360.f), 0.f), FVector(P.X, P.Y, GroundTop - S * 8.f), FVector(S, S * R.FRandRange(0.6f, 1.f), S * R.FRandRange(0.4f, 0.7f))));
+		const float S = R.FRand() < 0.2f ? R.FRandRange(1.7f, 2.5f) : R.FRandRange(0.7f, 1.4f);
+		const FName Mat = Stones[R.RandRange(0, 2)];
+		const int32 Main = R.RandRange(0, 3);
+		const float MainZ = (Main == 3 ? 1.f : (Main == 2 ? 0.4f : 0.7f)) * 50.f * S;
+		Add(Rocks[Main], Mat, FTransform(FRotator(R.FRandRange(-7.f, 7.f), R.FRandRange(0.f, 360.f), R.FRandRange(-7.f, 7.f)), FVector(P.X, P.Y, GroundTop + MainZ * 0.55f), FVector(S, S, S)));
+		const int32 Chips = R.RandRange(1, 3);
+		for (int32 k = 0; k < Chips; ++k)
+		{
+			const float A = R.FRandRange(0.f, 2.f * PI), D = S * R.FRandRange(48.f, 78.f), Sc = S * R.FRandRange(0.22f, 0.45f);
+			Add(Rocks[R.RandRange(0, 2)], Mat, FTransform(FRotator(R.FRandRange(-12.f, 12.f), R.FRandRange(0.f, 360.f), R.FRandRange(-12.f, 12.f)), FVector(P.X + FMath::Cos(A) * D, P.Y + FMath::Sin(A) * D, GroundTop + Sc * 12.f), FVector(Sc, Sc, Sc)));
+		}
+		const int32 Skirts = R.RandRange(5, 8);
+		for (int32 k = 0; k < Skirts; ++k)
+		{
+			const float A = R.FRandRange(0.f, 2.f * PI), D = S * R.FRandRange(42.f, 62.f);
+			Add(Tufts[k % 3], "Grass", FTransform(FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f), FVector(P.X + FMath::Cos(A) * D, P.Y + FMath::Sin(A) * D, GroundTop), FVector(0.9f, 0.9f, R.FRandRange(0.4f, 0.75f))), false);
+		}
 	}
 }
 
@@ -222,60 +239,37 @@ void ADCLandscape::BuildVegetation()
 void ADCLandscape::Tree(const FVector& Base, float Height, int32 Kind, uint32 Seed)
 {
 	FRandomStream R(Seed);
-	const float Yaw = R.FRandRange(0.f, 360.f);
+	const FRotator Yaw(0.f, R.FRandRange(0.f, 360.f), 0.f);
+	const bool bFar = Base.Size2D() > 7400.f; // the outer belt is only ever seen small: light meshes
+	if (Kind == 3) // shrub (Height = its height in cm)
+	{
+		const float S = Height / 130.f;
+		const FVector At = Base - FVector(0.f, 0.f, 5.f * S);
+		const FVector Sc(S * R.FRandRange(0.9f, 1.15f), S * R.FRandRange(0.9f, 1.15f), S);
+		if (R.FRand() < 0.3f)
+		{
+			const FName Petals[4] = { "PetalWhite", "PetalYellow", "PetalViolet", "PetalRed" };
+			Add2("ShrubBloom", "Shrub", Petals[R.RandRange(0, 3)], FTransform(Yaw, At, Sc));
+		}
+		else { Add(R.FRand() < 0.5f ? FName("Shrub0") : FName("Shrub1"), R.FRand() < 0.5f ? FName("Shrub") : FName("Hedge"), FTransform(Yaw, At, Sc)); }
+		return;
+	}
+	const float S = Height / 1000.f;
+	const float W = S * R.FRandRange(0.92f, 1.12f);
+	const FTransform T(Yaw, Base, FVector(W, W, S));
 	if (Kind == 2) // pine
 	{
-		Add("Trunk", "Bark", FTransform(FRotator(0.f, Yaw, 0.f), Base, FVector(Height * 0.028f / 50.f, Height * 0.028f / 50.f, Height * 0.5f / 100.f)));
-		const int32 Tiers = 4;
-		for (int32 t = 0; t < Tiers; ++t)
-		{
-			const float u = (float)t / Tiers;
-			const float Rad = Height * 0.27f * (1.f - 0.2f * t);
-			const float Z = Height * (0.18f + 0.2f * t);
-			Add("Skirt", "Pine", FTransform(FRotator(0.f, Yaw + t * 37.f, 0.f), Base + FVector(0, 0, Z), FVector(Rad / 50.f, Rad / 50.f, Height * (0.42f - 0.04f * t) / 100.f)));
-			(void)u;
-		}
+		const FName Mesh = bFar ? FName("PineFar0") : (R.FRand() < 0.5f ? FName("Pine0") : FName("Pine1"));
+		Add2(Mesh, "Bark", R.FRand() < 0.3f ? FName("PineBlue") : FName("Pine"), T);
 		return;
 	}
-	if (Kind == 3) // bush
-	{
-		const int32 N = R.RandRange(2, 4);
-		for (int32 i = 0; i < N; ++i)
-		{
-			const float S = Height * R.FRandRange(0.35f, 0.55f) / 50.f;
-			const FVector Off(R.FRandRange(-0.3f, 0.3f) * Height, R.FRandRange(-0.3f, 0.3f) * Height, Height * 0.35f);
-			Add(i % 2 ? FName("Clump0") : FName("Clump1"), "Hedge", FTransform(FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f), Base + Off, FVector(S, S, S * 0.75f)));
-		}
-		return;
-	}
-	// broadleaf
-	const float TrunkR = Height * 0.035f;
-	const float TrunkH = Height * 0.58f;
-	const FRotator Lean(R.FRandRange(-4.f, 4.f), Yaw, R.FRandRange(-4.f, 4.f));
-	Add("Trunk", "Bark", FTransform(Lean, Base - FVector(0, 0, 10.f), FVector(TrunkR / 50.f, TrunkR / 50.f, (TrunkH + 10.f) / 100.f)));
-	const FVector Top = Base + Lean.RotateVector(FVector(0, 0, TrunkH));
-	// two or three limbs
-	const int32 Limbs = R.RandRange(2, 3);
-	for (int32 l = 0; l < Limbs; ++l)
-	{
-		const FRotator LR(R.FRandRange(30.f, 50.f), Yaw + l * (360.f / Limbs) + R.FRandRange(-20.f, 20.f), 0.f);
-		const FVector Dir = FRotationMatrix(FRotator(90.f - LR.Pitch, LR.Yaw, 0.f)).GetUnitAxis(EAxis::X);
-		Add("Trunk", "Bark", FTransform(FRotationMatrix::MakeFromZ(Dir).Rotator(), Top - FVector(0, 0, Height * 0.1f), FVector(TrunkR * 0.55f / 50.f, TrunkR * 0.55f / 50.f, Height * 0.3f / 100.f)));
-	}
-	// canopy: clustered lumps of varied greens (some autumn)
-	const FName GreenSet[2] = { "LeafGreen", "LeafDeep" };
-	const FName AutumnSet[3] = { "LeafGold", "LeafRust", "LeafGreen" };
-	const int32 N = R.RandRange(6, 9);
-	const FVector CC = Top + FVector(0, 0, Height * 0.12f);
-	for (int32 i = 0; i < N; ++i)
-	{
-		const float A = R.FRandRange(0.f, 2.f * PI);
-		const float D = (i == 0) ? 0.f : R.FRandRange(0.12f, 0.27f) * Height;
-		const FVector P = CC + FVector(FMath::Cos(A) * D, FMath::Sin(A) * D, R.FRandRange(-0.08f, 0.16f) * Height - D * 0.25f);
-		const float S = Height * R.FRandRange(0.17f, 0.24f) / 50.f;
-		const FName Mat = (Kind == 1) ? AutumnSet[R.RandRange(0, 2)] : GreenSet[(i + Seed) % 2 == 0 ? 0 : (R.FRand() < 0.6f ? 0 : 1)];
-		Add(i % 2 ? FName("Clump0") : FName("Clump1"), Mat, FTransform(FRotator(R.FRandRange(-15.f, 15.f), R.FRandRange(0.f, 360.f), 0.f), P, FVector(S, S, S * 0.82f)));
-	}
+	// broadleaf: one leaf colour per tree (each instance also drifts between its material's two greens)
+	const FName Near[3] = { "Tree0", "Tree1", "Tree2" };
+	const FName Far[2] = { "TreeFar0", "TreeFar1" };
+	const FName Green[3] = { "LeafGreen", "LeafDeep", "LeafFresh" };
+	const FName Autumn[2] = { "LeafGold", "LeafRust" };
+	const FName Mesh = bFar ? Far[R.RandRange(0, 1)] : Near[R.RandRange(0, 2)];
+	Add2(Mesh, "Bark", Kind == 1 ? Autumn[R.RandRange(0, 1)] : Green[R.RandRange(0, 2)], T);
 }
 
 void ADCLandscape::BuildTrees()
@@ -406,7 +400,7 @@ void ADCLandscape::BuildFieldsAndFences()
 			const float XX = X + (Course % 2) * 26.f + R.FRandRange(-6.f, 6.f);
 			const float S = (Course == 2) ? R.FRandRange(0.38f, 0.5f) : R.FRandRange(0.55f, 0.75f);
 			const float Z = GroundTop + 18.f + Course * 30.f;
-			Add(Course % 2 ? FName("Rock0") : FName("Rock1"), R.FRand() < 0.4f ? FName("StoneDark") : FName("Stone"),
+			Add(Course % 2 ? FName("WallStone0") : FName("WallStone1"), R.FRand() < 0.35f ? FName("StoneDark") : (R.FRand() < 0.5f ? FName("StoneWarm") : FName("Stone")),
 				FTransform(FRotator(R.FRandRange(-10.f, 10.f), R.FRandRange(-15.f, 15.f), Course == 2 ? 70.f : 0.f), FVector(XX, BoundaryY + R.FRandRange(-6.f, 6.f), Z), FVector(S * 1.1f, S * 0.75f, S * 0.6f)));
 		}
 	}
@@ -414,16 +408,16 @@ void ADCLandscape::BuildFieldsAndFences()
 	for (float X = StubbleField.Min.X - 300.f; X < StubbleField.Max.X + 400.f; X += 170.f)
 	{
 		if (FMath::Abs(X - 3600.f) < 250.f) { continue; }
-		const float S = R.FRandRange(2.6f, 3.4f);
-		Add(R.FRand() < 0.5f ? FName("Clump0") : FName("Clump1"), "Hedge", FTransform(FRotator(0.f, R.FRandRange(-20.f, 20.f), 0.f), FVector(X, BoundaryY + R.FRandRange(-20.f, 20.f), GroundTop + 60.f), FVector(S, S * 0.65f, S * 0.7f)));
+		const float S = R.FRandRange(0.9f, 1.15f);
+		Add(R.FRand() < 0.5f ? FName("Shrub0") : FName("Shrub1"), "Hedge", FTransform(FRotator(0.f, R.FRandRange(-20.f, 20.f) + (R.FRand() < 0.5f ? 180.f : 0.f), 0.f), FVector(X, BoundaryY + R.FRandRange(-20.f, 20.f), GroundTop - 6.f), FVector(S * 1.3f, S * 0.95f, S * 1.4f)));
 	}
 	Tree(FVector(5200.f, BoundaryY - 60.f, GroundTop), 1000.f, 0, 4401);
 	Tree(FVector(1900.f, BoundaryY - 80.f, GroundTop), 820.f, 1, 4402);
 	// short hedge along the far side of both fields
 	for (float X = -7400.f; X < 7400.f; X += 190.f)
 	{
-		const float S = R.FRandRange(2.4f, 3.2f);
-		Add("Clump0", "Hedge", FTransform(FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f), FVector(X, SoilField.Min.Y - 150.f + R.FRandRange(-20.f, 20.f), GroundTop + 50.f), FVector(S, S * 0.7f, S * 0.65f)));
+		const float S = R.FRandRange(0.85f, 1.1f);
+		Add(R.FRand() < 0.5f ? FName("Shrub0") : FName("Shrub1"), "Hedge", FTransform(FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f), FVector(X, SoilField.Min.Y - 150.f + R.FRandRange(-20.f, 20.f), GroundTop - 6.f), FVector(S * 1.3f, S * 1.1f, S * 1.25f)));
 	}
 }
 

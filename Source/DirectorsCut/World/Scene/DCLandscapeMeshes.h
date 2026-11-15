@@ -21,6 +21,16 @@ namespace DCLandMesh
 	UStaticMesh* Tube(UObject* Outer, int32 Sides, float TopScale);
 	/** Drooping cone skirt (pine tier): radius 50 at z=0 rising to a point at z=100. */
 	UStaticMesh* Skirt(UObject* Outer, int32 Sides, int32 Seed);
+	/** Whole broadleaf tree, 10 m tall at scale 1, base at z=0. Slot M0 = bark (flared trunk + limbs), M1 = foliage: a crown
+	 *  of rounded lumps that shades as one volume, coated in leaf cards (vertex B = accent tint). Detail 0 = distant. */
+	UStaticMesh* Broadleaf(UObject* Outer, int32 Seed, int32 Detail);
+	/** Whole conifer, 10 m tall at scale 1: trunk (M0) + tiers of swooping, star-rimmed boughs (M1). Detail 0 = distant. */
+	UStaticMesh* Pine(UObject* Outer, int32 Seed, int32 Detail);
+	/** Leafy shrub ~2.6 m across and ~1.3 m tall at scale 1, base at z=0 (M0 foliage). bFlowers adds blossom in slot M1. */
+	UStaticMesh* Shrub(UObject* Outer, int32 Seed, bool bFlowers);
+	/** Chiselled rock: an ellipsoid (radius 50 * Shape, centred on the origin) sliced by Cuts random planes into flat
+	 *  faces. Depth 0..1 = how deep the cuts may go. */
+	UStaticMesh* Rock(UObject* Outer, int32 Seed, const FVector& Shape, int32 Cuts, float Depth);
 	/** Flat irregular disc of radius ~50 at z=0 (top face only), wobble 0..0.3. */
 	UStaticMesh* Disc(UObject* Outer, int32 Sides, float Wobble, int32 Seed);
 	/** Extruded polygon (counter-clockwise outline, cm): top face at Z1 + side walls down to Z0. No bottom. */

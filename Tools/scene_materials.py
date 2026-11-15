@@ -733,6 +733,7 @@ FOLIAGE_CODE = NOISE_LIB + r"""
 float3 col = lerp(ColorA.rgb, ColorB.rgb, R);
 float macro = d.fbm(float3(P.xy * 0.0006, 4.2));
 col = lerp(col, ColorC.rgb, smoothstep(0.42, 0.75, macro) * CMix);
+col = lerp(col, ColorC.rgb, saturate(VC.b) * 0.7); // leaf cards / bough tips tinted towards the accent colour
 col *= lerp(AOMin, 1.12, saturate(VC.r));
 return col;
 """
