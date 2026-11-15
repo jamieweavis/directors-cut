@@ -11,8 +11,8 @@
 // unplaced one is parked off-site and hidden. Whenever a placement or a room's stage changes, the builder regenerates
 // the whole house: per cell a floor, and per edge either a tall back wall (exterior +X/+Y), a low stub (exterior
 // -X/-Y) or a low partition stub with a doorway gap at the edge midpoint (two finished rooms; built by the -side room). A room
-// under its first build is a slab + timber frame + scaffold. The Office is furnished by a layout solver that fits
-// its shape and connections (DCHideoutFurnish.cpp); the other rooms are EMPTY for now. One clickable station covers
+// under its first build is a slab + timber frame + scaffold. Rooms are furnished by a layout solver that fits
+// their shape and connections (DCHideoutFurnish*.cpp, one recipe per room); the Garage is EMPTY for now. One clickable station covers
 // each whole room and opens its panel. No house geometry collides (pawns path through the doorway midpoints).
 //
 // Dev flags (World/Scene only):
@@ -30,6 +30,7 @@
 #include "DCHideoutBuilder.generated.h"
 
 class ADCRoomModule;
+namespace DCFurnish { struct FCtx; }
 class ADCStation;
 class ADCDayNight;
 class UStaticMesh;
@@ -262,7 +263,7 @@ protected:
 	/** Scaffolding along edge E, just outside the room (E < 0: none). */
 	void EdgeScaffold(const FVector2D Q[4], int32 E, float H);
 
-	// ---------------------------------------------------------------- furnishing (DCHideoutFurnish.cpp)
+	// ---------------------------------------------------------------- furnishing (DCHideoutFurnish*.cpp)
 	/** Lays furniture out to fit the room's real shape and connections, then draws it. EdgeKind per edge (see
 	 *  DCSite::Grid::Corners): 0 tall wall, 1 low partition with a centred doorway, 2 collapsed open front.
 	 *  bExit: pawns walk out over that edge. WallSeed: the per-edge seed TallEdge used (windows).
@@ -270,6 +271,14 @@ protected:
 	 *  without it). Run it BEFORE the walls. Returns false if the room type has no furnishing (the caller then lights
 	 *  the room itself). */
 	bool FurnishGridRoom(ADCRoomModule* Room, const FVector2D Q[4], const int32 EdgeKind[4], const bool bExit[4], const bool bStepStart[4], const bool bStepEnd[4], float H, int32 WallSeed, int32 Seed, uint8 OutOmitWindows[4]);
+	// One recipe per room type, each in its own file (DCHideoutFurnish<Room>.cpp). The Garage has none yet.
+	void FurnishOffice(DCFurnish::FCtx& C);
+	void FurnishLounge(DCFurnish::FCtx& C);
+	void FurnishWorkshop(DCFurnish::FCtx& C);
+	void FurnishOpsRoom(DCFurnish::FCtx& C);
+	void FurnishClinic(DCFurnish::FCtx& C);
+	void FurnishServerRoom(DCFurnish::FCtx& C);
+	void FurnishLawyer(DCFurnish::FCtx& C);
 
 	// ---------------------------------------------------------------- runtime FX
 	struct FFlicker { TWeakObjectPtr<ULightComponent> Light; float Base; float Rate; float Depth; float Seed; };
