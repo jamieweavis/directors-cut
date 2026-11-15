@@ -87,7 +87,7 @@ TSharedRef<SWidget> SDCRoot::StatusChip(const FDCCriminal& C)
 	const FLinearColor SC = StatusColor(C);
 	return Pill(
 		SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 4.f, 0.f)[Icon(StatusIcon(C), 10.f, SC)]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 4.f, 0.f)[Icon(StatusIcon(C), 12.f, SC)]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 		[TxtA(TAttribute<FText>::CreateLambda([RR, CId]()
 			{
@@ -176,10 +176,10 @@ TSharedRef<SWidget> SDCRoot::CrewCard(const FDCCriminal& C, bool bRecruit)
 		];
 
 	TSharedRef<SWidget> Kit = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[AbilityChips(C, 10.f)]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.f, 0.f, 0.f, 0.f)[TraitChips(R ? R->GetAllTraits(CId) : C.Traits, 10.f)]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[AbilityChips(C, 14.f)]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.f, 0.f, 0.f, 0.f)[TraitChips(R ? R->GetAllTraits(CId) : C.Traits, 14.f)]
 		+ SHorizontalBox::Slot().FillWidth(1.f)[SNullWidget::NullWidget]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[bRecruit ? SNullWidget::NullWidget : GearSlots(C, 10.f)];
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[bRecruit ? SNullWidget::NullWidget : GearSlots(C, 14.f)];
 
 	TSharedRef<SVerticalBox> Content = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()[Head]
@@ -382,18 +382,18 @@ TSharedRef<SWidget> SDCRoot::GearCard(const FDCGearItem& G, bool bStash)
 	auto RR = [this]() { return Run(); };
 	TSharedRef<SHorizontalBox> Stats = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-		[SNew(SBox).ToolTip(Tip(FString::Printf(TEXT("%s slot"), DC::SlotName(G.Slot)), FString(), DC::SlotIcon(G.Slot)))[Icon(DC::SlotIcon(G.Slot), 10.f, TextFaint)]];
+		[SNew(SBox).ToolTip(Tip(FString::Printf(TEXT("%s slot"), DC::SlotName(G.Slot)), FString(), DC::SlotIcon(G.Slot)))[Icon(DC::SlotIcon(G.Slot), 13.f, TextFaint)]];
 	if (G.Power > 0.f)
 	{
 		Stats->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0.f, 0.f, 0.f)
-		[SNew(SBox).ToolTip(Tip(TEXT("Power"), TEXT("Adds to effective level"), TEXT("chevrons-up"), Info))[IconText(TEXT("chevrons-up"), FString::Printf(TEXT("+%.1f"), G.Power), Mono(9.f), Info, Info, 10.f, 3.f)]];
+		[SNew(SBox).ToolTip(Tip(TEXT("Power"), TEXT("Adds to effective level"), TEXT("chevrons-up"), Info))[IconText(TEXT("chevrons-up"), FString::Printf(TEXT("+%.1f"), G.Power), Mono(10.f), Info, Info, 13.f, 3.f)]];
 	}
 	if (G.Counters != EDCThreat::MAX)
 	{
 		Stats->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0.f, 0.f, 0.f)
 		[SNew(SBox).ToolTip(Tip(FString::Printf(TEXT("Counters %s"), DC::ThreatName(G.Counters)), FString(), DC::ThreatIcon(G.Counters), Good))
-			[IconText(TEXT("shield-check"), FString(), Mono(9.f), Good, Good, 10.f, 0.f)]];
-		Stats->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(2.f, 0.f, 0.f, 0.f)[Icon(DC::ThreatIcon(G.Counters), 10.f, Good)];
+			[IconText(TEXT("shield-check"), FString(), Mono(10.f), Good, Good, 13.f, 0.f)]];
+		Stats->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(2.f, 0.f, 0.f, 0.f)[Icon(DC::ThreatIcon(G.Counters), 13.f, Good)];
 	}
 	if (!G.TraitId.IsNone())
 	{
@@ -401,7 +401,7 @@ TSharedRef<SWidget> SDCRoot::GearCard(const FDCGearItem& G, bool bStash)
 		const FDCTrait* Tr = R ? R->FindTrait(G.TraitId) : nullptr;
 		Stats->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0.f, 0.f, 0.f)
 		[SNew(SBox).ToolTip(Tip(Tr ? Tr->DisplayName : G.TraitId.ToString(), Tr ? Tr->Description : FString(), Tr ? Tr->Icon : FName(TEXT("sparkle")), Hex(0xC4B5FD)))
-			[Icon(Tr ? Tr->Icon : FName(TEXT("sparkle")), 10.f, (Tr && Tr->bNegative) ? Bad : Hex(0xC4B5FD))]];
+			[Icon(Tr ? Tr->Icon : FName(TEXT("sparkle")), 13.f, (Tr && Tr->bNegative) ? Bad : Hex(0xC4B5FD))]];
 	}
 
 	TSharedRef<SWidget> Action = SNullWidget::NullWidget;

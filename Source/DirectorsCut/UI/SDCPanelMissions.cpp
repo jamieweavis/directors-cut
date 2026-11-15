@@ -616,7 +616,7 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 			for (EDCThreat T : R->GetCounters(CId))
 			{
 				const bool bUseful = M.Threats.Contains(T);
-				Ctr->AddSlot().AutoWidth().Padding(1.f, 0.f)[Icon(DC::ThreatIcon(T), 10.f, bUseful ? Good : TextFaint)];
+				Ctr->AddSlot().AutoWidth().Padding(1.f, 0.f)[Icon(DC::ThreatIcon(T), 13.f, bUseful ? Good : TextFaint)];
 			}
 			Inner = SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
@@ -749,7 +749,7 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 		if (const FDCCriminal* C = R->FindCriminal(H.CriminalId)) { Who = C->GetShortName() + TEXT(" · "); }
 		TSharedRef<SWidget> Chip = Pill(
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 5.f, 0.f)[Icon(H.Icon.IsNone() ? FName(TEXT("sparkle")) : H.Icon, 10.f, MC)]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 5.f, 0.f)[Icon(H.Icon.IsNone() ? FName(TEXT("sparkle")) : H.Icon, 12.f, MC)]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 			[Txt(!FMath::IsNearlyZero(H.ChanceDelta) ? SignedPct(H.ChanceDelta) : (!FMath::IsNearlyEqual(H.DurationMult, 1.f) ? FString::Printf(TEXT("x%.2f"), H.DurationMult) : FString::Printf(TEXT("x%.2f"), H.PayoutMult)), Mono(9.f), MC)],
 			A(MC, 0.10f), FMargin(8.f, 3.f), A(MC, 0.25f));
@@ -1003,10 +1003,10 @@ TSharedRef<SWidget> SDCRoot::BuildPlanner()
 			const bool bOnMission = M.Threats.Contains(T);
 			Ctr->AddSlot().AutoWidth().Padding(0.f, 0.f, 3.f, 0.f)
 			[
-				SNew(SBox).WidthOverride(20.f).HeightOverride(20.f)
+				SNew(SBox).WidthOverride(22.f).HeightOverride(22.f)
 				[
 					SNew(SBorder).BorderImage(bNeeded ? Box(A(Good, 0.18f), 5.f, A(Good, 0.55f), 1.f) : NoBrush()).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(0.f)
-					[Icon(DC::ThreatIcon(T), 11.f, bNeeded ? Good : (bOnMission ? TextDim : TextFaint))]
+					[Icon(DC::ThreatIcon(T), 13.f, bNeeded ? Good : (bOnMission ? TextDim : TextFaint))]
 				]
 			];
 		}
