@@ -1,4 +1,4 @@
-// Director's Cut — a crew car built from primitives (World owns). One per mission slot, parked in the yard
+// Director's Cut — a crew car built from generated rounded shells (DCLandMesh::Loft) and a few primitives (World owns). One per mission slot, parked in the yard
 // (DCSite::ParkingSlot). Drives smooth spline routes (DCSite::DepartRoute) with acceleration, cornering, braking,
 // steering wheels that spin, body pitch/roll, headlights at night, brake glow, and doors that pop open for boarding.
 #pragma once

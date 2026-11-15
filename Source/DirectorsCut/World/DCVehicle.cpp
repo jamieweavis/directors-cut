@@ -4,6 +4,7 @@
 #include "Core/DCSiteLayout.h"
 #include "Core/DCRunSubsystem.h"
 #include "Core/DCSettings.h"
+#include "World/Scene/DCLandscapeMeshes.h"
 #include "DirectorsCut.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SpotLightComponent.h"
@@ -38,6 +39,17 @@ namespace
 		const FVector B1 = (T2 - U) / (T2 - T0) * A1 + (U - T0) / (T2 - T0) * A2;
 		const FVector B2 = (T3 - U) / (T3 - T1) * A2 + (U - T1) / (T3 - T1) * A3;
 		return (T2 - U) / (T2 - T1) * B1 + (U - T1) / (T2 - T1) * B2;
+	}
+
+	/** Generated car meshes, shared between cars (kept alive by the components that use them). */
+	TMap<FString, TWeakObjectPtr<UStaticMesh>> GCarMeshes;
+	template <typename FMake>
+	UStaticMesh* CachedMesh(const FString& Key, FMake&& Make)
+	{
+		if (const TWeakObjectPtr<UStaticMesh>* Found = GCarMeshes.Find(Key)) { if (Found->IsValid()) { return Found->Get(); } }
+		UStaticMesh* Mesh = Make();
+		GCarMeshes.Add(Key, Mesh);
+		return Mesh;
 	}
 
 	const FLinearColor Paints[] = {
@@ -115,7 +127,7 @@ void ADCVehicle::Setup(int32 Seed)
 
 void ADCVehicle::BuildBody(int32 Seed)
 {
-	FRandomStream R(0xCA2 + Seed * 7919);
+	using DCLandMesh::FLoftSection;
 	Style = (EDCCarStyle)(Seed % 4 == 0 ? 0 : Seed % 4 == 1 ? 1 : Seed % 4 == 2 ? 3 : 2); // hatch, estate, van, pickup, ...
 	const FLinearColor Paint = Paints[(Seed * 5 + 3) % UE_ARRAY_COUNT(Paints)];
 
@@ -133,93 +145,134 @@ void ADCVehicle::BuildBody(int32 Seed)
 	TailMID = MakeMID(DCPaths::MatEmissive, FLinearColor(1.f, 0.03f, 0.02f), 0.4f, 0.f);
 
 	// Dimensions per style (local: +X nose, +Y right, Z up, origin = ground centre).
+	//   HoodDrop: how far the nose sits below the belt line. Rake / RearRun: horizontal run of the windscreen / rear
+	//   window. Tumble: how far the side windows lean in at the roof. CabInset: glass set in from the body side.
 	float BodyTop = 88.f, CabX0 = -120.f, CabX1 = 70.f, CabTop = 146.f, DoorX0 = -55.f, DoorX1 = 60.f;
+	float HoodDrop = 8.f, Rake = 40.f, RearRun = 38.f, Tumble = 10.f, CabInset = 7.f;
 	switch (Style)
 	{
 	case EDCCarStyle::Hatch:  Length = 380.f; Width = 166.f; WheelBase = 245.f; CabX0 = -150.f; CabX1 = 60.f; break;
-	case EDCCarStyle::Estate: Length = 440.f; Width = 170.f; WheelBase = 280.f; CabX0 = -205.f; CabX1 = 70.f; DoorX0 = -70.f; DoorX1 = 65.f; break;
-	case EDCCarStyle::Pickup: Length = 455.f; Width = 174.f; WheelBase = 300.f; CabX0 = -20.f; CabX1 = 95.f; CabTop = 152.f; DoorX0 = -15.f; DoorX1 = 90.f; BodyTop = 92.f; WheelR = 34.f; break;
-	case EDCCarStyle::Van:    Length = 450.f; Width = 176.f; WheelBase = 290.f; CabX0 = -225.f; CabX1 = 120.f; CabTop = 205.f; DoorX0 = 40.f; DoorX1 = 135.f; BodyTop = 100.f; WheelR = 33.f; break;
+	case EDCCarStyle::Estate: Length = 440.f; Width = 170.f; WheelBase = 280.f; CabX0 = -205.f; CabX1 = 70.f; DoorX0 = -70.f; DoorX1 = 65.f; HoodDrop = 6.f; RearRun = 14.f; break;
+	case EDCCarStyle::Pickup: Length = 455.f; Width = 174.f; WheelBase = 300.f; CabX0 = -20.f; CabX1 = 95.f; CabTop = 152.f; DoorX0 = -15.f; DoorX1 = 90.f; BodyTop = 92.f; WheelR = 34.f; HoodDrop = 3.f; Rake = 36.f; RearRun = 8.f; Tumble = 8.f; break;
+	case EDCCarStyle::Van:    Length = 450.f; Width = 176.f; WheelBase = 290.f; CabX0 = -225.f; CabX1 = 120.f; CabTop = 205.f; DoorX0 = 18.f; DoorX1 = 100.f; BodyTop = 100.f; WheelR = 33.f; Rake = 32.f; RearRun = 6.f; Tumble = 5.f; CabInset = 3.f; break;
 	}
 	const float HL = Length * 0.5f, HW = Width * 0.5f;
 	const float Floor = 30.f;
+	const bool bPickup = Style == EDCCarStyle::Pickup, bVan = Style == EDCCarStyle::Van;
+	const FString Key = FString::Printf(TEXT("S%d_"), (int32)Style);
 
-	// Lower body + skirts + bumpers.
-	Part(BodyPivot, Cube, FVector(0, 0, Floor + 6.f), FVector(Length - 30.f, Width - 10.f, 20.f), MTrim);
-	if (Style == EDCCarStyle::Pickup)
+	// Rounded pieces are generated once (DCLandMesh::Loft) and shared by every car that needs the same one.
+	auto Shell = [&](const TCHAR* Name, const TArray<FLoftSection>& Sections) -> UStaticMesh*
 	{
-		Part(BodyPivot, Cube, FVector(0, 0, (Floor + 62.f) * 0.5f + 4.f), FVector(Length - 8.f, Width, 62.f - Floor), MPaint);
-		const float FrontLen = HL - (-25.f);
-		Part(BodyPivot, Cube, FVector(-25.f + FrontLen * 0.5f - 4.f, 0, (62.f + BodyTop) * 0.5f), FVector(FrontLen - 8.f, Width, BodyTop - 62.f), MPaint);
-		// Bed walls + tailgate + bed floor.
-		const float BedX0 = -HL + 4.f, BedX1 = -30.f, BedLen = BedX1 - BedX0;
-		Part(BodyPivot, Cube, FVector((BedX0 + BedX1) * 0.5f, -HW + 5.f, 80.f), FVector(BedLen, 10.f, 36.f), MPaint);
-		Part(BodyPivot, Cube, FVector((BedX0 + BedX1) * 0.5f, HW - 5.f, 80.f), FVector(BedLen, 10.f, 36.f), MPaint);
-		Part(BodyPivot, Cube, FVector(BedX0 + 5.f, 0, 80.f), FVector(10.f, Width - 10.f, 36.f), MPaint);
-		Part(BodyPivot, Cube, FVector((BedX0 + BedX1) * 0.5f, 0, 64.f), FVector(BedLen, Width - 20.f, 4.f), MTrim);
-		// A tarp-covered load in the bed.
-		Part(BodyPivot, Cube, FVector((BedX0 + BedX1) * 0.5f + 10.f, 0, 78.f), FVector(BedLen * 0.6f, Width * 0.6f, 26.f), MakeMID(DCPaths::MatSurface, FLinearColor(0.09f, 0.11f, 0.06f), 0.9f, 0.f), FRotator(0, 4, 0));
-	}
-	else
+		return CachedMesh(Key + Name, [&]() { return DCLandMesh::Loft(GetTransientPackage(), Sections); });
+	};
+	auto Box = [&](USceneComponent* Parent, const FVector& Loc, const FVector& Size, float Radius, UMaterialInterface* Mat, float EndRound = -1.f, bool bShadow = true, const FRotator& Rot = FRotator::ZeroRotator) -> UStaticMeshComponent*
 	{
-		Part(BodyPivot, Cube, FVector(0, 0, (Floor + BodyTop) * 0.5f + 4.f), FVector(Length - 8.f, Width, BodyTop - Floor - 8.f), MPaint);
-	}
-	Part(BodyPivot, Cube, FVector(HL - 3.f, 0, Floor + 12.f), FVector(10.f, Width + 4.f, 18.f), MTrim);
-	Part(BodyPivot, Cube, FVector(-HL + 3.f, 0, Floor + 12.f), FVector(10.f, Width + 4.f, 18.f), MTrim);
-	// Grille + chrome strip.
-	Part(BodyPivot, Cube, FVector(HL - 1.f, 0, Floor + 34.f), FVector(4.f, Width * 0.42f, 16.f), MTrim);
-	Part(BodyPivot, Cube, FVector(0, -HW - 0.5f, Floor + 30.f), FVector(Length - 40.f, 2.f, 3.f), MChrome);
-	Part(BodyPivot, Cube, FVector(0, HW + 0.5f, Floor + 30.f), FVector(Length - 40.f, 2.f, 3.f), MChrome);
+		FString BoxKey(TEXT("B"));
+		for (const float V : { (float)Size.X, (float)Size.Y, (float)Size.Z, Radius, EndRound }) { BoxKey.AppendChar(TEXT('_')); BoxKey.AppendInt(FMath::RoundToInt(V * 10.f)); }
+		UStaticMesh* Mesh = CachedMesh(BoxKey, [&]() { return DCLandMesh::RoundBox(GetTransientPackage(), Size, Radius, EndRound); });
+		return Part(Parent, Mesh, Loc, FVector(100.f), Mat, Rot, bShadow);
+	};
 
-	// Cabin: tinted glass box with a painted roof + pillars.
-	const float CabW = Width - 14.f;
-	const float CabLen = CabX1 - CabX0;
-	const float GlassZ0 = BodyTop - 2.f, GlassH = CabTop - BodyTop - 6.f;
-	Part(BodyPivot, Cube, FVector((CabX0 + CabX1) * 0.5f, 0, GlassZ0 + GlassH * 0.5f), FVector(CabLen, CabW, GlassH), MGlass);
-	if (Style == EDCCarStyle::Van)
+	// Sill, then the painted lower body: one smooth shell from the nose over the bonnet to the tail.
+	Box(BodyPivot, FVector(0, 0, Floor + 1.f), FVector(Length - 30.f, Width - 8.f, 16.f), 5.f, MTrim);
+	const float WsX0 = CabX1 + 16.f, WsX1 = WsX0 - Rake; // windscreen: base and top
+	const float NoseTop = BodyTop - HoodDrop, BedZ = 64.f;
 	{
-		// Panel van: solid painted load box behind the cab glass.
-		const float BoxX1 = CabX1 - 105.f;
-		Part(BodyPivot, Cube, FVector((CabX0 + BoxX1) * 0.5f, 0, GlassZ0 + GlassH * 0.5f), FVector(BoxX1 - CabX0 + 2.f, Width, GlassH + 2.f), MPaint);
-		// Low hood in front of a tall cab.
-		Part(BodyPivot, Cube, FVector((CabX1 + HL) * 0.5f, 0, BodyTop + 2.f), FVector(HL - CabX1, Width - 6.f, 6.f), MPaint);
-		// Side stripe.
-		Part(BodyPivot, Cube, FVector((CabX0 + BoxX1) * 0.5f, -HW - 0.6f, 128.f), FVector(BoxX1 - CabX0 - 20.f, 2.f, 10.f), MakeMID(DCPaths::MatSurface, Paint * 0.35f + FLinearColor(0.1f, 0.08f, 0.04f), 0.4f, 0.2f));
-		Part(BodyPivot, Cube, FVector((CabX0 + BoxX1) * 0.5f, HW + 0.6f, 128.f), FVector(BoxX1 - CabX0 - 20.f, 2.f, 10.f), MakeMID(DCPaths::MatSurface, Paint * 0.35f + FLinearColor(0.1f, 0.08f, 0.04f), 0.4f, 0.2f));
-	}
-	Part(BodyPivot, Cube, FVector((CabX0 + CabX1) * 0.5f - 6.f, 0, CabTop - 3.f), FVector(CabLen - 30.f, CabW - 14.f, 7.f), MPaint);
-	for (int32 s = -1; s <= 1; s += 2)
-	{
-		const float Y = s * (CabW * 0.5f - 2.f);
-		Part(BodyPivot, Cube, FVector(CabX1 - 5.f, Y, GlassZ0 + GlassH * 0.5f), FVector(8.f, 6.f, GlassH), MPaint);   // A pillar
-		Part(BodyPivot, Cube, FVector(CabX0 + 6.f, Y, GlassZ0 + GlassH * 0.5f), FVector(12.f, 6.f, GlassH), MPaint);  // C pillar
-		if (Style == EDCCarStyle::Hatch || Style == EDCCarStyle::Estate)
+		TArray<FLoftSection> S;
+		S.Add({ HL, Floor + 12.f, NoseTop - 4.f, HW - 8.f, HW - 8.f, 9.f, 0, 5.f });
+		S.Add({ HL - 9.f, Floor + 2.f, NoseTop, HW, HW, 12.f, 0, 7.f });
+		S.Add({ WsX0 - 4.f, Floor, BodyTop, HW, HW, 12.f, 0, 10.f });
+		if (bPickup)
 		{
-			Part(BodyPivot, Cube, FVector(DoorX0 - 4.f, Y, GlassZ0 + GlassH * 0.5f), FVector(7.f, 6.f, GlassH), MPaint); // B pillar
+			// Steps down behind the cab to the load bed.
+			S.Add({ CabX0 - 4.f, Floor, BodyTop, HW, HW, 12.f, 0, 3.f });
+			S.Add({ CabX0 - 10.f, Floor, BedZ, HW, HW, 6.f, 0, 3.f });
+			S.Add({ -HL + 4.f, Floor + 2.f, BedZ, HW, HW, 6.f, 0, 3.f });
+			S.Add({ -HL, Floor + 8.f, BedZ - 2.f, HW - 3.f, HW - 3.f, 5.f });
 		}
+		else
+		{
+			S.Add({ -HL + 9.f, Floor + 2.f, BodyTop - 1.f, HW, HW, 12.f, 0, 7.f });
+			S.Add({ -HL, Floor + 12.f, BodyTop - 6.f, HW - 8.f, HW - 8.f, 9.f });
+		}
+		Part(BodyPivot, Shell(TEXT("Body"), S), FVector::ZeroVector, FVector(100.f), MPaint);
+	}
+	if (bPickup)
+	{
+		// Bed walls + tailgate + bed floor.
+		const float BedX0 = -HL, BedX1 = CabX0 - 6.f, BedLen = BedX1 - BedX0, BedMid = (BedX0 + BedX1) * 0.5f;
+		Box(BodyPivot, FVector(BedMid, -HW + 5.f, 78.f), FVector(BedLen, 10.f, 36.f), 4.f, MPaint, 3.f);
+		Box(BodyPivot, FVector(BedMid, HW - 5.f, 78.f), FVector(BedLen, 10.f, 36.f), 4.f, MPaint, 3.f);
+		Box(BodyPivot, FVector(BedX0 + 5.f, 0, 78.f), FVector(10.f, Width - 12.f, 34.f), 4.f, MPaint, 3.f);
+		Part(BodyPivot, Cube, FVector(BedMid, 0, BedZ + 1.f), FVector(BedLen - 10.f, Width - 20.f, 3.f), MTrim);
+		// A tarp-covered load in the bed.
+		Box(BodyPivot, FVector(BedMid + 10.f, 0, 78.f), FVector(BedLen * 0.6f, Width * 0.6f, 26.f), 9.f, MakeMID(DCPaths::MatSurface, FLinearColor(0.09f, 0.11f, 0.06f), 0.9f, 0.f), -1.f, true, FRotator(0, 4, 0));
+	}
+	// Bumpers, grille, chrome side strips.
+	Box(BodyPivot, FVector(HL - 3.f, 0, Floor + 12.f), FVector(10.f, Width + 4.f, 18.f), 6.f, MTrim, 3.f);
+	Box(BodyPivot, FVector(-HL + 3.f, 0, Floor + 12.f), FVector(10.f, Width + 4.f, 18.f), 6.f, MTrim, 3.f);
+	Box(BodyPivot, FVector(HL - 1.f, 0, Floor + 34.f), FVector(4.f, Width * 0.42f, 16.f), 4.f, MTrim, 1.5f);
+	Part(BodyPivot, Cube, FVector(0, -HW - 0.5f, BodyTop - 14.f), FVector(Length - 44.f, 2.f, 3.f), MChrome);
+	Part(BodyPivot, Cube, FVector(0, HW + 0.5f, BodyTop - 14.f), FVector(Length - 44.f, 2.f, 3.f), MChrome);
+
+	// Cabin: one shell. Raked windscreen, side windows that lean in, rear window; the rounded corners between them
+	// are the painted pillars and roof rails, the flat faces flagged below are glass (material slot 1).
+	const float GZ0 = BodyTop - 4.f, WB = HW - CabInset, WT = WB - Tumble;
+	{
+		const uint8 Screen = DCLandMesh::LoftTopAlt | DCLandMesh::LoftSideAlt, Side = DCLandMesh::LoftSideAlt;
+		TArray<FLoftSection> S;
+		S.Add({ WsX0, GZ0, BodyTop - 1.f, WB, WB, 3.f, Screen, 4.f });
+		S.Add({ WsX1, GZ0, CabTop, WB, WT, 11.f, Side, 9.f });
+		if (bVan)
+		{
+			// Panel van: painted load box behind the cab doors.
+			S.Add({ CabX1 - 105.f, GZ0, CabTop, WB, WT, 11.f, 0, 0.f });
+		}
+		else if (!bPickup)
+		{
+			// B pillar behind the front doors.
+			S.Add({ DoorX0 - 1.f, GZ0, CabTop, WB, WT, 11.f, 0, 0.f });
+			S.Add({ DoorX0 - 8.f, GZ0, CabTop, WB, WT, 11.f, Side, 0.f });
+		}
+		S.Add({ CabX0 + RearRun, GZ0, CabTop - 2.f, WB, WT, 11.f, bVan ? uint8(0) : Screen, 9.f });
+		S.Add({ CabX0 + 1.f, GZ0, BodyTop - 1.f, WB, WB, 3.f });
+		if (UStaticMeshComponent* C = Part(BodyPivot, Shell(TEXT("Cab"), S), FVector::ZeroVector, FVector(100.f), MPaint)) { C->SetMaterial(1, MGlass); }
+	}
+	if (bVan)
+	{
+		// Side stripe on the load box.
+		const float BoxX1 = CabX1 - 105.f, Y = WB - Tumble * (128.f - GZ0) / (CabTop - GZ0) + 0.4f;
+		UMaterialInstanceDynamic* MStripe = MakeMID(DCPaths::MatSurface, Paint * 0.35f + FLinearColor(0.1f, 0.08f, 0.04f), 0.4f, 0.2f);
+		for (int32 s = -1; s <= 1; s += 2) { Part(BodyPivot, Cube, FVector((CabX0 + BoxX1) * 0.5f, s * Y, 128.f), FVector(BoxX1 - CabX0 - 30.f, 2.f, 10.f), MStripe); }
 	}
 	if (Style == EDCCarStyle::Estate)
 	{
 		// Roof rails.
-		for (int32 s = -1; s <= 1; s += 2) { Part(BodyPivot, Cube, FVector((CabX0 + CabX1) * 0.5f - 10.f, s * (CabW * 0.5f - 12.f), CabTop + 3.f), FVector(CabLen - 50.f, 4.f, 4.f), MChrome); }
+		const float RoofX0 = CabX0 + RearRun, RoofLen = WsX1 - RoofX0;
+		for (int32 s = -1; s <= 1; s += 2) { Box(BodyPivot, FVector(RoofX0 + RoofLen * 0.5f, s * (WT - 13.f), CabTop + 1.5f), FVector(RoofLen - 30.f, 4.f, 4.f), 1.8f, MChrome); }
 	}
 
-	// Lights (emissive lenses).
-	const float LampZ = Style == EDCCarStyle::Van ? BodyTop - 22.f : BodyTop - 20.f;
+	// Lights (emissive lens pads).
+	const float LampZ = bVan ? BodyTop - 22.f : BodyTop - 20.f;
 	for (int32 s = -1; s <= 1; s += 2)
 	{
-		Part(BodyPivot, Cube, FVector(HL + 0.5f, s * (HW - 24.f), LampZ), FVector(4.f, 30.f, 12.f), HeadMID, FRotator::ZeroRotator, false);
-		Part(BodyPivot, Cube, FVector(-HL - 0.5f, s * (HW - 18.f), LampZ + (Style == EDCCarStyle::Pickup ? 0.f : 4.f)), FVector(4.f, 24.f, 14.f), TailMID, FRotator::ZeroRotator, false);
+		Box(BodyPivot, FVector(HL + 0.5f, s * (HW - 27.f), LampZ), FVector(4.f, 30.f, 12.f), 5.f, HeadMID, 1.5f, false);
+		Box(BodyPivot, FVector(-HL - 0.5f, s * (HW - 22.f), LampZ + (bPickup ? 0.f : 4.f)), FVector(4.f, 24.f, 14.f), 5.f, TailMID, 1.5f, false);
 	}
 	// Number plates.
 	UMaterialInstanceDynamic* MPlate = MakeMID(DCPaths::MatSurface, FLinearColor(0.6f, 0.58f, 0.45f), 0.5f, 0.f);
-	Part(BodyPivot, Cube, FVector(HL + 1.f, 0, Floor + 14.f), FVector(2.f, 44.f, 10.f), MPlate, FRotator::ZeroRotator, false);
+	Part(BodyPivot, Cube, FVector(HL + 2.3f, 0, Floor + 12.f), FVector(2.f, 44.f, 10.f), MPlate, FRotator::ZeroRotator, false);
 	Part(BodyPivot, Cube, FVector(-HL - 1.f, 0, Floor + 30.f), FVector(2.f, 44.f, 10.f), MPlate, FRotator::ZeroRotator, false);
 	// Wing mirrors.
-	for (int32 s = -1; s <= 1; s += 2) { Part(BodyPivot, Cube, FVector(CabX1 - 12.f, s * (HW + 9.f), BodyTop + 10.f), FVector(10.f, 14.f, 10.f), MTrim); }
+	for (int32 s = -1; s <= 1; s += 2) { Box(BodyPivot, FVector(WsX0 - 22.f, s * (HW + 4.f), BodyTop + 5.f), FVector(9.f, 16.f, 9.f), 3.5f, MTrim, 3.f); }
 
-	// Doors (front doors): painted panel hinged at its front edge, slightly proud of the body.
+	// Doors (front doors): painted panel hinged at its front edge, slightly proud of the body, with a window pane
+	// that follows the windscreen rake and leans in with the cabin side.
 	DoorHinge.Reset();
+	const float PaneZ0 = BodyTop - 2.f, PaneZ1 = CabTop - 12.f;
+	const float PaneFront0 = FMath::Min(DoorX1 - 3.f, WsX0 - 9.f);
+	const float PaneFront1 = FMath::Min(DoorX1 - 3.f, WsX0 - Rake * (PaneZ1 - BodyTop) / (CabTop - BodyTop) - 9.f);
 	for (int32 s = -1; s <= 1; s += 2)
 	{
 		USceneComponent* H = NewObject<USceneComponent>(this);
@@ -228,16 +281,36 @@ void ADCVehicle::BuildBody(int32 Seed)
 		H->RegisterComponent();
 		AddInstanceComponent(H);
 		const float DL = DoorX1 - DoorX0;
-		Part(H, Cube, FVector(-DL * 0.5f, 0, (Floor + 10.f + BodyTop) * 0.5f), FVector(DL, 3.f, BodyTop - Floor - 12.f), MPaint);
+		const float PanelZ0 = Floor + 8.f, PanelZ1 = BodyTop - 9.f;
+		Box(H, FVector(-DL * 0.5f, 0, (PanelZ0 + PanelZ1) * 0.5f), FVector(DL, 3.5f, PanelZ1 - PanelZ0), 1.7f, MPaint, 5.f);
 		Part(H, Cube, FVector(-DL + 10.f, s * 2.5f, BodyTop - 18.f), FVector(10.f, 2.f, 3.f), MChrome, FRotator::ZeroRotator, false); // handle
-		Part(H, Cube, FVector(-DL * 0.5f, 0, BodyTop + GlassH * 0.45f), FVector(DL - 6.f, 2.f, GlassH * 0.9f), MGlass, FRotator::ZeroRotator, false);
+		const float LeanPerCm = -s * Tumble / (CabTop - GZ0);
+		auto Lean = [&](float Z) { return LeanPerCm * (Z - PaneZ0); };
+		TArray<FLoftSection> S;
+		S.Add({ PaneFront0 - DoorX1, PaneZ0, PaneZ0 + 3.f, 1.f, 1.f, 0.8f, 0, 3.f, 0.f, Lean(PaneZ0 + 3.f) });
+		S.Add({ PaneFront1 - DoorX1, PaneZ0, PaneZ1, 1.f, 1.f, 0.8f, 0, 4.f, 0.f, Lean(PaneZ1) });
+		S.Add({ DoorX0 + 3.f - DoorX1, PaneZ0, PaneZ1, 1.f, 1.f, 0.8f, 0, 4.f, 0.f, Lean(PaneZ1) });
+		const float PaneY = (WB - Tumble * (PaneZ0 - GZ0) / (CabTop - GZ0) + 1.2f) - (HW + 1.5f);
+		Part(H, Shell(s < 0 ? TEXT("PaneL") : TEXT("PaneR"), S), FVector(0, s * PaneY, 0), FVector(100.f), MGlass, FRotator::ZeroRotator, false);
 		DoorHinge.Add(H);
 	}
 
-	// Wheels: steer (yaw) -> spin (pitch) -> tyre + hub + spoke bar.
+	// Wheels: steer (yaw) -> spin (pitch) -> tyre + hub + spoke bars. They stand slightly proud of the body, each in
+	// a dark wheel arch.
 	WheelSteer.Reset(); WheelSpin.Reset();
 	const float WX[4] = { WheelBase * 0.5f, WheelBase * 0.5f, -WheelBase * 0.5f, -WheelBase * 0.5f };
-	const float WY[4] = { -(HW - 20.f), HW - 20.f, -(HW - 20.f), HW - 20.f };
+	const float WY[4] = { -(HW - 9.f), HW - 9.f, -(HW - 9.f), HW - 9.f };
+	UStaticMesh* Arch = CachedMesh(FString::Printf(TEXT("Arch_%d"), FMath::RoundToInt(WheelR)), [&]()
+	{
+		const float Ra = WheelR + 7.f, Zc = WheelR + 2.f, Z0 = Floor - 4.f;
+		TArray<FLoftSection> S;
+		for (int32 k = 0; k <= 10; ++k)
+		{
+			const float A = PI * k / 10.f;
+			S.Add({ Ra * FMath::Cos(A), Z0, FMath::Max(Zc + Ra * FMath::Sin(A), Z0 + 2.f), 6.6f, 6.6f, 1.5f, 0, 0.f });
+		}
+		return DCLandMesh::Loft(GetTransientPackage(), S, 2);
+	});
 	for (int32 i = 0; i < 4; ++i)
 	{
 		USceneComponent* S = NewObject<USceneComponent>(this);
@@ -250,16 +323,16 @@ void ADCVehicle::BuildBody(int32 Seed)
 		Sp->RegisterComponent();
 		AddInstanceComponent(Sp);
 		const float Out = WY[i] > 0.f ? 1.f : -1.f;
+		Part(BodyPivot, Arch, FVector(WX[i], Out * (HW - 6.f), 0.f), FVector(100.f), MTrim, FRotator::ZeroRotator, false);
 		Part(Sp, Cyl, FVector::ZeroVector, FVector(WheelR * 2.f, WheelR * 2.f, 24.f), MTyre, FRotator(0, 0, 90));
 		Part(Sp, Cyl, FVector(0, Out * 3.f, 0), FVector(WheelR * 1.15f, WheelR * 1.15f, 21.f), MHub, FRotator(0, 0, 90), false);
-		Part(Sp, Cube, FVector(0, Out * 11.f, 0), FVector(WheelR * 1.05f, 2.f, 6.f), MTrim, FRotator::ZeroRotator, false);
-		Part(Sp, Cube, FVector(0, Out * 11.f, 0), FVector(6.f, 2.f, WheelR * 1.05f), MTrim, FRotator::ZeroRotator, false);
+		Part(Sp, Cube, FVector(0, Out * 13.6f, 0), FVector(WheelR * 1.05f, 2.f, 6.f), MTrim, FRotator::ZeroRotator, false);
+		Part(Sp, Cube, FVector(0, Out * 13.6f, 0), FVector(6.f, 2.f, WheelR * 1.05f), MTrim, FRotator::ZeroRotator, false);
 		WheelSteer.Add(S);
 		WheelSpin.Add(Sp);
 	}
 
 	BuildLights(HL, HW, LampZ);
-	(void)R;
 }
 
 void ADCVehicle::BuildLights(float HL, float HW, float LampZ)

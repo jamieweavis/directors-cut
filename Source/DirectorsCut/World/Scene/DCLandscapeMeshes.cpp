@@ -16,6 +16,7 @@ namespace
 		TArray<FVector3f> N;
 		TArray<FLinearColor> C;
 		TArray<int32> I;
+		TArray<int32> I1; // triangles of the optional second material slot ("M1")
 
 		int32 V(const FVector3f& Pos, const FVector3f& Nrm, const FLinearColor& Col)
 		{
@@ -23,13 +24,14 @@ namespace
 			return P.Num() - 1;
 		}
 		/** Triangle facing along the average vertex normal. */
-		void Tri(int32 A, int32 B, int32 Cc)
+		void Tri(int32 A, int32 B, int32 Cc, int32 Group = 0)
 		{
+			TArray<int32>& Dst = Group == 1 ? I1 : I;
 			const FVector3f X = FVector3f::CrossProduct(P[B] - P[A], P[Cc] - P[A]);
 			const float D = FVector3f::DotProduct(X, N[A] + N[B] + N[Cc]);
 			const bool bKeep = bFrontIsNegativeCross ? (D < 0.f) : (D > 0.f);
-			if (bKeep) { I.Add(A); I.Add(B); I.Add(Cc); }
-			else { I.Add(A); I.Add(Cc); I.Add(B); }
+			if (bKeep) { Dst.Add(A); Dst.Add(B); Dst.Add(Cc); }
+			else { Dst.Add(A); Dst.Add(Cc); Dst.Add(B); }
 		}
 
 		UStaticMesh* Build(UObject* Outer, const TCHAR* Name) const
@@ -69,8 +71,19 @@ namespace
 				const FVertexInstanceID Tri[3] = { VI[I[k]], VI[I[k + 1]], VI[I[k + 2]] };
 				MD.CreateTriangle(PG, Tri);
 			}
+			if (I1.Num())
+			{
+				const FPolygonGroupID PG1 = MD.CreatePolygonGroup();
+				Attr.GetPolygonGroupMaterialSlotNames()[PG1] = FName("M1");
+				for (int32 k = 0; k + 2 < I1.Num(); k += 3)
+				{
+					const FVertexInstanceID Tri[3] = { VI[I1[k]], VI[I1[k + 1]], VI[I1[k + 2]] };
+					MD.CreateTriangle(PG1, Tri);
+				}
+			}
 			UStaticMesh* SM = NewObject<UStaticMesh>(Outer, FName(Name));
 			SM->GetStaticMaterials().Add(FStaticMaterial(nullptr, FName("M0")));
+			if (I1.Num()) { SM->GetStaticMaterials().Add(FStaticMaterial(nullptr, FName("M1"))); }
 			UStaticMesh::FBuildMeshDescriptionsParams Params;
 			Params.bMarkPackageDirty = false;
 			Params.bBuildSimpleCollision = false;
@@ -323,5 +336,139 @@ namespace DCLandMesh
 		}
 		static int32 Counter = 0;
 		return B.Build(Outer, *MakeUniqueObjectName(Outer, UStaticMesh::StaticClass(), FName(*FString::Printf(TEXT("DCPrism_%d"), ++Counter))).ToString());
+	}
+
+	UStaticMesh* Loft(UObject* Outer, const TArray<FLoftSection>& In, int32 CornerSegs)
+	{
+		if (In.Num() < 2) { return nullptr; }
+		auto Mix = [](const FLoftSection& A, const FLoftSection& B, float T)
+		{
+			FLoftSection O = A;
+			O.X = FMath::Lerp(A.X, B.X, T); O.Z0 = FMath::Lerp(A.Z0, B.Z0, T); O.Z1 = FMath::Lerp(A.Z1, B.Z1, T);
+			O.W0 = FMath::Lerp(A.W0, B.W0, T); O.W1 = FMath::Lerp(A.W1, B.W1, T); O.R = FMath::Lerp(A.R, B.R, T);
+			O.Y0 = FMath::Lerp(A.Y0, B.Y0, T); O.Y1 = FMath::Lerp(A.Y1, B.Y1, T);
+			return O;
+		};
+		auto Len = [](const FLoftSection& A, const FLoftSection& B)
+		{
+			return FMath::Sqrt(FMath::Square(A.X - B.X) + FMath::Square(A.Z0 - B.Z0) + FMath::Square(A.Z1 - B.Z1) + FMath::Square(A.W0 - B.W0));
+		};
+		// 1. Round every interior section into a short arc (Flags describe the span that STARTS at a section).
+		TArray<FLoftSection> S;
+		S.Add(In[0]);
+		for (int32 k = 1; k + 1 < In.Num(); ++k)
+		{
+			const FLoftSection& Pv = In[k - 1]; const FLoftSection& Cu = In[k]; const FLoftSection& Nx = In[k + 1];
+			if (Cu.Bevel <= 0.f) { S.Add(Cu); continue; }
+			const FLoftSection A = Mix(Cu, Pv, FMath::Min(0.45f, Cu.Bevel / FMath::Max(Len(Pv, Cu), 0.01f)));
+			const FLoftSection B = Mix(Cu, Nx, FMath::Min(0.45f, Cu.Bevel / FMath::Max(Len(Cu, Nx), 0.01f)));
+			for (int32 u = 0; u <= 4; ++u)
+			{
+				const float T = u / 4.f;
+				FLoftSection Q = Mix(Mix(A, Cu, T), Mix(Cu, B, T), T);
+				Q.Flags = u < 2 ? Pv.Flags : Cu.Flags;
+				S.Add(Q);
+			}
+		}
+		S.Add(In.Last());
+
+		// 2. Rings: rounded rectangle in YZ, clockwise from the top seen from +X (top, +Y side, bottom, -Y side).
+		const int32 K = FMath::Clamp(CornerSegs, 1, 12), M = 4 * (K + 1), NS = S.Num();
+		TArray<FVector3f> Pos; Pos.SetNumUninitialized(NS * M);
+		for (int32 i = 0; i < NS; ++i)
+		{
+			const FLoftSection& Q = S[i];
+			const float H = FMath::Max((Q.Z1 - Q.Z0) * 0.5f, 0.005f), Zc = (Q.Z0 + Q.Z1) * 0.5f;
+			const float Wm = FMath::Max((Q.W0 + Q.W1) * 0.5f, 0.005f);
+			const float Rr = FMath::Clamp(Q.R, 0.004f, FMath::Min(H, Wm));
+			for (int32 j = 0; j < M; ++j)
+			{
+				const int32 Cn = j / (K + 1), A = j % (K + 1);
+				const float Th = FMath::DegreesToRadians(90.f - 90.f * Cn - 90.f * A / K);
+				const float Sy = (Cn == 0 || Cn == 1) ? 1.f : -1.f, Sz = (Cn == 0 || Cn == 3) ? 1.f : -1.f;
+				float Y = Sy * (Wm - Rr) + Rr * FMath::Cos(Th);
+				const float Zl = Sz * (H - Rr) + Rr * FMath::Sin(Th);
+				const float T = FMath::Clamp(Zl / (2.f * H) + 0.5f, 0.f, 1.f);
+				Y = Y * FMath::Lerp(Q.W0, Q.W1, T) / Wm + FMath::Lerp(Q.Y0, Q.Y1, T);
+				Pos[i * M + j] = FVector3f(Q.X, Y, Zc + Zl);
+			}
+		}
+		// 3. Smooth normals: area-weighted sum of the surrounding quads.
+		const float Dir = S.Last().X >= S[0].X ? 1.f : -1.f;
+		TArray<FVector3f> Nrm; Nrm.Init(FVector3f::ZeroVector, NS * M);
+		for (int32 i = 0; i + 1 < NS; ++i)
+		{
+			for (int32 j = 0; j < M; ++j)
+			{
+				const int32 j2 = (j + 1) % M;
+				const int32 a = i * M + j, b = (i + 1) * M + j, c = (i + 1) * M + j2, d = i * M + j2;
+				const FVector3f Nf = FVector3f::CrossProduct(Pos[c] - Pos[a], Pos[d] - Pos[b]) * Dir;
+				Nrm[a] += Nf; Nrm[b] += Nf; Nrm[c] += Nf; Nrm[d] += Nf;
+			}
+		}
+		for (int32 i = 0; i < NS; ++i)
+		{
+			const float Zc = (S[i].Z0 + S[i].Z1) * 0.5f, Yc = (S[i].Y0 + S[i].Y1) * 0.5f;
+			for (int32 j = 0; j < M; ++j)
+			{
+				FVector3f& N = Nrm[i * M + j];
+				if (N.SizeSquared() < 1e-8f) { N = FVector3f(0.f, Pos[i * M + j].Y - Yc, Pos[i * M + j].Z - Zc); }
+				if (!N.Normalize()) { N = FVector3f::UpVector; }
+			}
+		}
+		// 4. Emit. Each material slot gets its own copy of the vertices it touches.
+		FBuilder B;
+		const FLinearColor Col(1.f, 0.f, 0.f, 1.f);
+		TArray<int32> Map[2];
+		Map[0].Init(INDEX_NONE, NS * M); Map[1].Init(INDEX_NONE, NS * M);
+		auto Vx = [&](int32 G, int32 Id) { int32& R = Map[G][Id]; if (R == INDEX_NONE) { R = B.V(Pos[Id], Nrm[Id], Col); } return R; };
+		for (int32 i = 0; i + 1 < NS; ++i)
+		{
+			for (int32 j = 0; j < M; ++j)
+			{
+				const int32 j2 = (j + 1) % M;
+				const int32 Cn = j / (K + 1);
+				const bool bSpan = (j % (K + 1)) == K; // flat span after corner Cn: 0 = +Y side, 1 = bottom, 2 = -Y side, 3 = top
+				const bool bAlt = bSpan && ((Cn == 3 && (S[i].Flags & LoftTopAlt)) || ((Cn == 0 || Cn == 2) && (S[i].Flags & LoftSideAlt)));
+				const int32 G = bAlt ? 1 : 0;
+				const int32 a = Vx(G, i * M + j), b = Vx(G, (i + 1) * M + j), c = Vx(G, (i + 1) * M + j2), d = Vx(G, i * M + j2);
+				if (!(B.P[a] - B.P[c]).IsNearlyZero(1e-3f) && !(B.P[b] - B.P[d]).IsNearlyZero(1e-3f))
+				{
+					B.Tri(a, b, c, G);
+					B.Tri(a, c, d, G);
+				}
+			}
+		}
+		for (int32 End = 0; End < 2; ++End)
+		{
+			const int32 i = End == 0 ? 0 : NS - 1;
+			const FVector3f N(End == 0 ? -Dir : Dir, 0.f, 0.f);
+			FVector3f Mid = FVector3f::ZeroVector;
+			for (int32 j = 0; j < M; ++j) { Mid += Pos[i * M + j]; }
+			const int32 Cv = B.V(Mid / float(M), N, Col);
+			TArray<int32> Ring;
+			for (int32 j = 0; j < M; ++j) { Ring.Add(B.V(Pos[i * M + j], N, Col)); }
+			for (int32 j = 0; j < M; ++j)
+			{
+				const int32 p = Ring[j], q = Ring[(j + 1) % M];
+				if (!(B.P[p] - B.P[q]).IsNearlyZero(1e-3f)) { B.Tri(Cv, p, q); }
+			}
+		}
+		static int32 Counter = 0;
+		return B.Build(Outer, *MakeUniqueObjectName(Outer, UStaticMesh::StaticClass(), FName(*FString::Printf(TEXT("DCLoft_%d"), ++Counter))).ToString());
+	}
+
+	UStaticMesh* RoundBox(UObject* Outer, const FVector& Size, float Radius, float EndRound)
+	{
+		const float Hx = Size.X * 0.5f, Hy = Size.Y * 0.5f, Hz = Size.Z * 0.5f;
+		const float R = FMath::Clamp(Radius, 0.01f, FMath::Min(Hy, Hz));
+		const float E = FMath::Clamp(EndRound < 0.f ? Radius : EndRound, 0.01f, Hx * 0.9f);
+		const float Ez = FMath::Min3(E, R, Hz * 0.8f), Ey = FMath::Min3(E, R, Hy * 0.6f);
+		TArray<FLoftSection> S;
+		S.Add({ -Hx, -Hz + Ez, Hz - Ez, Hy - Ey, Hy - Ey, FMath::Max(R - Ez * 0.5f, 0.01f), 0, E });
+		S.Add({ -Hx + E, -Hz, Hz, Hy, Hy, R, 0, E });
+		S.Add({ Hx - E, -Hz, Hz, Hy, Hy, R, 0, E });
+		S.Add({ Hx, -Hz + Ez, Hz - Ez, Hy - Ey, Hy - Ey, FMath::Max(R - Ez * 0.5f, 0.01f), 0, E });
+		return Loft(Outer, S, 3);
 	}
 }
