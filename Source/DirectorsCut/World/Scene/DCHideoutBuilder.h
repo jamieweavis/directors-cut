@@ -246,7 +246,8 @@ protected:
 	void EdgeBox(const FVector2D& A, const FVector2D& B, float T0, float T1, float Inset, float Z0, float Z1, float Thick, FName Mat, float Pitch = 0.f);
 	void EdgeWall(const FVector2D& A, const FVector2D& B, float T0, float T1, float Inset, float Z0, float Z1, float Thick, const TArray<FOpening>& Ops, FName Mat);
 	void EdgeWindow(const FVector2D& A, const FVector2D& B, const FOpening& O, float Inset, int32 Seed);
-	void TallEdge(const FVector2D& A, const FVector2D& B, float H, const FGridStyle& St, int32 Seed, bool bStepStart, bool bStepEnd, uint8 OmitWindows = 0);
+	void TallEdge(const FVector2D& A, const FVector2D& B, float H, const FGridStyle& St, int32 Seed, bool bStepStart, bool bStepEnd, uint8 OmitWindows = 0,
+		bool bTrimStart = false, bool bTrimEnd = false);
 	/** Where TallEdge puts its windows and broken ends (shared with the furnisher so furniture respects them).
 	 *  OutSteps: (t0, t1, height) of each broken-down stretch. */
 	static void TallEdgePlan(float L, float H, int32 Seed, bool bStepStart, bool bStepEnd, TArray<FOpening>& OutWin, TArray<FVector>& OutSteps);

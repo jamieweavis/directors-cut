@@ -239,7 +239,19 @@ void ADCHideoutBuilder::BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 
 	bFit = false;
 	const int32 Seed = 1000 + Cell.X * 131 + Cell.Y * 17;
 	const float H = Grid::WallHeight(Cell);
-	auto NStage = [&](int32 E) { const int32* P = StageAt.Find(Grid::Neighbour(Cell, E)); return P ? *P : 0; };
+	auto StageOf = [&](const FIntPoint& C) { const int32* P = StageAt.Find(C); return P ? *P : 0; };
+	auto NStage = [&](int32 E) { return StageOf(Grid::Neighbour(Cell, E)); };
+	// Tall wall on edge E, its end at the corner shared with edge Adj: trim the end when a room stands across Adj (its
+	// floor starts right there), unless that room carries the same wall on (finished, nothing across E from it), so the
+	// two walls meet and close the corner between them.
+	auto TrimWallEnd = [&](int32 E, int32 Adj)
+	{
+		const int32 Across = NStage(Adj);
+		if (Across == 0) { return false; }
+		const FIntPoint N = Grid::Neighbour(Cell, Adj);
+		const bool bContinues = Across == 2 && StageOf(Grid::Neighbour(N, E)) < 2;
+		return !bContinues;
+	};
 	// scaffolding goes up on an open side (back first, so it doesn't hide the room), never inside a neighbour
 	int32 ScafEdge = -1;
 	for (int32 E : { 2, 1, 3, 0 }) { if (NStage(E) == 0) { ScafEdge = E; break; } }
@@ -262,8 +274,14 @@ void ADCHideoutBuilder::BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 
 		{
 			Kind[e] = NStage(e) == 2 ? 1 : (Grid::IsFrontEdge(e) ? 2 : 0);
 			bExit[e] = Grid::IsFrontEdge(e) && NStage(e) == 0;
-			bSS[e] = bSE[e] = false; // back walls stand full height to both ends
+			bSS[e] = bSE[e] = false;
 		}
+		// Back walls stand full height to both ends, except at the back corner (Q2) when a room stands diagonally
+		// behind it: seen from the camera, the full-height corner would cover that room's front corner, so both walls
+		// break down towards it (+Y wall: its start; +X wall: its end).
+		const bool bBehind = StageOf(Cell + FIntPoint(1, 1)) > 0;
+		bSS[2] = bTall[2] && bBehind;
+		bSE[1] = bTall[1] && bBehind;
 		const bool bFurnished = FurnishGridRoom(Room, Q, Kind, bExit, bSS, bSE, H, Seed, Seed, Omit);
 		for (int32 e = 0; e < 4; ++e)
 		{
@@ -285,10 +303,10 @@ void ADCHideoutBuilder::BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 
 			else
 			{
 				// Back wall: full height along its whole length (must match bSS / bSE above).
-				TallEdge(A, B, H, St, S, bSS[e], bSE[e], Omit[e]);
+				TallEdge(A, B, H, St, S, bSS[e], bSE[e], Omit[e], TrimWallEnd(e, (e + 3) & 3), TrimWallEnd(e, (e + 1) & 3));
 			}
 		}
-		if (bTall[1] && bTall[2])
+		if (bTall[1] && bTall[2] && !bBehind)
 		{
 			// corner pier where the two back walls meet
 			const FVector2D In = (-Q[2]).GetSafeNormal() * 14.f;
@@ -373,11 +391,38 @@ void ADCHideoutBuilder::EdgeWindow(const FVector2D& A, const FVector2D& B, const
 	EdgeBox(A, B, L0 + 5.f, L1 - 5.f, Inset, O.Bottom, O.Top - 5.f, 1.5f, "Window");                            // glass
 }
 
+namespace
+{
+	/** How steeply a broken wall end may rise: height per cm along the wall from the corner. The camera looks down at
+	 *  35 degrees along the grid diagonal, so a wall of height h hides about 1.01 h of ground beyond its end (measured
+	 *  along the wall): rising no faster than this keeps the room diagonally behind the corner in view. */
+	constexpr float GRampSlope = 0.85f;
+	constexpr float GRampFoot = 18.f; // the stub left standing right at the corner
+
+	float RampLen(float L, float H) { return FMath::Min((H - GRampFoot) / GRampSlope + 10.f, L * 0.6f); }
+
+	/** A broken wall end as a ragged staircase, (t0, t1, height) per piece in edge coordinates (t = 0 at A). Each
+	 *  piece's height stays under the ramp at its corner-side edge, so the whole run is below the sight line. */
+	void RampPieces(float L, float H, int32 Seed, int32 K, bool bAtStart, TArray<FVector>& Out)
+	{
+		const float Len = RampLen(L, H);
+		const int32 N = FMath::Max(3, FMath::RoundToInt(Len / 46.f));
+		float D0 = 0.f;
+		for (int32 i = 0; i < N; ++i)
+		{
+			const float D1 = i == N - 1 ? Len : Len * (i + 1) / N + HS(Seed, K + 20 + i) * 8.f;
+			const float Hp = FMath::Clamp(GRampFoot + D0 * GRampSlope - H01(Seed, K + i) * 14.f, GRampFoot - 4.f, H);
+			Out.Add(bAtStart ? FVector(D0, D1, Hp) : FVector(L - D1, L - D0, Hp));
+			D0 = D1;
+		}
+	}
+}
+
 void ADCHideoutBuilder::TallEdgePlan(float L, float H, int32 Seed, bool bStepStart, bool bStepEnd, TArray<FOpening>& OutWin, TArray<FVector>& OutSteps)
 {
 	const float HalfT = GWallT * 0.5f;
-	const float SA = bStepStart ? 70.f + H01(Seed, 1) * 70.f : 0.f;
-	const float SB = bStepEnd ? 70.f + H01(Seed, 2) * 70.f : 0.f;
+	const float SA = bStepStart ? RampLen(L, H) : 0.f;
+	const float SB = bStepEnd ? RampLen(L, H) : 0.f;
 	const float Main0 = bStepStart ? SA : -HalfT, Main1 = bStepEnd ? L - SB : L + HalfT;
 	OutWin.Reset();
 	OutSteps.Reset();
@@ -389,18 +434,22 @@ void ADCHideoutBuilder::TallEdgePlan(float L, float H, int32 Seed, bool bStepSta
 		if (C - W * 0.5f < Main0 + 45.f || C + W * 0.5f > Main1 - 45.f) { continue; }
 		OutWin.Add({ C, W, 92.f + H01(Seed, 7 + k) * 10.f, FMath::Min(205.f, H - 42.f) });
 	}
-	// the broken ends stand at H * (0.42..0.64) (see Step in TallEdge); the lower figure is the safe one
-	if (bStepStart) { OutSteps.Add(FVector(-HalfT, SA, H * (0.42f + 0.22f * H01(Seed, 11)))); }
-	if (bStepEnd) { OutSteps.Add(FVector(L - SB, L + HalfT, H * (0.42f + 0.22f * H01(Seed, 13)))); }
+	// the broken ends, piece by piece (TallEdge builds exactly these)
+	if (bStepStart) { RampPieces(L, H, Seed, 300, true, OutSteps); }
+	if (bStepEnd) { RampPieces(L, H, Seed, 400, false, OutSteps); }
 }
 
-void ADCHideoutBuilder::TallEdge(const FVector2D& A, const FVector2D& B, float H, const FGridStyle& St, int32 Seed, bool bStepStart, bool bStepEnd, uint8 OmitWindows)
+void ADCHideoutBuilder::TallEdge(const FVector2D& A, const FVector2D& B, float H, const FGridStyle& St, int32 Seed, bool bStepStart, bool bStepEnd, uint8 OmitWindows,
+	bool bTrimStart, bool bTrimEnd)
 {
 	const float L = FVector2D::Distance(A, B);
 	const float T = GWallT, HalfT = GWallT * 0.5f;
-	const float SA = bStepStart ? 70.f + H01(Seed, 1) * 70.f : 0.f;
-	const float SB = bStepEnd ? 70.f + H01(Seed, 2) * 70.f : 0.f;
-	const float Main0 = bStepStart ? SA : -HalfT, Main1 = bStepEnd ? L - SB : L + HalfT;
+	const float SA = bStepStart ? RampLen(L, H) : 0.f;
+	const float SB = bStepEnd ? RampLen(L, H) : 0.f;
+	// A wall normally runs HalfT past each corner to close it off. A trimmed end stops at the corner instead: past it
+	// lies a neighbouring room's floor, and the overhang would stand in that room as a stray post.
+	const float End0 = bTrimStart ? 0.f : -HalfT, End1 = bTrimEnd ? L : L + HalfT;
+	const float Main0 = bStepStart ? SA : End0, Main1 = bStepEnd ? L - SB : End1;
 
 	// windows, kept clear of the broken ends
 	TArray<FOpening> Win;
@@ -408,24 +457,19 @@ void ADCHideoutBuilder::TallEdge(const FVector2D& A, const FVector2D& B, float H
 	TallEdgePlan(L, H, Seed, bStepStart, bStepEnd, Win, Steps);
 	for (int32 k = Win.Num() - 1; k >= 0; --k) { if (OmitWindows & (1 << k)) { Win.RemoveAt(k); } } // furniture stands there
 
-	EdgeBox(A, B, -HalfT, L + HalfT, HalfT, 0.f, 16.f, T + 8.f, "StoneDark");                       // plinth course
+	EdgeBox(A, B, End0, End1, HalfT, 0.f, 16.f, T + 8.f, "StoneDark");                               // plinth course
 	EdgeWall(A, B, Main0, Main1, HalfT, 0.f, H, T, Win, St.Outer);                                   // masonry
 	EdgeBox(A, B, Main0, Main1, HalfT, H, H + 10.f, T + 4.f, "TimberDark");                          // wall plate
 	// interior skin (plaster / boards), short of the corners and the broken ends
 	EdgeWall(A, B, FMath::Max(Main0, T), FMath::Min(Main1, L - T), T + 1.5f, 8.f, H - 22.f, 3.f, Win, St.Skin);
 	for (int32 k = 0; k < Win.Num(); ++k) { EdgeWindow(A, B, Win[k], HalfT, Seed + 40 + k); }
 
-	// broken ends: a lower piece, then a ragged step
-	auto Step = [&](float T0, float T1, int32 K, bool bAtStart)
+	// broken ends: the masonry steps down to a stub at the corner (the corner piece also covers the overhang)
+	for (const FVector& P : Steps)
 	{
-		const float Hs = H * (0.42f + 0.22f * H01(Seed, K));
-		EdgeBox(A, B, T0, T1, HalfT, 0.f, Hs, T, St.Outer);
-		const float Len = T1 - T0;
-		const float U0 = bAtStart ? T0 + Len * 0.45f : T0, U1 = bAtStart ? T1 : T1 - Len * 0.45f;
-		EdgeBox(A, B, U0, U1, HalfT, Hs, Hs + (H - Hs) * (0.35f + 0.3f * H01(Seed, K + 1)), T - 3.f, St.Outer);
-	};
-	if (bStepStart) { Step(-HalfT, SA, 11, true); }
-	if (bStepEnd) { Step(L - SB, L + HalfT, 13, false); }
+		const float T0 = P.X <= 0.5f ? End0 : P.X, T1 = P.Y >= L - 0.5f ? End1 : P.Y;
+		EdgeBox(A, B, T0, T1 - 1.f, HalfT + HS(Seed, 500 + (int32)P.X) * 1.5f, 0.f, P.Z, T - 2.f, St.Outer);
+	}
 
 	// a damp patch low on the inside face
 	if (H01(Seed, 15) > 0.45f)
