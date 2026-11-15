@@ -74,8 +74,14 @@ TSharedRef<SWidget> SDCRoot::BuildHudSpeed()
 	auto R = [this]() { return Run(); };
 	auto Paused = [this]() { return IsSpeedPausedNow(); };
 
-	// One segment: a highlight layer under a ghost button. bOn = lit (accent), bHeld = the speed a pause will resume.
-	auto Segment = [](TSharedRef<SWidget> Content, TFunction<bool()> On, TFunction<bool()> Held, TFunction<void()> Click, TSharedRef<SToolTip> TipW)
+	// A split button in the dock's language: one rounded shell as tall as a dock button, thin dividers between
+	// segments, each segment a dock-style button (same hover / press) with the dock's active accent when lit.
+	// SegH + 2 * shell padding + shell outline = 52, the dock button height.
+	constexpr float SegH = 44.f;
+	constexpr float ShellPad = 3.f;
+
+	// bOn = lit (accent), bHeld = the speed a pause will resume (faint accent outline).
+	auto Segment = [SegH](float W, TSharedRef<SWidget> Content, TFunction<bool()> On, TFunction<bool()> Held, TFunction<void()> Click, TSharedRef<SToolTip> TipW)
 	{
 		return SNew(SOverlay)
 			+ SOverlay::Slot()
@@ -83,23 +89,24 @@ TSharedRef<SWidget> SDCRoot::BuildHudSpeed()
 				SNew(SBorder).Visibility(EVisibility::HitTestInvisible).Padding(0.f)
 				.BorderImage_Lambda([On, Held]()
 				{
-					if (On()) { return Box(A(Accent, 0.18f), 6.f, A(Accent, 0.75f), 1.f); }
-					if (Held()) { return Box(FLinearColor::Transparent, 6.f, A(Accent, 0.35f), 1.f); }
+					if (On()) { return Box(A(Accent, 0.14f), 10.f, A(Accent, 0.5f), 1.f); }
+					if (Held()) { return Box(FLinearColor::Transparent, 10.f, A(Accent, 0.35f), 1.f); }
 					return NoBrush();
 				})
 			]
 			+ SOverlay::Slot()
 			[
-				Button(SNew(SBox).WidthOverride(26.f).HeightOverride(22.f).HAlign(HAlign_Center).VAlign(VAlign_Center)[Content],
-					Click, EBtn::Ghost, true, TipW, FMargin(1.f))
+				Button(SNew(SBox).WidthOverride(W).HeightOverride(SegH).HAlign(HAlign_Center).VAlign(VAlign_Center)[Content],
+					Click, EBtn::Dock, true, TipW, FMargin(0.f))
 			];
 	};
+	auto Divider = []() { return SNew(SBox).Padding(FMargin(2.f, 12.f))[VLine(LineHi)]; };
 
 	TSharedRef<SHorizontalBox> H = SNew(SHorizontalBox);
 	H->AddSlot().AutoWidth().VAlign(VAlign_Center)
 	[
-		Segment(IconA(TAttribute<FName>::CreateLambda([Paused]() { return FName(Paused() ? TEXT("play") : TEXT("pause")); }), 12.f,
-				TAttribute<FSlateColor>::CreateLambda([Paused]() { return FSlateColor(Paused() ? Accent : TextDim); })),
+		Segment(SegH, IconA(TAttribute<FName>::CreateLambda([Paused]() { return FName(Paused() ? TEXT("play") : TEXT("pause")); }), 18.f,
+				TAttribute<FSlateColor>::CreateLambda([Paused]() { return FSlateColor(Paused() ? Accent : Text); })),
 			Paused, []() { return false; }, [this]() { ToggleSpeedPause(); },
 			KeyTip(TEXT("Pause / resume"), TEXT("SPACE"), TEXT("Stops the clock. Plan, build and hire while time stands still.")))
 	];
@@ -108,15 +115,16 @@ TSharedRef<SWidget> SDCRoot::BuildHudSpeed()
 		auto Sel = [R, i]() { const UDCRunSubsystem* X = R(); return X && X->GetGameSpeed() == i; };
 		auto On = [Sel, Paused]() { return Sel() && !Paused(); };
 		auto Held = [Sel, Paused]() { return Sel() && Paused(); };
-		H->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(2.f, 0.f, 0.f, 0.f)
+		H->AddSlot().AutoWidth()[Divider()];
+		H->AddSlot().AutoWidth().VAlign(VAlign_Center)
 		[
-			Segment(TxtA(FText::FromString(SpeedLabel[i]), Mono(10.5f), TAttribute<FSlateColor>::CreateLambda([On, Held]() { return FSlateColor(On() ? Accent : (Held() ? Text : TextDim)); })),
+			Segment(40.f, TxtA(FText::FromString(SpeedLabel[i]), Mono(14.f), TAttribute<FSlateColor>::CreateLambda([On]() { return FSlateColor(On() ? Accent : Text); })),
 				On, Held, [this, i]() { SetSpeed(i); }, KeyTip(SpeedName[i], SpeedKey[i]))
 		];
 	}
 
 	return SNew(SBorder)
-		.BorderImage_Lambda([Paused]() { return Box(Hex(0x0A0C0F, 0.85f), 8.f, Paused() ? A(Accent, 0.55f) : Line, 1.f); })
-		.Padding(2.f)
+		.BorderImage_Lambda([Paused, ShellPad]() { return Box(A(FLinearColor::White, 0.03f), 10.f + ShellPad, Paused() ? A(Accent, 0.55f) : Line, 1.f); })
+		.Padding(ShellPad)
 		[H];
 }
