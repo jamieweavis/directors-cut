@@ -7,7 +7,6 @@
 #include "World/DCCrewBody.h"
 #include "Animation/AnimSequence.h"
 #include "Core/DCAssetPaths.h"
-#include "AnimationRuntime.h"
 #include "Animation/AnimInstance.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -29,9 +28,6 @@ namespace
 	constexpr float HurrySpeed = 300.f;     // walking out to / in from the door
 	constexpr float HurryLimpSpeed = 140.f;
 	constexpr float LevelUpLength = 1.1f;
-
-	TAutoConsoleVariable<int32> CVarCrewBody(TEXT("dc.CrewBody"), 1,
-		TEXT("1 = crew wear the imported crew body (posed from a hidden mannequin), 0 = plain mannequins. Affects crew spawned afterwards."));
 
 	template <typename T>
 	T* LoadQuiet(const TCHAR* Path) { return LoadObject<T>(nullptr, Path, nullptr, LOAD_NoWarn | LOAD_Quiet); }
@@ -98,7 +94,6 @@ void ADCCriminalPawn::UpdateFromCriminal(const FDCCriminal& C)
 		bInjured = bNowInjured;
 		ApplyBodyTint();
 	}
-	if (Bandage) { Bandage->SetVisibility(bInjured && !IsHidden()); }
 	UpdateSpeed();
 	if (LevelUpTime < 0.f) { RefreshPlate(); }
 }
@@ -128,10 +123,9 @@ UMaterialInstanceDynamic* ADCCriminalPawn::MakeSurfaceMID(const FLinearColor& Co
 
 void ADCCriminalPawn::SetupVisuals()
 {
+	// The crew body is driven by a hidden mannequin: it runs ABP_Unarmed and its pose is copied onto the body.
 	USkeletalMeshComponent* M = GetMesh();
-	USkeletalMesh* Mesh = LoadQuiet<USkeletalMesh>((CriminalId % 2 == 0) ? DCPaths::QuinnMesh : DCPaths::MannyMesh);
-	if (!Mesh) { Mesh = LoadQuiet<USkeletalMesh>(DCPaths::MannyMesh); }
-	if (Mesh)
+	if (USkeletalMesh* Mesh = LoadQuiet<USkeletalMesh>(DCPaths::MannyMesh))
 	{
 		M->SetSkeletalMesh(Mesh);
 		AnimClass = LoadClass<UAnimInstance>(nullptr, DCPaths::UnarmedAnimBP, nullptr, LOAD_NoWarn | LOAD_Quiet);
@@ -140,43 +134,39 @@ void ADCCriminalPawn::SetupVisuals()
 			M->SetAnimationMode(EAnimationMode::AnimationBlueprint);
 			M->SetAnimInstanceClass(AnimClass);
 		}
-		// The crew body: the mannequin stays (hidden) as the animation driver and its pose is copied onto it.
-		USkeletalMesh* BodyMesh = CVarCrewBody.GetValueOnGameThread() != 0 ? LoadQuiet<USkeletalMesh>(DCPaths::CrewBodyMesh) : nullptr;
-		if (BodyMesh)
+		M->SetVisibility(false, /*bPropagateToChildren*/ false);
+		M->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+
+		// Crew pick a body by id; skip any that didn't import.
+		USkeletalMesh* BodyMesh = nullptr;
+		UMaterialInterface* Skin = nullptr;
+		const int32 NumBodies = UE_ARRAY_COUNT(DCPaths::CrewBodies);
+		const int32 First = FMath::Abs(CriminalId) % NumBodies;
+		for (int32 k = 0; k < NumBodies && !BodyMesh; ++k)
 		{
-			UDCCrewBodyComponent* B = NewObject<UDCCrewBodyComponent>(this, TEXT("CrewBody"));
-			if (B->Init(BodyMesh, M))
-			{
-				B->RegisterComponent();
-				AddInstanceComponent(B);
-				CrewBody = B;
-				M->SetVisibility(false, /*bPropagateToChildren*/ false);
-				M->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
-				if (UMaterialInterface* Skin = LoadQuiet<UMaterialInterface>(DCPaths::MatCrewSkin))
-				{
-					for (int32 i = 0; i < B->GetNumMaterials(); ++i)
-					{
-						UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Skin, this);
-						B->SetMaterial(i, MID);
-						BodyMIDs.Add(MID);
-					}
-				}
-			}
-			else { B->DestroyComponent(); }
+			const DCPaths::FCrewBody& Body = DCPaths::CrewBodies[(First + k) % NumBodies];
+			BodyMesh = LoadQuiet<USkeletalMesh>(Body.Mesh);
+			Skin = BodyMesh ? LoadQuiet<UMaterialInterface>(Body.Skin) : nullptr;
 		}
-		if (!CrewBody)
+		UDCCrewBodyComponent* B = BodyMesh ? NewObject<UDCCrewBodyComponent>(this, TEXT("CrewBody")) : nullptr;
+		if (B && B->Init(BodyMesh, M))
 		{
-			UMaterialInterface* Crim = LoadQuiet<UMaterialInterface>(DCPaths::MatCriminal);
-			for (int32 i = 0; i < M->GetNumMaterials(); ++i)
+			B->RegisterComponent();
+			AddInstanceComponent(B);
+			CrewBody = B;
+			for (int32 i = 0; Skin && i < B->GetNumMaterials(); ++i)
 			{
-				UMaterialInstanceDynamic* MID = Crim ? UMaterialInstanceDynamic::Create(Crim, this) : MakeSurfaceMID(FLinearColor(0.04f, 0.04f, 0.045f), 0.f);
-				if (MID) { M->SetMaterial(i, MID); BodyMIDs.Add(MID); }
+				UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Skin, this);
+				B->SetMaterial(i, MID);
+				BodyMIDs.Add(MID);
 			}
 		}
+		else if (B) { B->DestroyComponent(); }
 	}
-	else
+	if (!CrewBody)
 	{
-		// Primitive fallback body: a dark pill with a head.
+		// Assets missing: a dark pill with a head so the crew member is still visible.
+		UE_LOG(LogDC, Warning, TEXT("Crew %d: no crew body (missing mannequin or crew body assets); using the primitive fallback"), CriminalId);
 		bUsingFallbackBody = true;
 		UStaticMesh* Cyl = LoadQuiet<UStaticMesh>(DCPaths::Cylinder);
 		UStaticMesh* Sph = LoadQuiet<UStaticMesh>(DCPaths::Sphere);
@@ -198,7 +188,6 @@ void ADCCriminalPawn::SetupVisuals()
 		AddPart(Sph, FVector(0, 0, 70), FVector(0.3f));
 	}
 	ApplyBodyTint();
-	BuildProps();
 
 	Plate = UDCWorldLabel::CreateLabelComponent(this, GetCapsuleComponent(), FVector(0.f, 0.f, HalfHeight + 22.f));
 
@@ -247,90 +236,6 @@ void ADCCriminalPawn::ApplyBodyTint()
 	}
 }
 
-UStaticMeshComponent* ADCCriminalPawn::AddProp(UStaticMesh* SM, const FName& Bone, const FVector& MeshSpaceOffset, const FRotator& MeshSpaceRot, const FVector& Scale, const FLinearColor& Color, float Emissive)
-{
-	if (!SM) { return nullptr; }
-	// The crew body has its own headgear (WIP: the hats / headset / bandage were sized for the mannequin's head).
-	if (CrewBody && Bone == TEXT("head")) { return nullptr; }
-	UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
-	C->SetStaticMesh(SM);
-	C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	C->SetCastShadow(true);
-	if (UMaterialInstanceDynamic* MID = MakeSurfaceMID(Color, Emissive)) { C->SetMaterial(0, MID); }
-
-	USkeletalMeshComponent* M = GetMesh();
-	USkeletalMesh* Mesh = M ? M->GetSkeletalMeshAsset() : nullptr;
-	const int32 BoneIdx = Mesh ? Mesh->GetRefSkeleton().FindBoneIndex(Bone) : INDEX_NONE;
-	if (BoneIdx != INDEX_NONE)
-	{
-		// Author the prop in mesh component space (Z up, character faces +Y), then express it relative to the bone's ref pose.
-		const FTransform BoneCS = FAnimationRuntime::GetComponentSpaceTransformRefPose(Mesh->GetRefSkeleton(), BoneIdx);
-		const FTransform PropCS(MeshSpaceRot, BoneCS.GetLocation() + MeshSpaceOffset, Scale);
-		C->SetupAttachment(M, Bone);
-		C->SetRelativeTransform(PropCS.GetRelativeTransform(BoneCS));
-	}
-	else
-	{
-		// Fallback body: approximate head / hand positions on the capsule.
-		const bool bHead = Bone == TEXT("head");
-		const FVector Anchor = bHead ? FVector(0, 0, 62) : FVector(Bone == TEXT("hand_l") ? -30.f : 30.f, 0.f, -10.f);
-		C->SetupAttachment(GetCapsuleComponent());
-		// Mesh-space +Y (forward) maps to actor +X.
-		C->SetRelativeLocation(FVector(MeshSpaceOffset.Y, -MeshSpaceOffset.X, MeshSpaceOffset.Z) + Anchor);
-		C->SetRelativeRotation(MeshSpaceRot + FRotator(0.f, 90.f, 0.f));
-		C->SetRelativeScale3D(Scale);
-	}
-	C->RegisterComponent();
-	AddInstanceComponent(C);
-	PropComps.Add(C);
-	return C;
-}
-
-void ADCCriminalPawn::BuildProps()
-{
-	UStaticMesh* Cube = LoadQuiet<UStaticMesh>(DCPaths::Cube);
-	UStaticMesh* Cyl = LoadQuiet<UStaticMesh>(DCPaths::Cylinder);
-	UStaticMesh* Sph = LoadQuiet<UStaticMesh>(DCPaths::Sphere);
-	const FLinearColor Accent = DC::TypeColor(Type);
-	const FLinearColor Dark(0.03f, 0.03f, 0.03f);
-	const FName Head(TEXT("head"));
-	// The ref-pose head bone sits low in the skull; offsets are measured from it.
-	switch (Type)
-	{
-	case EDCCriminalType::Wheelman: // flat cap
-		AddProp(Cyl, Head, FVector(0, 1, 17), FRotator(-6, 0, 0), FVector(0.215f, 0.235f, 0.06f), FLinearColor(0.16f, 0.1f, 0.06f));
-		AddProp(Cube, Head, FVector(0, 12, 15.5f), FRotator(-8, 0, 0), FVector(0.17f, 0.11f, 0.012f), FLinearColor(0.12f, 0.07f, 0.04f));
-		AddProp(Cyl, Head, FVector(0, 1, 15), FRotator(-6, 0, 0), FVector(0.22f, 0.24f, 0.012f), Accent, 2.f);
-		break;
-	case EDCCriminalType::Muscle: // gloves
-		AddProp(Sph, TEXT("hand_r"), FVector(0, 0, 0), FRotator::ZeroRotator, FVector(0.14f), Accent * 0.5f, 0.6f);
-		AddProp(Sph, TEXT("hand_l"), FVector(0, 0, 0), FRotator::ZeroRotator, FVector(0.14f), Accent * 0.5f, 0.6f);
-		break;
-	case EDCCriminalType::Hacker: // headset
-		AddProp(Cube, Head, FVector(0, 0, 21), FRotator::ZeroRotator, FVector(0.2f, 0.035f, 0.025f), Dark);
-		AddProp(Cyl, Head, FVector(10.5f, 0, 9), FRotator(0, 0, 90), FVector(0.08f, 0.08f, 0.035f), Dark);
-		AddProp(Cyl, Head, FVector(-10.5f, 0, 9), FRotator(0, 0, 90), FVector(0.08f, 0.08f, 0.035f), Dark);
-		AddProp(Cube, Head, FVector(9.5f, 7, 4), FRotator(0, 30, 0), FVector(0.012f, 0.12f, 0.012f), Accent, 4.f);
-		break;
-	case EDCCriminalType::Ghost: // beanie
-		AddProp(Sph, Head, FVector(0, 0, 14), FRotator::ZeroRotator, FVector(0.225f, 0.24f, 0.19f), FLinearColor(0.05f, 0.055f, 0.08f));
-		AddProp(Cyl, Head, FVector(0, 0, 10), FRotator::ZeroRotator, FVector(0.23f, 0.245f, 0.04f), Accent * 0.4f, 0.8f);
-		break;
-	case EDCCriminalType::Face: // fedora
-		AddProp(Cyl, Head, FVector(0, 1, 17), FRotator::ZeroRotator, FVector(0.38f, 0.38f, 0.012f), FLinearColor(0.09f, 0.08f, 0.07f));
-		AddProp(Cyl, Head, FVector(0, 1, 23), FRotator::ZeroRotator, FVector(0.21f, 0.21f, 0.12f), FLinearColor(0.09f, 0.08f, 0.07f));
-		AddProp(Cyl, Head, FVector(0, 1, 19), FRotator::ZeroRotator, FVector(0.215f, 0.215f, 0.025f), Accent, 2.f);
-		break;
-	case EDCCriminalType::Safecracker: // toolbag
-		AddProp(Cube, TEXT("hand_r"), FVector(0, 0, -16), FRotator::ZeroRotator, FVector(0.14f, 0.32f, 0.2f), FLinearColor(0.18f, 0.1f, 0.05f));
-		AddProp(Cube, TEXT("hand_r"), FVector(0, 0, -5), FRotator::ZeroRotator, FVector(0.145f, 0.33f, 0.02f), Accent, 1.5f);
-		break;
-	default: break;
-	}
-	Bandage = AddProp(Cyl, Head, FVector(0, 0, 8), FRotator(-8, 0, 0), FVector(0.22f, 0.24f, 0.045f), FLinearColor(0.8f, 0.78f, 0.72f));
-	if (Bandage) { Bandage->SetVisibility(false); }
-}
-
 void ADCCriminalPawn::RefreshPlate()
 {
 	FDCLabelSpec S;
@@ -353,7 +258,6 @@ void ADCCriminalPawn::SetHidden(bool bHide)
 {
 	SetActorHiddenInGame(bHide);
 	if (Plate) { Plate->SetVisibility(!bHide && DCSettings::ShowCrewNames()); }
-	if (Bandage) { Bandage->SetVisibility(!bHide && bInjured); }
 	if (bHide)
 	{
 		GetCharacterMovement()->StopMovementImmediately();
@@ -429,7 +333,6 @@ void ADCCriminalPawn::LieDown()
 		M->SetRelativeLocationAndRotation(FVector(88.f, 0.f, -HalfHeight + 14.f), Lying);
 	}
 	if (Plate) { Plate->SetRelativeLocation(FVector(0.f, 0.f, -HalfHeight + 60.f)); }
-	if (Bandage) { Bandage->SetVisibility(false); }
 	RefreshPlate();
 }
 
@@ -442,7 +345,6 @@ void ADCCriminalPawn::GetUp()
 		M->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -HalfHeight), FRotator(0.f, -90.f, 0.f));
 	}
 	if (Plate) { Plate->SetRelativeLocation(FVector(0.f, 0.f, HalfHeight + 22.f)); }
-	if (Bandage) { Bandage->SetVisibility(bInjured && !IsHidden()); }
 	RefreshPlate();
 }
 

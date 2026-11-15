@@ -57,10 +57,10 @@ bool UDCCrewBodyComponent::Init(USkeletalMesh* BodyMesh, USkeletalMeshComponent*
 	const FReferenceSkeleton& S = SrcMesh->GetRefSkeleton();
 	const int32 N = T.GetNum();
 
-	static bool bLogged = false;
-	if (!bLogged)
+	static TSet<FName> Logged;
+	if (!Logged.Contains(BodyMesh->GetFName()))
 	{
-		bLogged = true;
+		Logged.Add(BodyMesh->GetFName());
 		FString Tree;
 		for (int32 i = 0; i < N; ++i)
 		{
@@ -82,17 +82,58 @@ bool UDCCrewBodyComponent::Init(USkeletalMesh* BodyMesh, USkeletalMeshComponent*
 	{
 		const int32 Ti = T.FindBoneIndex(Pair.Key);
 		const int32 Si = S.FindBoneIndex(Pair.Value);
-		if (Ti == INDEX_NONE || Si == INDEX_NONE)
-		{
-			UE_LOG(LogDC, Warning, TEXT("Crew body: no bone pair %s -> %s"), Pair.Key, Pair.Value);
-			continue;
-		}
+		if (Ti == INDEX_NONE || Si == INDEX_NONE) { continue; } // bodies with mannequin names map by name below
 		const FTransform SrcRef = FAnimationRuntime::GetComponentSpaceTransformRefPose(S, Si);
 		SrcIndex[Ti] = Si;
 		SrcRefInvCS[Ti] = SrcRef.GetRotation().Inverse();
 		SrcRefLocCS[Ti] = SrcRef.GetLocation();
 		if (Mapped == 0) { HipBone = Ti; }
 		++Mapped;
+	}
+	// Bodies exported with mannequin bone names (fingers and all) map one-to-one; pelvis takes the translation.
+	const bool bByName = T.FindBoneIndex(TEXT("spine_01")) != INDEX_NONE;
+	if (bByName) { HipBone = INDEX_NONE; }
+	for (int32 Ti = 0; bByName && Ti < N; ++Ti)
+	{
+		if (SrcIndex[Ti] != INDEX_NONE) { continue; }
+		const int32 Si = S.FindBoneIndex(T.GetBoneName(Ti));
+		if (Si == INDEX_NONE || Si == 0) { continue; } // leave the root alone
+		const FTransform SrcRef = FAnimationRuntime::GetComponentSpaceTransformRefPose(S, Si);
+		SrcIndex[Ti] = Si;
+		SrcRefInvCS[Ti] = SrcRef.GetRotation().Inverse();
+		SrcRefLocCS[Ti] = SrcRef.GetLocation();
+		if (HipBone == INDEX_NONE && T.GetBoneName(Ti) == TEXT("pelvis")) { HipBone = Ti; }
+		++Mapped;
+	}
+
+	UE_LOG(LogDC, Log, TEXT("Crew body %s: %d of %d bones follow the mannequin"), *BodyMesh->GetName(), Mapped, N);
+
+	// The bodies rest in a different pose from the mannequin (arms straight out vs angled down), so a rotation change
+	// copied as-is swings their limbs somewhere else (hands behind the back). Swing each mapped bone in the body's ref
+	// pose to point where the mannequin's bone points; the copied changes then start from the same pose. Bones with
+	// no single mapped child (hands, pelvis, upper spine) keep their parent's swing.
+	TgtRefRotCS.SetNum(N);
+	TArray<FQuat> Align;
+	Align.Init(FQuat::Identity, N);
+	for (int32 i = 0; i < N; ++i)
+	{
+		const int32 P = T.GetParentIndex(i);
+		Align[i] = P >= 0 ? Align[P] : FQuat::Identity;
+		if (SrcIndex[i] != INDEX_NONE)
+		{
+			int32 Child = INDEX_NONE, NumChildren = 0;
+			for (int32 j = i + 1; j < N; ++j)
+			{
+				if (T.GetParentIndex(j) == i && SrcIndex[j] != INDEX_NONE) { Child = j; ++NumChildren; }
+			}
+			if (NumChildren == 1)
+			{
+				const FVector TDir = (TgtRefCS[Child].GetLocation() - TgtRefCS[i].GetLocation()).GetSafeNormal();
+				const FVector SDir = (SrcRefLocCS[Child] - SrcRefLocCS[i]).GetSafeNormal();
+				if (!TDir.IsNearlyZero() && !SDir.IsNearlyZero()) { Align[i] = FQuat::FindBetweenNormals(TDir, SDir); }
+			}
+		}
+		TgtRefRotCS[i] = (Align[i] * TgtRefCS[i].GetRotation()).GetNormalized();
 	}
 
 	// Same standing height as the mannequin, feet on its feet.
@@ -129,7 +170,7 @@ void UDCCrewBodyComponent::CopyPose()
 		{
 			// Same component-space rotation change as the mannequin bone made from its ref pose.
 			const FQuat Delta = RelInv * (SrcCS[Si].GetRotation() * SrcRefInvCS[i]) * RelRot;
-			B.SetRotation((Delta * TgtRefCS[i].GetRotation()).GetNormalized());
+			B.SetRotation((Delta * TgtRefRotCS[i]).GetNormalized());
 			if (i == HipBone)
 			{
 				B.SetTranslation(TgtRefCS[i].GetLocation() + RelInv.RotateVector(SrcCS[Si].GetLocation() - SrcRefLocCS[i]) / Scale);

@@ -135,9 +135,7 @@ protected:
 	UPROPERTY() TObjectPtr<UClass> AnimClass;
 
 	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> BodyMIDs;
-	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> PropComps;
 	UPROPERTY() TObjectPtr<UDCCrewBodyComponent> CrewBody; // set = the mannequin is hidden and only drives this body
-	UPROPERTY() TObjectPtr<UStaticMeshComponent> Bandage;
 	UPROPERTY() TObjectPtr<UWidgetComponent> Plate;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> LevelRing;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> LevelRingMID;
@@ -147,8 +145,6 @@ protected:
 	bool bUsingFallbackBody = false;
 
 	void SetupVisuals();
-	void BuildProps();
-	UStaticMeshComponent* AddProp(UStaticMesh* Mesh, const FName& Bone, const FVector& MeshSpaceOffset, const FRotator& MeshSpaceRot, const FVector& Scale, const FLinearColor& Color, float Emissive = 0.f);
 	UMaterialInstanceDynamic* MakeSurfaceMID(const FLinearColor& Color, float Emissive);
 	void ApplyBodyTint();
 	void RefreshPlate();

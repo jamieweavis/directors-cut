@@ -23,6 +23,7 @@ private:
 	TArray<int32> SrcIndex;        // per target bone: mapped source bone, or INDEX_NONE (follows its parent)
 	TArray<FQuat> SrcRefInvCS;     // per target bone: inverse of the mapped source bone's ref rotation (component space)
 	TArray<FTransform> TgtRefCS;   // target ref pose, component space
+	TArray<FQuat> TgtRefRotCS;     // target ref rotations swung to point along the mannequin's ref pose (component space)
 	TArray<FVector> SrcRefLocCS;   // per target bone: the mapped source bone's ref location (component space)
 	int32 HipBone = INDEX_NONE;    // target bone that also takes the source pelvis translation
 	FQuat RelRot = FQuat::Identity;

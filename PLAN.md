@@ -363,7 +363,7 @@ Stations (each one can be clicked and gets a hover highlight). Each station live
 
 ### 3.4 Characters
 
-- MVP: the UE5 template **Manny/Quinn mannequins** (imported from the engine's `Templates/TP_ThirdPerson` content), with a **dark matte noir material**, a **type-colour accent** (rim light/emissive trim) and a simple silhouette prop per type (flat cap, beanie, fedora, headset, gloves, toolbag). Idle and walk animations come from the template.
+- Crew wear modelled bodies from `Art/Crew` (imported by `Tools/crew_import.py`), chosen by crew id, with a **type-colour fresnel rim** on `M_DC_CrewSkin`. A hidden template Manny runs the idle/walk animations and `UDCCrewBodyComponent` copies its pose onto the body. No per-type props.
 - Pawns idle and wander in the lounge. A selected criminal gets a spotlight pool and a floating name/level plate. They walk to the garage when leaving and come back injured (limping/bandage tint) or don't come back at all if they're arrested.
 - Post-MVP: Fab character/animation packs or MetaHumans (§9).
 
