@@ -18,6 +18,8 @@ The clock keeps running. Every dawn is payday, and crew wages and building upkee
 
 Every run deals out different recruits, jobs and perks, so no two runs play out the same.
 
+Want to know how it was made? Read the [devlog](DEVLOG.md).
+
 ## Licensing
 
 Everything that ships in the build, and where it comes from:
