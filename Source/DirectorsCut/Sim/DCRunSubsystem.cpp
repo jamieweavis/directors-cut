@@ -1160,6 +1160,7 @@ bool UDCRunSubsystem::BailOut(int32 CriminalId)
 bool UDCRunSubsystem::HasPendingPerkOffer() const { return PerkOffer.Num() > 0; }
 TArray<FDCPerk> UDCRunSubsystem::GetPerkOffer() const { return PerkOffer; }
 TArray<FDCPerk> UDCRunSubsystem::GetPerksTaken() const { return PerksTaken; }
+void UDCRunSubsystem::DevOfferPerks() { if (PerkOffer.Num() == 0) { DCImpl::OfferPerks(*this); } }
 
 bool UDCRunSubsystem::IsFinalPerkOffer() const
 {

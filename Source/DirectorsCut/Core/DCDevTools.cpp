@@ -43,7 +43,8 @@ void UDCDevTools::Initialize(FSubsystemCollectionBase& Collection)
 	bClockFlags = FCString::Strifind(Cmd, TEXT("DCHour=")) || FCString::Strifind(Cmd, TEXT("DCTimeScale="));
 	bContinue = FParse::Param(Cmd, TEXT("DCContinue"));
 	FParse::Value(Cmd, TEXT("DCHireCrew="), HireCrew);
-	if (Shots.Num() || QuitAfter > 0.f || AutoPlaySeconds > 0 || bClockFlags || bContinue || HireCrew > 0)
+	bPerkOffer = FParse::Param(Cmd, TEXT("DCPerkOffer"));
+	if (Shots.Num() || QuitAfter > 0.f || AutoPlaySeconds > 0 || bClockFlags || bContinue || HireCrew > 0 || bPerkOffer)
 	{
 		IFileManager::Get().MakeDirectory(*ShotDir, true);
 		TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UDCDevTools::Tick));
@@ -206,6 +207,11 @@ bool UDCDevTools::Tick(float DeltaTime)
 	if (bContinue && bWorldUp) { ApplyContinue(); bContinue = false; }
 	if (bClockFlags && bWorldUp && Elapsed > 0.5) { ApplyClockFlags(); bClockFlags = false; }
 	if (HireCrew > 0 && bWorldUp && Elapsed > 1.0) { ApplyHireCrew(); HireCrew = 0; }
+	if (bPerkOffer && bWorldUp && Elapsed > 1.0)
+	{
+		if (UDCRunSubsystem* Run = UDCRunSubsystem::Get(GetGameWorld())) { if (Run->HasActiveRun()) { Run->DevOfferPerks(); } }
+		bPerkOffer = false;
+	}
 	if (Elapsed < NextAt) { return true; }
 	if (Step == 0 && AutoPlaySeconds > 0) { RunAutoPlay(); AutoPlaySeconds = 0; NextAt = Elapsed + 1.0; return true; }
 

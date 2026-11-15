@@ -220,6 +220,8 @@ public:
 	TArray<FDCPerk> GetPerksTaken() const;
 	/** The current offer holds every perk still obtainable: the unpicked ones are discarded for the run. */
 	bool IsFinalPerkOffer() const;
+	/** Dev/screenshot hook (-DCPerkOffer): put a perk offer on the table now. */
+	void DevOfferPerks();
 	/** Successful missions in a row (a failure or bust resets it). */
 	int32 GetSuccessStreak() const { return SuccessStreak; }
 
