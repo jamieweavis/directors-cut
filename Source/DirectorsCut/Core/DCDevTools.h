@@ -22,7 +22,8 @@
 //                           same as Options > Gameplay > Debug view
 //   -DCHireCrew=N           hire the first N recruits right after start (crew close-ups; stops when cash runs out)
 //   -DCCrewBody=Name        every crew member wears SK_Crew_<Name> (checking a newly imported body)
-//   -DCPerkOffer            put a perk offer on the table right after start (shoot it with panel PerkDraft)
+//   -DCPortraitDump         also write every baked crew portrait onto a contact sheet, <DCShotDir>/portraits.png
+//   -DCPerkOffer          put a perk offer on the table right after start (shoot it with panel PerkDraft)
 //   -DCPerkSel=N            with -DCShots: pre-select perk card N (0-based) when the PerkDraft panel opens
 //   -DCContinue            load the saved run (UDCRunSubsystem::ContinueRun) right after start instead of a new run
 //

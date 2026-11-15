@@ -147,7 +147,12 @@ TSharedRef<SWidget> SDCRoot::CrewCard(const FDCCriminal& C, bool bRecruit)
 		[
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight()
-			[SNew(STextBlock).Text(FText::FromString(C.GetShortName())).Font(Font(13.f, EW::SemiBold)).ColorAndOpacity(Text).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 6.f, 0.f)[Icon(DC::TypeIcon(C.Type), 13.f, TC)]
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+				[SNew(STextBlock).Text(FText::FromString(C.GetShortName())).Font(Font(13.f, EW::SemiBold)).ColorAndOpacity(Text).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
+			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)
 			[
 				SNew(SHorizontalBox)

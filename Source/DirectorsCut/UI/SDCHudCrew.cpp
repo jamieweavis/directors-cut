@@ -143,7 +143,7 @@ TSharedRef<SWidget> SDCRoot::HudCrewRow(const FDCCriminal& C)
 	}
 
 	TSharedRef<SWidget> Content = SNew(SHorizontalBox)
-		// Avatar with a status dot
+		// Portrait with a status dot
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 12.f, 0.f)
 		[
 			SNew(SOverlay)
@@ -161,6 +161,11 @@ TSharedRef<SWidget> SDCRoot::HudCrewRow(const FDCCriminal& C)
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 6.f, 0.f)
+				[
+					SNew(SBox).ToolTip(Tip(DC::TypeName(C.Type), FString(), DC::TypeIcon(C.Type), DC::TypeColor(C.Type)))
+					[Icon(DC::TypeIcon(C.Type), 13.f, DC::TypeColor(C.Type))]
+				]
 				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 				[SNew(STextBlock).Text(FText::FromString(C.GetShortName())).Font(Font(13.f, EW::SemiBold)).ColorAndOpacity(Text).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Abilities]

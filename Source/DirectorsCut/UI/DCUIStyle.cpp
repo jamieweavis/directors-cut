@@ -23,6 +23,7 @@
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SSpacer.h"
 #include "Widgets/Notifications/SProgressBar.h"
+#include "World/DCPortraits.h"
 #include "DirectorsCut.h"
 
 namespace DCUI
@@ -562,7 +563,38 @@ namespace DCUI
 				]
 			];
 	}
-	TSharedRef<SWidget> Avatar(const FDCCriminal& C, float Size, bool bDim) { return AvatarType(C.Type, C.Quality, Size, bDim); }
+	TSharedRef<SWidget> Avatar(const FDCCriminal& C, float Size, bool bDim)
+	{
+		// A head-and-shoulders portrait of the crew member's own body, baked once per look by UDCPortraits. Until it's
+		// ready (a few frames the first time a look is seen) the type icon stands in.
+		const uint32 Key = UDCPortraits::KeyFor(C);
+		const FLinearColor QC = DC::QualityColor(C.Quality);
+		const FLinearColor TC = DC::TypeColor(C.Type);
+		const float Ring = FMath::Max(1.5f, Size * 0.05f);
+		return SNew(SBox).WidthOverride(Size).HeightOverride(Size)
+			[
+				SNew(SOverlay)
+				+ SOverlay::Slot()
+				[
+					SNew(SBorder)
+					.BorderImage(Box(Hex(0x1A1F27, 1.f), -1.f, FLinearColor::Transparent, 0.f))
+					.HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(0.f)
+					[Icon(DC::TypeIcon(C.Type), Size * 0.42f, bDim ? A(TC, 0.55f) : TC)]
+				]
+				+ SOverlay::Slot()
+				[
+					SNew(SImage)
+					.Image_Lambda([Key]() { return UDCPortraits::Find(Key); })
+					.ColorAndOpacity(bDim ? FLinearColor(0.42f, 0.42f, 0.44f, 1.f) : FLinearColor::White)
+					.Visibility(EVisibility::HitTestInvisible)
+				]
+				+ SOverlay::Slot()
+				[
+					SNew(SBorder).BorderImage(Box(FLinearColor::Transparent, -1.f, A(QC, bDim ? 0.35f : 1.f), Ring)).Padding(0.f)
+					.Visibility(EVisibility::HitTestInvisible)
+				]
+			];
+	}
 
 	FName MoodIcon(float W, bool bRefuses)
 	{

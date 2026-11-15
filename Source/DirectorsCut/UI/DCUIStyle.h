@@ -155,8 +155,9 @@ namespace DCUI
 	/** Pips (tier, room level). */
 	TSharedRef<SWidget> Pips(int32 Filled, int32 Max, const FLinearColor& On, float Size = 6.f, const FLinearColor& Off = FLinearColor(1, 1, 1, 0.12f));
 
-	/** Crew avatar: type icon on a dark disc with a quality-coloured ring. Optional status overlay icon. */
+	/** Crew avatar: a small rendered portrait of the crew member with a quality-coloured ring (type icon until it's ready). */
 	TSharedRef<SWidget> Avatar(const FDCCriminal& C, float Size, bool bDim = false);
+	/** Type icon on a dark disc with a quality-coloured ring. */
 	TSharedRef<SWidget> AvatarType(EDCCriminalType T, EDCQuality Q, float Size, bool bDim = false);
 	/** Mood icon by willingness (smile / meh / frown / angry). */
 	FName MoodIcon(float Willingness, bool bRefuses);
