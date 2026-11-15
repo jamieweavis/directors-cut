@@ -12,7 +12,8 @@ Epic AI MegaJam entry, built Nov 13–15, 2026. Three days, about 160 commits, a
 6. [Cars](#day-3-cars)
 7. [Graphics](#day-3-graphics)
 8. [Perks and Balance](#day-3-perks-and-balance)
-9. [Shipping It](#day-3-shipping-it)
+9. [Music](#day-3-music)
+10. [Shipping It](#day-3-shipping-it)
 
 ---
 
@@ -147,6 +148,27 @@ Day 3 was mostly playtesting and tweaking, and then more playtesting.
 - **Room labels:** room levels now spell out what they do in plain language.
 
 The balance bot from Day 1 kept paying for itself here. It plays thousands of simulated runs, so I could check things like when you can first afford the Big Score without playing the whole game every time.
+
+## Day 3: Music
+
+For most of the jam the game had no music at all, just procedural SFX and ambience. Right at the end of Day 3 I wanted something to sit under the hideout, and went for a **laid-back lounge score**: easy bossa by day, slow brushed swing at night.
+
+Like the rest of the audio, none of it is samples or recordings. A Python script (`Tools/music_gen.py`, using numpy and scipy) both **composes and synthesises** every note:
+
+- **Four sets:** DayA (a sunny bossa in F, 96 bpm), DayB (brighter and busier in Eb, 104 bpm), NightA (D minor swing, 82 bpm) and NightB (a warmer late-hours groove in A minor with ride cymbal, 88 bpm). Each one is a 32-bar tune with its own key, tempo and hand-written chord progression.
+- **Seeded composition:** the melodies are generated from rules. The script picks rhythm cells for a call, a response and a bridge, gives each a random contour, then snaps every note to a scale that fits whatever chord is playing underneath. The chords are voiced so each one moves smoothly to the next, and the bass plays roots and fifths with a little approach note leading into the next chord. Same seed, same tune, every time.
+- **Synthesised instruments:** electric piano, bass, vibraphone, flute, nylon guitar, pads, bells, and a drum kit (kick, rim, brushes, shaker, hats, ride, congas), each built from oscillators, noise and filters. The reverb is generated too, and the tail of each loop wraps back round onto its start so the loops are seamless.
+
+Each set is rendered as **five stems** of exactly the same length: **Core** (piano and bass), **Groove** (drums), **MelA** (vibes), **MelB** (flute, a different tune over the same chords) and **Color** (guitar and congas by day, pad and bells at night).
+
+In game, all five stems of a set start on the same frame and the audio subsystem **re-mixes them every 8-bar phrase**, so the music follows what's happening:
+
+- It switches between day and night sets with the clock, with a bit of slack so it doesn't flip back and forth around dusk and dawn.
+- As you unlock higher mission tiers, it moves through four "chapters": the later sets come in, the layers fill out, and eventually both melodies play together.
+- Set changes crossfade on a phrase boundary, so you never hear a cut mid-bar.
+- The title screen gets a quiet mix, pausing ducks it and muffles it with a low-pass filter, and it fades out on game over.
+
+There's a new **Music** volume slider in Options and the pause menu (60% by default), and tests check the music assets load and loop at the right tempo, plus the mixing rules.
 
 ## Day 3: Shipping It
 
