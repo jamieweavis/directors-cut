@@ -1,4 +1,4 @@
-// Director's Cut — game speed controls (HUD, left end of the top-right bar) and their hotkeys.
+// Director's Cut — game speed controls (HUD, left end of the bottom dock) and their hotkeys.
 // Pause / 1x / 2x / 4x. Keys: Space = pause / resume, 1 / 2 / 3 = 1x / 2x / 4x.
 #include "UI/SDCRootInternal.h"
 #include "Framework/Application/SlateApplication.h"

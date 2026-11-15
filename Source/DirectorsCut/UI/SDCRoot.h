@@ -86,8 +86,14 @@ private:
 	TSharedRef<SWidget> Scroll(TSharedRef<SWidget> Content);
 
 	// Toasts
-	struct FToast { TSharedPtr<SWidget> Widget; double Time = 0.0; };
-	TArray<FToast> Toasts;
+	struct FToast { TSharedPtr<SWidget> Widget; double Time = 0.0; TSharedRef<double> End = MakeShared<double>(0.0); FString Msg; };
+	struct FPendingToast { FString Msg; FName Icon; bool bWarn = false; };
+	TArray<FToast> Toasts;               // on screen (at most one)
+	TArray<FPendingToast> PendingToasts; // waiting their turn
+	static constexpr double ToastHold = 4.2;     // full on-screen time when nothing is waiting
+	static constexpr double ToastMinHold = 2.2;  // shortest a toast stays once others are queued
+	static constexpr double ToastFadeOut = 0.45;
+	void ShowToastNow(const FString& Msg, FName Icon, bool bWarn);
 
 	// Badges / seen state
 	TSet<int32> SeenMissionIds;          // board postings the player has looked at

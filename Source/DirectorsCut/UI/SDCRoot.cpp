@@ -57,7 +57,7 @@ TSharedRef<SWidget> SDCRoot::BuildRootContent()
 			SNew(SBox).Visibility_Lambda(HudVis)[SAssignNew(ChipBox, SVerticalBox)]
 		]
 
-		// ── HUD: game speed + clock + payday + stats bar (top-right) ──
+		// ── HUD: clock + stats bar (top-right) ──
 		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(FMargin(0.f, 20.f, 20.f, 0.f))
 		[
 			SNew(SBox).Visibility_Lambda(HudVis)[BuildHudStats()]
@@ -662,14 +662,20 @@ void SDCRoot::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime
 		DisplayCash = FMath::Abs(Diff) < 1.0 ? Target : DisplayCash + Diff * FMath::Min(1.0, InDeltaTime * 5.0) + FMath::Sign(Diff) * FMath::Min(FMath::Abs(Diff), 1.0);
 	}
 
-	// Toasts expire.
+	// Toasts: one on screen at a time; the next queued one shows when it ends.
 	for (int32 i = Toasts.Num() - 1; i >= 0; --i)
 	{
-		if (T - Toasts[i].Time > 4.2)
+		if (T >= *Toasts[i].End)
 		{
 			ToastBox->RemoveSlot(Toasts[i].Widget.ToSharedRef());
 			Toasts.RemoveAt(i);
 		}
+	}
+	if (Toasts.Num() == 0 && PendingToasts.Num() > 0)
+	{
+		const FPendingToast P = PendingToasts[0];
+		PendingToasts.RemoveAt(0);
+		ShowToastNow(P.Msg, P.Icon, P.bWarn);
 	}
 }
 
@@ -677,15 +683,30 @@ void SDCRoot::Toast(const FString& Msg, FName IconName, bool bWarn)
 {
 	UE_LOG(LogDC, Log, TEXT("[Toast] %s"), *Msg);
 	if (!ToastBox.IsValid()) { return; }
+	if (Toasts.Num() == 0 && PendingToasts.Num() == 0) { ShowToastNow(Msg, IconName, bWarn); return; }
+	// Busy: queue it (skip exact repeats) and cut the current toast's hold short so the line keeps moving.
+	if (Toasts.Num() > 0 && Toasts.Last().Msg == Msg) { return; }
+	for (const FPendingToast& P : PendingToasts) { if (P.Msg == Msg) { return; } }
+	PendingToasts.Add({ Msg, IconName, bWarn });
+	if (PendingToasts.Num() > 6) { PendingToasts.RemoveAt(0); }
+	const double T = Now();
+	for (FToast& Cur : Toasts) { *Cur.End = FMath::Min(*Cur.End, FMath::Max(Cur.Time + ToastMinHold, T + ToastFadeOut)); }
+}
+
+void SDCRoot::ShowToastNow(const FString& Msg, FName IconName, bool bWarn)
+{
 	const double T0 = Now();
+	TSharedRef<double> End = MakeShared<double>(T0 + ToastHold);
 	const FLinearColor IC = bWarn ? Bad : Accent;
 	TSharedRef<SWidget> W = SNew(SBorder)
 		.BorderImage(NoBrush())
 		.Padding(0.f)
-		.ColorAndOpacity_Lambda([T0]()
+		.ColorAndOpacity_Lambda([T0, End]()
 		{
-			const float A = (float)(Now() - T0);
-			return FLinearColor(1, 1, 1, FMath::Min(EaseOut(A / 0.16f), 1.f - FMath::Clamp((A - 3.7f) / 0.45f, 0.f, 1.f)));
+			const double N = Now();
+			const float In = EaseOut((float)(N - T0) / 0.16f);
+			const float Out = 1.f - FMath::Clamp((float)((N - (*End - ToastFadeOut)) / ToastFadeOut), 0.f, 1.f);
+			return FLinearColor(1, 1, 1, FMath::Min(In, Out));
 		})
 		.RenderTransform_Lambda([T0]() { return TOptional<FSlateRenderTransform>(FSlateRenderTransform(FVector2f(0.f, (1.f - EaseOut((float)(Now() - T0) / 0.22f)) * -14.f))); })
 		[
@@ -706,8 +727,7 @@ void SDCRoot::Toast(const FString& Msg, FName IconName, bool bWarn)
 			]
 		];
 	ToastBox->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 0.f, 0.f, 8.f)[W];
-	Toasts.Add({ W, T0 });
-	if (Toasts.Num() > 4) { ToastBox->RemoveSlot(Toasts[0].Widget.ToSharedRef()); Toasts.RemoveAt(0); }
+	Toasts.Add({ W, T0, End, Msg });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -716,9 +736,8 @@ void SDCRoot::Toast(const FString& Msg, FName IconName, bool bWarn)
 
 TSharedRef<SWidget> SDCRoot::BuildHudClock()
 {
-	// Clock + day + payday group; BuildHudStats() frames it inside the top-right bar.
+	// Clock + day; BuildHudStats() frames it inside the top-right bar. Upkeep lives in the crew list (bottom-left).
 	auto R = [this]() { return Run(); };
-	auto Sep = []() { return SNew(SBox).Padding(FMargin(12.f, 4.f)).HeightOverride(26.f)[VLine(Line)]; };
 
 	TSharedRef<SWidget> Clock = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 10.f, 0.f)
@@ -767,27 +786,7 @@ TSharedRef<SWidget> SDCRoot::BuildHudClock()
 			]
 		];
 
-	TSharedRef<SWidget> Payday = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)[Icon(TEXT("wallet"), 14.f, TextDim)]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-		[
-			SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight()
-			[TxtA(TAttribute<FText>::CreateLambda([R]() { const UDCRunSubsystem* X = R(); return FText::FromString(X ? Money(-X->GetUpkeepDue()) : TEXT("")); }), Mono(12.f),
-				TAttribute<FSlateColor>::CreateLambda([R]() { const UDCRunSubsystem* X = R(); return FSlateColor((X && X->GetCash() < X->GetUpkeepDue()) ? Bad : Text); }))]
-			+ SVerticalBox::Slot().AutoHeight()
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 4.f, 0.f)[Icon(TEXT("sunrise"), 9.f, TextFaint)]
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-				[TxtA(TAttribute<FText>::CreateLambda([R]() { const UDCRunSubsystem* X = R(); return FText::FromString(X ? DC::Clock(X->GetSecondsUntilPayday()) : TEXT("")); }), Mono(9.5f), FSlateColor(TextFaint))]
-			]
-		];
-
-	TSharedRef<SWidget> W = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Clock]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Sep()]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Payday];
+	TSharedRef<SWidget> W = Clock;
 	W->SetToolTip(TipWidget(
 		SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()[Txt(TEXT("Payday at dawn"), Font(11.f, EW::SemiBold), Text)]
@@ -850,8 +849,6 @@ TSharedRef<SWidget> SDCRoot::BuildHudStats()
 		.Padding(FMargin(8.f, 6.f, 6.f, 6.f))
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[BuildHudSpeed()]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Sep()]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[BuildHudClock()]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Sep()]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Cash]
@@ -942,6 +939,8 @@ TSharedRef<SWidget> SDCRoot::BuildDock()
 		.Padding(FMargin(6.f))
 		[
 			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.f, 0.f, 2.f, 0.f)[BuildHudSpeed()]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(8.f, 10.f)[VLine(Line)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("map"), TEXT("Missions"), TEXT("M"), EDCPanel::Missions, TAttribute<int32>::CreateLambda([this]() { return NewPostingCount(); }), true, [this]() { return SoonestLeadExpiry(); })]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("users"), TEXT("Crew"), TEXT("C"), EDCPanel::Crew, Zero)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("wrench"), TEXT("Gear"), TEXT("G"), EDCPanel::Workbench, Zero)]
