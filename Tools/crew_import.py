@@ -31,6 +31,8 @@ BODIES = [
     ("Hooded", "Crew_Hooded.fbx", "Crew_Hooded.fbm/T_Crew_Hooded_BaseColor.jpg", None),
     ("Criminal", "Crew_Criminal.fbx", "Crew_Criminal.fbm/T_Crew_Criminal_basecolor.jpg",
      "Crew_Criminal.fbm/T_Crew_Criminal_normal.jpg"),
+    ("Hoodie", "Crew_Hoodie.fbx", "Crew_Hoodie.fbm/T_Crew_Hoodie_basecolor.jpg",
+     "Crew_Hoodie.fbm/T_Crew_Hoodie_normal.jpg"),
 ]
 
 

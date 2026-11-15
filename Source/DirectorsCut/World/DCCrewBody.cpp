@@ -111,7 +111,7 @@ bool UDCCrewBodyComponent::Init(USkeletalMesh* BodyMesh, USkeletalMeshComponent*
 	// The bodies rest in a different pose from the mannequin (arms straight out vs angled down), so a rotation change
 	// copied as-is swings their limbs somewhere else (hands behind the back). Swing each mapped bone in the body's ref
 	// pose to point where the mannequin's bone points; the copied changes then start from the same pose. Bones with
-	// no single mapped child (hands, pelvis, upper spine) keep their parent's swing.
+	// no single mapped child, twist bones aside (hands, pelvis, upper spine), keep their parent's swing.
 	TgtRefRotCS.SetNum(N);
 	TArray<FQuat> Align;
 	Align.Init(FQuat::Identity, N);
@@ -124,7 +124,12 @@ bool UDCCrewBodyComponent::Init(USkeletalMesh* BodyMesh, USkeletalMeshComponent*
 			int32 Child = INDEX_NONE, NumChildren = 0;
 			for (int32 j = i + 1; j < N; ++j)
 			{
-				if (T.GetParentIndex(j) == i && SrcIndex[j] != INDEX_NONE) { Child = j; ++NumChildren; }
+				// Twist bones sit along the limb, not at its end: aim at the next joint (upperarm -> lowerarm), so
+				// T-posed mannequin-named bodies swing their arms down too.
+				if (T.GetParentIndex(j) == i && SrcIndex[j] != INDEX_NONE && !T.GetBoneName(j).ToString().Contains(TEXT("twist")))
+				{
+					Child = j; ++NumChildren;
+				}
 			}
 			if (NumChildren == 1)
 			{
