@@ -2,6 +2,7 @@
 // Dev: -DCPlaceRoom=Workshop starts placement once a run is up; -DCPlaceCursor=X,Y fixes the cursor's ground point.
 #include "World/DCBuildPlacer.h"
 #include "World/DCWorldLabel.h"
+#include "World/Scene/DCLandscape.h"
 #include "Core/DCSiteLayout.h"
 #include "Core/DCRunSubsystem.h"
 #include "Core/DCUISubsystem.h"
@@ -19,19 +20,9 @@
 namespace
 {
 	using namespace DCSite;
-	constexpr float NearR = 260.f;    // full-size grid lines within this distance of the cursor...
-	constexpr float FarR = 1250.f;    // ...shrinking to nothing out here
 	constexpr float LineZ = 5.f;
 	const FLinearColor AccentCol(0.30f, 0.85f, 1.f);
-	const FLinearColor BadCol(1.f, 0.16f, 0.1f);
 
-	float Falloff(float D) { const float A = FMath::Clamp((D - NearR) / (FarR - NearR), 0.f, 1.f); return 1.f - A * A * (3.f - 2.f * A); }
-	float DistToSegment(const FVector2D& P, const FVector2D& A, const FVector2D& B)
-	{
-		const FVector2D AB = B - A;
-		const float T = FMath::Clamp(FVector2D::DotProduct(P - A, AB) / FMath::Max(1.f, AB.SizeSquared()), 0.f, 1.f);
-		return FVector2D::Distance(P, A + AB * T);
-	}
 	/** Box instance between two ground points. */
 	FTransform BarXform(const FVector2D& A, const FVector2D& B, float Z, float W, float H, float Shrink = 0.f)
 	{
@@ -85,12 +76,10 @@ void ADCBuildPlacer::Begin(EDCRoomType InRoom)
 	{
 		LineMat = MakeGlow(FLinearColor(1.f, 0.93f, 0.8f), 9.f);
 		GoodMat = MakeGlow(AccentCol, 14.f);
-		BadMat = MakeGlow(BadCol, 12.f);
 		Lines = MakeISM(TEXT("GridLines"), DCPaths::Cube, LineMat);
 		Dots = MakeISM(TEXT("GridDots"), DCPaths::Cylinder, LineMat);
 		Marks = MakeISM(TEXT("GridMarks"), DCPaths::Cube, GoodMat);
 		HoverGood = MakeISM(TEXT("GridHoverGood"), DCPaths::Cube, GoodMat);
-		HoverBad = MakeISM(TEXT("GridHoverBad"), DCPaths::Cube, BadMat);
 		Label = UDCWorldLabel::CreateLabelComponent(this, Root, FVector::ZeroVector);
 	}
 	Room = InRoom;
@@ -118,13 +107,14 @@ void ADCBuildPlacer::Cancel(bool bQuiet)
 	if (!bActive) { return; }
 	bActive = false;
 	HideAll();
+	if (ADCLandscape* Land = ADCLandscape::Get(GetWorld())) { Land->SetPreviewCells({}); }
 	UE_LOG(LogDC, Log, TEXT("BuildPlacer: cancelled%s"), bQuiet ? TEXT(" (quiet)") : TEXT(""));
 	if (!bQuiet) { UDCAudioSubsystem::Play(this, DCSfx::PanelClose); }
 }
 
 void ADCBuildPlacer::HideAll()
 {
-	for (UInstancedStaticMeshComponent* C : { Lines.Get(), Dots.Get(), Marks.Get(), HoverGood.Get(), HoverBad.Get() }) { if (C) { C->ClearInstances(); } }
+	for (UInstancedStaticMeshComponent* C : { Lines.Get(), Dots.Get(), Marks.Get(), HoverGood.Get() }) { if (C) { C->ClearInstances(); } }
 	if (Label) { Label->SetVisibility(false); }
 }
 
@@ -133,6 +123,8 @@ void ADCBuildPlacer::RefreshCells()
 	const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
 	Occupied = Run ? Run->GetOccupiedCells() : TArray<FIntPoint>{ Grid::OfficeCell() };
 	Grid::ValidCells(Occupied, Valid);
+	// clear the meadow grass off the valid cells so their outlines show (no-op unless the set changed)
+	if (ADCLandscape* Land = ADCLandscape::Get(GetWorld())) { Land->SetPreviewCells(bActive ? Valid : TArray<FIntPoint>()); }
 }
 
 void ADCBuildPlacer::UpdateCursor(APlayerController* PC, float DeltaTime)
@@ -183,72 +175,75 @@ void ADCBuildPlacer::UpdateCursor(APlayerController* PC, float DeltaTime)
 void ADCBuildPlacer::Redraw()
 {
 	HideAll();
-	if (!bHaveCursor) { return; }
-	const FVector2D C = Smooth;
 
-	// lattice lines + corner dots, sized by distance to the cursor
+	// lattice lines + corner dots around every cell where the room may go, all at full size wherever the cursor is.
+	// Shared edges/corners are drawn once.
 	TArray<FTransform> L, Dt;
-	auto Edge = [&](const FVector2D& A, const FVector2D& B)
+	TSet<FIntVector> Edges;   // (I, J, 0 = +X edge from vertex IJ, 1 = +Y edge)
+	TSet<FIntPoint> Verts;
+	const float F = Appear;
+	auto Edge = [&](int32 I, int32 J, int32 Dir)
 	{
-		const float F = Falloff(DistToSegment(C, A, B)) * Appear;
-		if (F < 0.03f) { return; }
+		bool bSeen = false; Edges.Add(FIntVector(I, J, Dir), &bSeen);
+		if (bSeen) { return; }
+		const FVector2D A = Grid::Vertex(I, J), B = Dir == 0 ? Grid::Vertex(I + 1, J) : Grid::Vertex(I, J + 1);
 		L.Add(BarXform(A, B, LineZ, 3.f + 7.f * F, 1.5f + 2.f * F, 10.f));
 	};
-	for (int32 J = Grid::MinRow; J <= Grid::MaxRow + 1; ++J)
+	auto Vert = [&](int32 I, int32 J)
 	{
-		for (int32 I = Grid::MinCol; I <= Grid::MaxCol + 1; ++I)
-		{
-			const FVector2D V = Grid::Vertex(I, J);
-			if (I <= Grid::MaxCol) { Edge(V, Grid::Vertex(I + 1, J)); }
-			if (J <= Grid::MaxRow) { Edge(V, Grid::Vertex(I, J + 1)); }
-			const float F = Falloff(FVector2D::Distance(C, V)) * Appear;
-			if (F >= 0.03f) { Dt.Add(FTransform(FRotator::ZeroRotator, FVector(V.X, V.Y, LineZ), FVector(0.14f * F + 0.04f, 0.14f * F + 0.04f, 0.04f))); }
-		}
+		bool bSeen = false; Verts.Add(FIntPoint(I, J), &bSeen);
+		if (bSeen) { return; }
+		const FVector2D V = Grid::Vertex(I, J);
+		Dt.Add(FTransform(FRotator::ZeroRotator, FVector(V.X, V.Y, LineZ), FVector(0.14f * F + 0.04f, 0.14f * F + 0.04f, 0.04f)));
+	};
+	for (const FIntPoint& V : Valid)
+	{
+		Edge(V.X, V.Y, 0); Edge(V.X, V.Y + 1, 0); Edge(V.X, V.Y, 1); Edge(V.X + 1, V.Y, 1);
+		Vert(V.X, V.Y); Vert(V.X + 1, V.Y); Vert(V.X + 1, V.Y + 1); Vert(V.X, V.Y + 1);
 	}
 	Lines->AddInstances(L, false, false, false);
 	Dots->AddInstances(Dt, false, false, false);
 
-	// a small "+" on every free cell where the room may go (bigger near the cursor)
+	// a "+" on every free cell where the room may go
 	TArray<FTransform> Mk;
 	const float Pulse = 0.85f + 0.15f * FMath::Sin(Time * 4.f);
 	for (const FIntPoint& V : Valid)
 	{
 		if (bHoverValid && V == Hover) { continue; }
 		const FVector2D P = Grid::Centre(V);
-		const float F = FMath::Max(0.25f, Falloff(FVector2D::Distance(C, P) * 0.7f)) * Appear * Pulse;
-		const float S = 45.f + 55.f * F;
+		const float S = 100.f * Appear * Pulse;
 		Mk.Add(FTransform(FRotator(0.f, 45.f, 0.f), FVector(P.X, P.Y, LineZ + 1.f), FVector(S / 100.f, 0.1f, 0.03f)));
 		Mk.Add(FTransform(FRotator(0.f, -45.f, 0.f), FVector(P.X, P.Y, LineZ + 1.f), FVector(S / 100.f, 0.1f, 0.03f)));
 	}
 	Marks->AddInstances(Mk, false, false, false);
 
-	// hovered cell: outline + corner posts (a ghost of the room's volume)
-	if (bHover)
+	// hovered valid cell: outline + corner posts (a ghost of the room's volume) + label. Cells the room can't go on
+	// show nothing at all.
+	if (bHaveCursor && bHoverValid)
 	{
 		FVector2D Q[4]; Grid::Corners(Hover, Q);
 		const FVector2D Ctr = Grid::Centre(Hover);
-		const bool bTaken = Occupied.Contains(Hover);
 		TArray<FTransform> Hv;
 		const float Inset = 10.f;
 		FVector2D QI[4];
 		for (int32 k = 0; k < 4; ++k) { QI[k] = Q[k] + (Ctr - Q[k]).GetSafeNormal() * Inset; }
-		const float Rise = bHoverValid ? 110.f + 12.f * FMath::Sin(Time * 3.f) : 40.f;
+		const float Rise = 110.f + 12.f * FMath::Sin(Time * 3.f);
 		for (int32 k = 0; k < 4; ++k)
 		{
 			Hv.Add(BarXform(QI[k], QI[(k + 1) & 3], LineZ + 2.f, 9.f, 4.f));
 			Hv.Add(FTransform(FRotator::ZeroRotator, FVector(QI[k].X, QI[k].Y, Rise * 0.5f), FVector(0.07f, 0.07f, Rise / 100.f)));
-			if (bHoverValid) { Hv.Add(BarXform(QI[k], QI[(k + 1) & 3], Rise, 5.f, 4.f)); }
+			Hv.Add(BarXform(QI[k], QI[(k + 1) & 3], Rise, 5.f, 4.f));
 		}
-		(bHoverValid ? HoverGood : HoverBad)->AddInstances(Hv, false, false, false);
+		HoverGood->AddInstances(Hv, false, false, false);
 
-		if (Label && !bTaken)
+		if (Label)
 		{
 			FDCLabelSpec S;
-			S.Icon = bHoverValid ? DC::RoomIcon(Room) : FName(TEXT("ban"));
+			S.Icon = DC::RoomIcon(Room);
 			const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
 			S.Text = Run ? Run->GetRoom(Room).DisplayName : FString(DC::RoomName(Room));
-			S.Sub = bHoverValid ? FString::Printf(TEXT("$%d  ·  click to build"), LastCost) : FString(TEXT("must join the house"));
-			S.Accent = bHoverValid ? AccentCol : BadCol;
+			S.Sub = FString::Printf(TEXT("$%d  ·  click to build"), LastCost);
+			S.Accent = AccentCol;
 			S.bAccentOutline = true;
 			S.Size = 12.f;
 			UDCWorldLabel::SetComponentSpec(Label, S);

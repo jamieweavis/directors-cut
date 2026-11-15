@@ -1,6 +1,6 @@
 // Director's Cut — build placement mode. "Build" on a new room (UI -> UDCUISubsystem::RequestRoomPlacement) starts
-// it: the build grid (DCSite::Grid) fades in around the mouse, cells where the room may go are marked, the hovered
-// cell is outlined (accent = valid, red = not allowed) with a label. Click builds there (UDCRunSubsystem::BuildRoom
+// it: every cell of the build grid (DCSite::Grid) where the room may go is drawn, the hovered
+// one is outlined with a label (cells it can't go on show nothing). Click builds there (UDCRunSubsystem::BuildRoom
 // with the cell); Esc, opening a panel or losing the ability to build cancels. Owned and driven by
 // ADCPlayerController. All visuals are emissive (readable day and night) and never collide.
 #pragma once
@@ -52,11 +52,9 @@ protected:
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> Dots;
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> Marks;
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> HoverGood;
-	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> HoverBad;
 	UPROPERTY() TObjectPtr<UWidgetComponent> Label;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> LineMat;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> GoodMat;
-	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> BadMat;
 
 	UInstancedStaticMeshComponent* MakeISM(const TCHAR* Name, const TCHAR* MeshPath, UMaterialInstanceDynamic* Mat);
 	UMaterialInstanceDynamic* MakeGlow(const FLinearColor& Color, float Strength);

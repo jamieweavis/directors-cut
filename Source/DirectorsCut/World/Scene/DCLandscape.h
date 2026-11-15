@@ -47,6 +47,9 @@ public:
 	/** The meadow grass grows over the whole build grid; it is cleared from every cell in Cells (rooms built or under
 	 *  construction). Called by the house builder whenever the house changes. */
 	void SetHouseCells(const TArray<FIntPoint>& Cells);
+	/** Build placement: grass is also cleared from these cells (where the new room may go) so the grid drawn on the
+	 *  ground shows. Empty restores it. */
+	void SetPreviewCells(const TArray<FIntPoint>& Cells);
 
 protected:
 	bool bBuilt = false;
@@ -104,6 +107,7 @@ protected:
 	struct FHouseTuft { FVector2D P; FTransform T; int32 Mesh = 0; };
 	TArray<FHouseTuft> HouseTufts;
 	TArray<FIntPoint> HouseCells;
+	TArray<FIntPoint> PreviewCells;
 	UPROPERTY() TArray<TObjectPtr<UInstancedStaticMeshComponent>> HouseGrass;
 	void RefreshHouseGrass();
 

@@ -267,11 +267,20 @@ void ADCLandscape::SetHouseCells(const TArray<FIntPoint>& Cells)
 	RefreshHouseGrass();
 }
 
+void ADCLandscape::SetPreviewCells(const TArray<FIntPoint>& Cells)
+{
+	if (Cells == PreviewCells) { return; }
+	PreviewCells = Cells;
+	RefreshHouseGrass();
+}
+
 void ADCLandscape::RefreshHouseGrass()
 {
 	if (HouseGrass.Num() != 3) { return; }
 	TArray<FVector2D> Quads;
-	for (const FIntPoint& C : HouseCells)
+	TArray<FIntPoint> Clear = HouseCells;
+	for (const FIntPoint& C : PreviewCells) { Clear.AddUnique(C); }
+	for (const FIntPoint& C : Clear)
 	{
 		FVector2D Q[4];
 		DCSite::Grid::Corners(C, Q);
