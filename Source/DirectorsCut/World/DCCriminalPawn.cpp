@@ -144,11 +144,11 @@ void ADCCriminalPawn::SetupVisuals()
 	const DCPaths::FCrewBody* Bodies = bQuinn ? DCPaths::CrewBodiesFemale : DCPaths::CrewBodies;
 	const int32 NumBodies = bQuinn ? UE_ARRAY_COUNT(DCPaths::CrewBodiesFemale) : UE_ARRAY_COUNT(DCPaths::CrewBodies);
 	USkeletalMeshComponent* M = GetMesh();
-	USkeletalMesh* Mesh = bQuinn ? LoadQuiet<USkeletalMesh>(DCPaths::QuinnMesh) : nullptr;
-	if (!Mesh) { Mesh = LoadQuiet<USkeletalMesh>(DCPaths::MannyMesh); }
-	if (Mesh)
+	USkeletalMesh* SkelMesh = bQuinn ? LoadQuiet<USkeletalMesh>(DCPaths::QuinnMesh) : nullptr;
+	if (!SkelMesh) { SkelMesh = LoadQuiet<USkeletalMesh>(DCPaths::MannyMesh); }
+	if (SkelMesh)
 	{
-		M->SetSkeletalMesh(Mesh);
+		M->SetSkeletalMesh(SkelMesh);
 		AnimClass = LoadClass<UAnimInstance>(nullptr, DCPaths::UnarmedAnimBP, nullptr, LOAD_NoWarn | LOAD_Quiet);
 		if (AnimClass)
 		{

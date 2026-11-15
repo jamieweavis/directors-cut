@@ -376,9 +376,9 @@ void ADCHideoutBuilder::FlushBatches()
 	BatchIndex.Reset();
 }
 
-UStaticMeshComponent* ADCHideoutBuilder::Single(AActor* Owner, USceneComponent* Parent, EDCShape Shape, const FVector& Loc, const FVector& Size, UMaterialInterface* Mat, const FRotator& Rot)
+UStaticMeshComponent* ADCHideoutBuilder::Single(AActor* OwnerActor, USceneComponent* Parent, EDCShape Shape, const FVector& Loc, const FVector& Size, UMaterialInterface* Mat, const FRotator& Rot)
 {
-	UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(Owner);
+	UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(OwnerActor);
 	C->SetStaticMesh(Meshes[(int32)Shape]);
 	C->SetMobility(EComponentMobility::Movable);
 	C->SetupAttachment(Parent);
@@ -387,7 +387,7 @@ UStaticMeshComponent* ADCHideoutBuilder::Single(AActor* Owner, USceneComponent* 
 	C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	C->SetCollisionResponseToAllChannels(ECR_Ignore);
 	C->RegisterComponent();
-	Owner->AddInstanceComponent(C);
+	OwnerActor->AddInstanceComponent(C);
 	return C;
 }
 

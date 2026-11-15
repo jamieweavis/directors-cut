@@ -124,7 +124,7 @@ protected:
 	/** Box between two local points (square section). */
 	void Bar(const FVector& A, const FVector& B, float W, float H, FName Mat, bool bShadow = true);
 	/** Individual mesh component on Owner attached to Parent (relative transform). */
-	UStaticMeshComponent* Single(AActor* Owner, USceneComponent* Parent, EDCShape Shape, const FVector& Loc, const FVector& Size, UMaterialInterface* Mat, const FRotator& Rot = FRotator::ZeroRotator);
+	UStaticMeshComponent* Single(AActor* OwnerActor, USceneComponent* Parent, EDCShape Shape, const FVector& Loc, const FVector& Size, UMaterialInterface* Mat, const FRotator& Rot = FRotator::ZeroRotator);
 	/** Walkable / blocking architecture (floors, walls) in CurRoom's CurGroup. bFloor keeps Visibility blocking. */
 	UStaticMeshComponent* Solid(const FVector& Loc, const FVector& Size, FName Mat, bool bFloor);
 	/** Records a component in a builder-managed group (shared-wall variants). */

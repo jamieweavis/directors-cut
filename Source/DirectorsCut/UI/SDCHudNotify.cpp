@@ -11,7 +11,7 @@ namespace
 	constexpr float SweepFrom = 0.2f;    // marker starts moving
 	constexpr float SweepTime = 0.9f;    // marker settles on the roll
 	constexpr float Reveal    = SweepFrom + SweepTime;
-	constexpr float OutTime   = 0.35f;   // fade out at the end of the lifetime
+	constexpr float FadeOutTime   = 0.35f;   // fade out at the end of the lifetime
 	constexpr float CardWidth = 320.f;
 
 	FName OutcomeIcon(EDCMissionOutcome O)
@@ -254,7 +254,7 @@ TSharedRef<SWidget> SDCHudNotify::BuildCard(const FDCMissionReport& Rep, TShared
 		.ColorAndOpacity_Lambda([Age]()
 		{
 			const float X = *Age;
-			return FLinearColor(1, 1, 1, FMath::Min(EaseOut(X / (Prefs().bReduceMotion ? 0.15f : InTime)), 1.f - FMath::Clamp((X - (Lifetime - OutTime)) / OutTime, 0.f, 1.f)));
+			return FLinearColor(1, 1, 1, FMath::Min(EaseOut(X / (Prefs().bReduceMotion ? 0.15f : InTime)), 1.f - FMath::Clamp((X - (Lifetime - FadeOutTime)) / FadeOutTime, 0.f, 1.f)));
 		})
 		.RenderTransform_Lambda([Age, bCalm]()
 		{
