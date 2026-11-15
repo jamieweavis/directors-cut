@@ -47,6 +47,10 @@ namespace DCSite
 	{
 		constexpr float CellSize = 580.f;     // nominal cell (the Office is roughly 5.8 x 5.8 m)
 		constexpr float Jitter = 31.f;       // max corner offset (cm) per axis
+		constexpr float WallT = 24.f;        // wall thickness
+		/** Doorway between two finished rooms: a gap of this width centred on their shared edge. House cuts it,
+		 *  World's nav map (FDCNavGrid) leaves the same gap open. */
+		constexpr float DoorW = 150.f;
 		constexpr int32 MinCol = -2, MaxCol = 2;
 		constexpr int32 MinRow = 0, MaxRow = 3; // row 0 = the front row (the Office's row); rows grow behind (+Y)
 		/** World position of the centre of cell (0,0) before jitter. The house sits forward of the world origin, close

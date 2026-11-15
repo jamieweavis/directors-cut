@@ -17,8 +17,8 @@
 namespace
 {
 	using namespace DCSite;
-	constexpr float GWallT = 24.f;    // wall thickness
-	constexpr float GDoorW = 150.f;   // doorway in a partition, always centred on the shared edge (nav relies on it)
+	constexpr float GWallT = Grid::WallT; // wall thickness
+	constexpr float GDoorW = Grid::DoorW; // doorway in a partition, always centred on the shared edge (nav relies on it)
 	constexpr float GBoundsH = 380.f; // room bounds height
 	const FLinearColor GWarm(1.f, 0.66f, 0.38f);
 

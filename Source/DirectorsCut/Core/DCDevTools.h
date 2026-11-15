@@ -13,6 +13,8 @@
 //   -DCTimeScale=N          run the clock N x faster (testing)
 //   -DCHour=H               jump the clock forward to hour H (0..24) shortly after start (day/night screenshots)
 //   -DCQuitAfter=S          quit after S seconds (when not taking shots)
+//   -DCDebugView            draw the generated layout (build grid, rooms, doorways, furniture, nav tile map, crew routes);
+//                           same as Options > Gameplay > Debug view
 //   -DCContinue             load the saved run (UDCRunSubsystem::ContinueRun) right after start instead of a new run
 #pragma once
 

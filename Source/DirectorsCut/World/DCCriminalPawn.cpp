@@ -18,6 +18,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ReferenceSkeleton.h"
+#include "DirectorsCut.h"
 
 namespace
 {
@@ -60,7 +61,7 @@ ADCCriminalPawn::ADCCriminalPawn(const FObjectInitializer& ObjectInitializer)
 	CM->DefaultLandMovementMode = MOVE_Flying;
 	CM->GravityScale = 0.f;
 	CM->MaxFlySpeed = WalkSpeed;
-	CM->MaxAcceleration = 700.f;
+	CM->MaxAcceleration = 1500.f; // tight enough to turn inside a doorway at a hurry
 	CM->BrakingDecelerationFlying = 1100.f;
 	CM->bOrientRotationToMovement = true;
 	CM->RotationRate = FRotator(0.f, 420.f, 0.f);
@@ -370,7 +371,7 @@ void ADCCriminalPawn::SetIdleGoal(const TArray<FVector>& FloorPath, EDCPawnActiv
 	GoalYaw = bHasGoalYaw ? FaceYaw : 0.f;
 	GoalHold = Hold;
 	WaitTime = 0.f;
-	StuckTime = 0.f;
+	BeginRoute();
 	if (Path.Num() == 0) { ArriveIdle(); }
 }
 
@@ -427,7 +428,7 @@ void ADCCriminalPawn::Depart(ADCGarageDoor* Door, float Delay, bool bForever)
 	Activity = EDCPawnActivity::Stand;
 	ActiveDoor = Door;
 	StartDelay = Delay;
-	StuckTime = 0.f;
+	BeginRoute();
 	Path.Reset();
 	if (Door)
 	{
@@ -464,7 +465,7 @@ void ADCCriminalPawn::BeginWalkIn(ADCGarageDoor* Door)
 	Activity = EDCPawnActivity::Stand;
 	bHasGoalYaw = false;
 	bReturnQueued = false;
-	StuckTime = 0.f;
+	BeginRoute();
 	Path.Reset();
 	if (!Door)
 	{
@@ -505,7 +506,7 @@ void ADCCriminalPawn::WalkOutAlong(const TArray<FVector>& FloorPath, float Delay
 	ActiveDoor = nullptr;
 	bHasGoalYaw = false;
 	StartDelay = Delay;
-	StuckTime = 0.f;
+	BeginRoute();
 	Path.Reset();
 	for (const FVector& P : FloorPath) { Path.Add(Ground(P)); }
 	UpdateSpeed();
@@ -521,7 +522,7 @@ void ADCCriminalPawn::WalkInAlong(const FVector& Start, const TArray<FVector>& F
 	ActiveDoor = nullptr;
 	bHasGoalYaw = false;
 	bReturnQueued = false;
-	StuckTime = 0.f;
+	BeginRoute();
 	Path.Reset();
 	for (const FVector& P : FloorPath) { Path.Add(Ground(P)); }
 	if (bWasAway)
@@ -678,16 +679,40 @@ void ADCCriminalPawn::Tick(float DeltaSeconds)
 	}
 
 	UpdateSpeed();
+	ADCWorldDirector* D = Director.Get();
+	// The house changed under us (a wing went up, furniture moved, a car parked): take a fresh route.
+	if (D && PathRevision != D->GetNavRevision())
+	{
+		Reroute();
+		if (Path.Num() == 0) { return; }
+	}
 	const FVector Loc = GetActorLocation();
 	FVector To = Path[0] - Loc;
 	To.Z = 0.f;
 	const float Dist = To.Size();
-	StuckTime += Dt;
-	if (Dist < 22.f || StuckTime > 12.f)
+	const bool bLast = Path.Num() == 1;
+	if (!bLegValid)
 	{
-		if (StuckTime > 12.f || Path.Num() == 1) { SetActorLocation(Path[0]); }
+		bLegValid = true;
+		LegDir = Dist > 1.f ? To / Dist : FVector::ZeroVector;
+		BestDist = Dist;
+	}
+	// Stuck = no closer to the waypoint for a while (a long leg at a limp is not stuck).
+	if (Dist < BestDist - 1.5f) { BestDist = Dist; StuckTime = 0.f; }
+	else { StuckTime += Dt; }
+	GhostTime -= Dt;
+
+	// Reached the waypoint, or walked past it (momentum carries a hurrying pawn through a corner: without this it
+	// would circle back for the exact spot).
+	const bool bPassed = !bLast && FVector::DotProduct(To, LegDir) <= 0.f;
+	if (Dist < (bLast ? 22.f : 30.f) || bPassed || StuckTime > 9.f)
+	{
+		if (StuckTime > 9.f) { UE_LOG(LogDC, Warning, TEXT("Pawn %d made no progress for 9 s at %s: placed on its waypoint"), CriminalId, *GetFeet().ToCompactString()); }
+		if (StuckTime > 9.f || bLast) { SetActorLocation(Path[0]); } // 9 s without progress: last resort
 		Path.RemoveAt(0);
 		StuckTime = 0.f;
+		bLegValid = false;
+		bTriedReroute = false;
 		if (Path.Num() == 0 && Mode == EDCPawnMode::Wander)
 		{
 			GetCharacterMovement()->StopMovementImmediately();
@@ -695,13 +720,63 @@ void ADCCriminalPawn::Tick(float DeltaSeconds)
 		}
 		return;
 	}
+	// Held up: first shoulder through whoever is in the way, then try another route.
+	if (StuckTime > 1.2f) { GhostTime = 1.5f; }
+	if (StuckTime > 3.5f && !bTriedReroute)
+	{
+		bTriedReroute = true;
+		UE_LOG(LogDC, Log, TEXT("Pawn %d held up for 3.5 s at %s: re-routing"), CriminalId, *GetFeet().ToCompactString());
+		Reroute();
+		return;
+	}
+
+	FVector Dir = To / Dist;
 	float Scale = 1.f;
 	if (bInjured)
 	{
 		LimpPhase += Dt * 7.f;
 		Scale = 0.55f + 0.45f * FMath::Abs(FMath::Sin(LimpPhase));
 	}
-	// Slow down for the final approach so braking doesn't overshoot.
-	if (Path.Num() == 1) { Scale *= FMath::Clamp(Dist / 60.f, 0.35f, 1.f); }
-	AddMovementInput(To / Dist, Scale);
+	if (bLast) { Scale *= FMath::Clamp(Dist / 60.f, 0.35f, 1.f); } // final approach: braking doesn't overshoot
+	else if (Dist < 70.f)
+	{
+		// ease into a sharp corner
+		const FVector Next = (Path[1] - Path[0]).GetSafeNormal2D();
+		const float Turn = (1.f - FVector::DotProduct(Dir, Next)) * 0.5f;
+		Scale *= FMath::Lerp(1.f, 0.5f, Turn * (1.f - Dist / 70.f));
+	}
+	if (D)
+	{
+		const bool bCrowd = GhostTime <= 0.f && !(bLast && Dist < 70.f);
+		D->SteerPawn(this, Path[0], bCrowd, Dir, Scale);
+	}
+	if (Scale > 0.02f) { AddMovementInput(Dir, Scale); }
+}
+
+void ADCCriminalPawn::BeginRoute()
+{
+	StuckTime = 0.f;
+	GhostTime = 0.f;
+	bLegValid = false;
+	bTriedReroute = false;
+	PathRevision = Director.IsValid() ? Director->GetNavRevision() : 0;
+}
+
+void ADCCriminalPawn::Reroute()
+{
+	ADCWorldDirector* D = Director.Get();
+	if (!D) { return; }
+	PathRevision = D->GetNavRevision();
+	bLegValid = false;
+	// Re-plan the part of the route that lies on the map; legs beyond it (off down the lane) stay as they are.
+	int32 Last = INDEX_NONE;
+	for (int32 i = 0; i < Path.Num() && D->IsOnNavMap(Path[i]); ++i) { Last = i; }
+	if (Last == INDEX_NONE) { return; }
+	TArray<FVector> Route;
+	D->PlanPath(GetFeet(), Path[Last] - FVector(0.f, 0.f, HalfHeight), Route);
+	TArray<FVector> New;
+	New.Reserve(Route.Num() + Path.Num() - Last - 1);
+	for (const FVector& P : Route) { New.Add(Ground(P)); }
+	for (int32 i = Last + 1; i < Path.Num(); ++i) { New.Add(Path[i]); }
+	Path = MoveTemp(New);
 }

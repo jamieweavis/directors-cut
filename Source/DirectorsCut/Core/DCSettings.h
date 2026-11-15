@@ -52,6 +52,9 @@ namespace DCSettings
 	inline bool ShowFPS()             { return GetBool(TEXT("ShowFPS"), false); }        // small fps readout on the HUD
 	inline bool CelShading()          { return GetBool(TEXT("ToonOutlines"), true); }    // ink outlines + stepped lighting post pass
 
+	// Developer
+	inline bool DebugView()           { return GetBool(TEXT("DebugView"), false); }      // overlay: build grid, rooms, doorways, nav tile map, crew routes
+
 	// Gameplay / camera (read by World: ADCCameraRig / ADCPlayerController)
 	inline bool EdgeScroll()          { return GetBool(TEXT("EdgeScroll"), false); }     // pan when the mouse touches the screen edge
 	inline float CameraPanSpeed()     { return GetFloat(TEXT("CameraPanSpeed"), 1.f); }  // 0.5 .. 2 multiplier on keyboard/edge pan

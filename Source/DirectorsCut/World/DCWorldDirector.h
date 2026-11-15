@@ -2,10 +2,11 @@
 // camera bounds, station enabling + badges, crew pawns (idle life tied to the clock, leaving for / returning from
 // missions, hires, dismissals) and the doors. Spawned by ADCPlayerController. Agent E owns.
 //
-// Pawns never path through walls: built rooms form a graph (grid neighbours, doorway at the shared edge's midpoint)
-// plus one OUTSIDE region reached through each room's open (collapsed) -X/-Y sides. Outdoors, pawns walk a
-// visibility graph around built/under-construction wings and parked cars. Idle goals are only ever spawn-zone points
-// or the floor in front of a station, inside usable rooms.
+// Pawns never path through walls: the house generates a tile map (FDCNavGrid) from its own layout: walls with the
+// doorways the builder cut, furniture, parked cars. Routes are found on it (A*, pulled tight), so crew move between
+// rooms through the doorways and in and out of the house through the front door. While walking, pawns steer round
+// each other and re-route when the map changes under them. Idle goals are only ever spawn-zone points or the floor
+// in front of a station / piece of furniture, inside usable rooms they can reach.
 //
 // Cars: one per mission slot (UDCRunSubsystem::GetMaxActiveMissions, max DCSite::MaxParkingSlots), parked in the yard.
 // A started mission takes the lowest free parked car: crew walk out to it, get in, it drives off along the lane; it
@@ -15,6 +16,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Core/DCTypes.h"
+#include "World/DCNavGrid.h"
 #include "DCWorldDirector.generated.h"
 
 class ADCPlayerController;
@@ -44,8 +46,16 @@ public:
 	ADCCriminalPawn* FindPawn(int32 CriminalId) const;
 	int32 GetPawnCount() const { return Pawns.Num(); }
 
-	/** Floor-level route from From to To through doorways (excludes From, ends with To). */
+	/** Floor-level route from From to To: through the doorways between rooms, in and out of the house by the front
+	 *  door, round furniture and parked cars (excludes From, ends with To). */
 	void PlanPath(const FVector& From, const FVector& To, TArray<FVector>& Out);
+	/** Bumped whenever the walkable map is regenerated: routes planned on an older revision are stale. */
+	uint32 GetNavRevision() const { return NavRevision; }
+	/** P lies on the generated map (the lane beyond the yard doesn't). */
+	bool IsOnNavMap(const FVector& P) const;
+	/** Local steering for a walking pawn: Dir (unit, towards Target, its next waypoint) is bent round the other crew
+	 *  (bCrowd) and kept off the walls; Scale (0..1) drops when it has to queue. */
+	void SteerPawn(const ADCCriminalPawn* Self, const FVector& Target, bool bCrowd, FVector& Dir, float& Scale) const;
 	/** A free floor spot in a usable room for P to appear / head to. */
 	FVector PickSpawnPoint(ADCCriminalPawn* P);
 	/** Called by an idle pawn that wants something to do. */
@@ -74,27 +84,29 @@ protected:
 	TMap<TWeakObjectPtr<ADCGarageDoor>, float> DoorIdleTime;
 	FRandomStream Rng;
 
-	// Room graph (walkable = built rooms only) + outdoor exits
-	struct FPortal { int32 A = 0; int32 B = 0; FVector InA = FVector::ZeroVector; FVector InB = FVector::ZeroVector; };
-	struct FExit { int32 Room = 0; FVector In = FVector::ZeroVector; FVector Out = FVector::ZeroVector; };
-	TArray<FPortal> Portals;
-	TArray<FExit> Exits;
+	// Generated tile map (see DCNavGrid.h). Rebuilt whenever its inputs change (NavSignature); NavRevision tells
+	// walking pawns their route is stale.
+	FDCNavGrid Nav;
 	bool bNavBuilt = false;
 	uint32 NavSignature = 0;
+	uint32 NavRevision = 0;
+	float NavBuildMs = 0.f;
 	void BuildNav();
 	void EnsureNav();
 	uint32 ComputeNavSignature() const;
 	int32 RoomIndexAt(const FVector& P) const;
-	int32 NavRoomAt(const FVector& P) const;
 	bool IsWalkable(const ADCRoomModule* R) const;
 	bool IsSolidOutdoors(const ADCRoomModule* R) const;
-	void RoomDistances(int32 S, TArray<float>& Dist, TArray<int32>& Prev, TArray<int32>& Via) const;
-	bool PlanRooms(int32 S, int32 G, const FVector& To, TArray<FVector>& Out) const;
-	void PlanPathRaw(const FVector& From, const FVector& To, TArray<FVector>& Out);
-	/** Legs of Out (from Start, walking from From) that would cut through a room's furniture go via the room's
-	 *  middle instead (the furnisher keeps the middle and the lanes to every doorway clear). */
-	void DetourFurniture(const FVector& From, TArray<FVector>& Out, int32 Start) const;
-	void PlanOutdoor(const FVector& From, const FVector& To, TArray<FVector>& Out) const;
+
+	// Debug view (Options > Gameplay > Debug view, or -DCDebugView): what the generators produced.
+	UPROPERTY() TObjectPtr<class ULineBatchComponent> DebugStatic;
+	UPROPERTY() TObjectPtr<class ULineBatchComponent> DebugLive;
+	bool bDebugView = false;
+	bool bDebugDirty = true;
+	float DebugPoll = 0.f;
+	void UpdateDebugView(float Dt);
+	void DrawDebugStatic();
+	void DrawDebugLive();
 	bool IsRoomUsable(const ADCRoomModule* R) const;
 	bool IsRoomUsable(EDCRoomType Type) const { return IsRoomUsable(FindRoom(Type)); }
 

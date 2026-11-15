@@ -75,6 +75,9 @@ public:
 	bool IsSleeping() const { return bLying; }
 	bool IsIdleReady() const { return Mode == EDCPawnMode::Wander && Path.Num() == 0 && WaitTime <= 0.f && StartDelay <= 0.f; }
 	bool IsHeadingToSleep() const { return Mode == EDCPawnMode::Wander && Activity == EDCPawnActivity::Sleep; }
+	/** Remaining waypoints (capsule height), for the debug view. */
+	const TArray<FVector>& GetRoute() const { return Path; }
+	bool IsShoulderingThrough() const { return GhostTime > 0.f; }
 	FVector GetGoalLocation() const { return Path.Num() ? Path.Last() : GetActorLocation(); }
 	bool IsAway() const { return Mode == EDCPawnMode::Away; }
 	bool IsLeavingForever() const { return bLeaveForever; }
@@ -117,7 +120,13 @@ protected:
 	bool bWantsDestroy = false;
 	bool bReturnQueued = false;
 	float QueuedReturnDelay = 0.f;
-	float StuckTime = 0.f;
+	float StuckTime = 0.f;      // seconds without getting closer to the next waypoint
+	float BestDist = 0.f;       // closest we've been to it
+	float GhostTime = 0.f;      // > 0: ignore the crowd (shouldering through a jam)
+	FVector LegDir = FVector::ZeroVector; // direction of the current leg when it began
+	bool bLegValid = false;
+	bool bTriedReroute = false;
+	uint32 PathRevision = 0;    // director nav revision the route was planned on
 	float LimpPhase = 0.f;
 	float NamePoll = 0.f;
 	TWeakObjectPtr<ADCGarageDoor> ActiveDoor;
@@ -149,4 +158,8 @@ protected:
 	void LieDown();
 	void GetUp();
 	void ArriveIdle();
+	/** Call whenever Path is replaced. */
+	void BeginRoute();
+	/** Plan again from where we stand to the same destination. */
+	void Reroute();
 };

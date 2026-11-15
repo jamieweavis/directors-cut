@@ -483,6 +483,7 @@ TSharedRef<SWidget> SDCRoot::BuildOptions()
 					else
 					{
 						DCSettings::SetBool(TEXT("EdgeScroll"), false); DCSettings::SetFloat(TEXT("CameraPanSpeed"), 1.f); DCSettings::SetFloat(TEXT("CameraZoomSpeed"), 1.f);
+						DCSettings::SetBool(TEXT("DebugView"), false);
 					}
 					ApplyPlayerSettings(true);
 				}, EBtn::Ghost, true, Tip(TEXT("Restore defaults"), TEXT("Resets this tab only")), 10.5f)];
@@ -654,7 +655,10 @@ TSharedRef<SWidget> SDCRoot::OptGameplay()
 		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("zoom-in"), TEXT("Zoom speed"), TEXT("Mouse wheel"), Speed(TEXT("CameraZoomSpeed")))]
 		+ SVerticalBox::Slot().AutoHeight()[Section(TEXT("Time"))]
 		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("pause"), TEXT("Pause / resume"), TEXT("Stops the clock; resumes at the speed you had"), Keys({ TEXT("SPACE") }))]
-		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("fast-forward"), TEXT("Game speed"), TEXT("1×, 2× or 4×. Also on the clock bar. Every run starts at 1×"), Keys({ TEXT("1"), TEXT("2"), TEXT("3") }))];
+		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("fast-forward"), TEXT("Game speed"), TEXT("1×, 2× or 4×. Also on the clock bar. Every run starts at 1×"), Keys({ TEXT("1"), TEXT("2"), TEXT("3") }))]
+		+ SVerticalBox::Slot().AutoHeight()[Section(TEXT("Developer"))]
+		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("bug"), TEXT("Debug view"), TEXT("Draws what the game generates: build grid, room layout, doorways, furniture, the walkable tile map and crew routes"),
+			SwitchRight([]() { return DCSettings::DebugView(); }, [](bool b) { DCSettings::SetBool(TEXT("DebugView"), b); }))];
 }
 
 // ── Save slots ───────────────────────────────────────────────────────────────

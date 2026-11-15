@@ -7,6 +7,8 @@
 #include "World/DCGarageDoor.h"
 #include "World/DCStation.h"
 #include "World/DCVehicle.h"
+#include "Core/DCSettings.h"
+#include "Components/LineBatchComponent.h"
 #include "Core/DCSiteLayout.h"
 #include "Core/DCAssetPaths.h"
 #include "Engine/StaticMeshActor.h"
@@ -153,7 +155,7 @@ ADCGarageDoor* ADCWorldDirector::GetMissionDoor() const
 	return GetStreetDoor();
 }
 
-// ─── Navigation: room graph + outside ────────────────────────────────────────
+// ─── Navigation: generated tile map (FDCNavGrid) ─────────────────────────────
 
 bool ADCWorldDirector::IsWalkable(const ADCRoomModule* R) const
 {
@@ -172,12 +174,25 @@ bool ADCWorldDirector::IsSolidOutdoors(const ADCRoomModule* R) const
 
 uint32 ADCWorldDirector::ComputeNavSignature() const
 {
+	// Everything the map is generated from: which rooms stand where, their furniture, and the parked cars.
 	uint32 H = 0x9E37u + Rooms.Num();
 	for (int32 i = 0; i < Rooms.Num(); ++i)
 	{
 		const ADCRoomModule* R = Rooms[i].Get();
 		H = HashCombineFast(H, (IsWalkable(R) ? 1u : 0u) | (IsSolidOutdoors(R) ? 2u : 0u) | (R && R->IsRevealPlaying() ? 4u : 0u) | (R && R->bPlaced ? 8u : 0u));
-		if (R && R->bPlaced) { H = HashCombineFast(H, GetTypeHash(R->GridCell)); }
+		if (!R || !R->bPlaced) { continue; }
+		H = HashCombineFast(H, GetTypeHash(R->GridCell));
+		H = HashCombineFast(H, (uint32)R->Footprints.Num());
+		for (const ADCRoomModule::FFootprint& F : R->Footprints)
+		{
+			H = HashCombineFast(H, GetTypeHash(FIntVector4(FMath::RoundToInt(F.Centre.X), FMath::RoundToInt(F.Centre.Y), FMath::RoundToInt(F.Half.X), FMath::RoundToInt(F.Half.Y))));
+			H = HashCombineFast(H, (uint32)FMath::RoundToInt(F.Yaw));
+		}
+	}
+	for (int32 i = 0; i < Slots.Num(); ++i)
+	{
+		const ADCVehicle* C = Slots[i].Car.Get();
+		H = HashCombineFast(H, (C && C->IsParked()) ? (uint32)(i + 1) * 31u : 0u);
 	}
 	return H;
 }
@@ -188,23 +203,14 @@ void ADCWorldDirector::EnsureNav()
 	if (!bNavBuilt || Sig != NavSignature) { BuildNav(); }
 }
 
-int32 ADCWorldDirector::NavRoomAt(const FVector& P) const
-{
-	for (int32 i = 0; i < Rooms.Num(); ++i)
-	{
-		const ADCRoomModule* R = Rooms[i].Get();
-		if (!R || !R->bPlaced || !IsWalkable(R)) { continue; }
-		if (R->ContainsPoint2D(P)) { return i; }
-	}
-	return INDEX_NONE;
-}
-
 void ADCWorldDirector::BuildNav()
 {
+	using namespace DCSite;
+	const double T0 = FPlatformTime::Seconds();
 	bNavBuilt = true;
 	NavSignature = ComputeNavSignature();
-	Portals.Reset();
-	Exits.Reset();
+	++NavRevision;
+	bDebugDirty = true;
 	// Rooms appeared on the grid: framing follows; beds follow the Bunkroom if it moved.
 	if (const ADCRoomModule* Lounge = FindRoom(EDCRoomType::Lounge))
 	{
@@ -212,276 +218,160 @@ void ADCWorldDirector::BuildNav()
 	}
 	UpdateBounds();
 
-	// Grid rooms: two finished neighbours always share a doorway centred on their common edge (DCHideoutGrid.cpp).
-	auto EdgeMid = [](const ADCRoomModule* R, int32 E) { return (R->FloorQuad[E] + R->FloorQuad[(E + 1) & 3]) * 0.5f; };
-	auto Inward = [](const ADCRoomModule* R, int32 E)
-	{
-		const FVector2D D = (R->FloorQuad[(E + 1) & 3] - R->FloorQuad[E]).GetSafeNormal();
-		return FVector2D(-D.Y, D.X);
-	};
-	for (int32 i = 0; i < Rooms.Num(); ++i)
-	{
-		const ADCRoomModule* RA = Rooms[i].Get();
-		if (!IsWalkable(RA) || RA->FloorQuad.Num() != 4) { continue; }
-		for (int32 j = i + 1; j < Rooms.Num(); ++j)
-		{
-			const ADCRoomModule* RB = Rooms[j].Get();
-			if (!IsWalkable(RB) || RB->FloorQuad.Num() != 4) { continue; }
-			for (int32 E = 0; E < 4; ++E)
-			{
-				if (DCSite::Grid::Neighbour(RA->GridCell, E) != RB->GridCell) { continue; }
-				const FVector2D M = EdgeMid(RA, E), N = Inward(RA, E);
-				FPortal Portal;
-				Portal.A = i; Portal.B = j;
-				Portal.InA = FVector(M + N * 60.f, RA->GetActorLocation().Z);
-				Portal.InB = FVector(M - N * 60.f, RB->GetActorLocation().Z);
-				Portals.Add(Portal);
-			}
-		}
-	}
+	Nav.Begin(OutdoorWalkRect().ExpandBy(60.f));
 
-	// Ways out: the collapsed front edges (-X / -Y) of each walkable room with nothing standing in front of them.
-	const FBox2D Walk = DCSite::OutdoorWalkRect();
-	for (int32 i = 0; i < Rooms.Num(); ++i)
-	{
-		const ADCRoomModule* R = Rooms[i].Get();
-		if (!IsWalkable(R) || R->FloorQuad.Num() != 4) { continue; }
-		for (int32 E = 0; E < 4; ++E)
-		{
-			if (!DCSite::Grid::IsFrontEdge(E)) { continue; }
-			const FIntPoint NC = DCSite::Grid::Neighbour(R->GridCell, E);
-			bool bBlocked = false;
-			for (const TWeakObjectPtr<ADCRoomModule>& OW : Rooms)
-			{
-				const ADCRoomModule* O = OW.Get();
-				if (O && O != R && O->bPlaced && O->GridCell == NC && IsSolidOutdoors(O)) { bBlocked = true; break; }
-			}
-			if (bBlocked) { continue; }
-			const FVector2D A = R->FloorQuad[E], B = R->FloorQuad[(E + 1) & 3], N = Inward(R, E);
-			const bool bFrontDoor = E == 0 && R->GridCell == DCSite::Grid::OfficeCell(); // that wall has a doorway: use it
-			for (float T : { 0.3f, 0.5f, 0.7f })
-			{
-				if (bFrontDoor && T != 0.5f) { continue; }
-				const FVector2D P = FMath::Lerp(A, B, T);
-				FExit X;
-				X.Room = i;
-				X.In = FVector(P + N * 75.f, R->GetActorLocation().Z);
-				X.Out = FVector(P - N * 120.f, R->GetActorLocation().Z);
-				if (!Walk.IsInside(FVector2D(X.Out.X, X.Out.Y))) { continue; }
-				Exits.Add(X);
-			}
-		}
-	}
-	UE_LOG(LogDC, Log, TEXT("WorldDirector nav: %d doorways, %d ways out"), Portals.Num(), Exits.Num());
-}
-
-void ADCWorldDirector::RoomDistances(int32 S, TArray<float>& Dist, TArray<int32>& Prev, TArray<int32>& Via) const
-{
-	const int32 N = Rooms.Num();
-	Dist.Init(1e9f, N); Prev.Init(INDEX_NONE, N); Via.Init(INDEX_NONE, N);
-	if (!Dist.IsValidIndex(S)) { return; }
-	TArray<bool> Done; Done.Init(false, N);
-	Dist[S] = 0.f;
-	for (int32 Iter = 0; Iter < N; ++Iter)
-	{
-		int32 U = INDEX_NONE;
-		for (int32 k = 0; k < N; ++k) { if (!Done[k] && Dist[k] < 1e8f && (U == INDEX_NONE || Dist[k] < Dist[U])) { U = k; } }
-		if (U == INDEX_NONE) { break; }
-		Done[U] = true;
-		for (int32 pi = 0; pi < Portals.Num(); ++pi)
-		{
-			const FPortal& Pt = Portals[pi];
-			if (Pt.A != U && Pt.B != U) { continue; }
-			const int32 V = Pt.A == U ? Pt.B : Pt.A;
-			const float Cost = 600.f;
-			if (Dist[U] + Cost < Dist[V]) { Dist[V] = Dist[U] + Cost; Prev[V] = U; Via[V] = pi; }
-		}
-	}
-}
-
-bool ADCWorldDirector::PlanRooms(int32 S, int32 G, const FVector& To, TArray<FVector>& Out) const
-{
-	if (S == G) { Out.Add(To); return true; }
-	TArray<float> Dist; TArray<int32> Prev, Via;
-	RoomDistances(S, Dist, Prev, Via);
-	if (!Prev.IsValidIndex(G) || Prev[G] == INDEX_NONE) { return false; }
-	TArray<int32> Chain;
-	for (int32 V = G; V != S; V = Prev[V]) { Chain.Insert(V, 0); }
-	int32 Cur = S;
-	for (int32 V : Chain)
-	{
-		const FPortal& Pt = Portals[Via[V]];
-		const bool bForward = Pt.A == Cur;
-		Out.Add(bForward ? Pt.InA : Pt.InB);
-		Out.Add(bForward ? Pt.InB : Pt.InA);
-		Cur = V;
-	}
-	Out.Add(To);
-	return true;
-}
-
-namespace
-{
-	/** True if segment A-B passes through the open box. */
-	bool SegmentHitsBox(const FVector2D& A, const FVector2D& B, const FBox2D& Box)
-	{
-		float T0 = 0.f, T1 = 1.f;
-		const FVector2D D = B - A;
-		for (int32 Ax = 0; Ax < 2; ++Ax)
-		{
-			const float Mn = Box.Min[Ax], Mx = Box.Max[Ax], P = A[Ax], Dd = D[Ax];
-			if (FMath::Abs(Dd) < 1e-4f) { if (P <= Mn || P >= Mx) { return false; } continue; }
-			float Ta = (Mn - P) / Dd, Tb = (Mx - P) / Dd;
-			if (Ta > Tb) { Swap(Ta, Tb); }
-			T0 = FMath::Max(T0, Ta); T1 = FMath::Min(T1, Tb);
-			if (T0 >= T1) { return false; }
-		}
-		return true;
-	}
-	bool StrictlyInside(const FBox2D& B, const FVector2D& P) { return P.X > B.Min.X && P.X < B.Max.X && P.Y > B.Min.Y && P.Y < B.Max.Y; }
-}
-
-void ADCWorldDirector::PlanOutdoor(const FVector& From, const FVector& To, TArray<FVector>& Out) const
-{
-	// Obstacles: standing wings (generous margin) and parked cars (tight, so crews can step between them).
-	TArray<FBox2D> Obs;
+	TMap<FIntPoint, const ADCRoomModule*> WalkableAt;
 	for (const TWeakObjectPtr<ADCRoomModule>& RW : Rooms)
 	{
 		const ADCRoomModule* R = RW.Get();
-		if (!IsSolidOutdoors(R)) { continue; }
-		const FBox B = R->GetWorldBounds();
-		Obs.Add(FBox2D(FVector2D(B.Min.X, B.Min.Y), FVector2D(B.Max.X, B.Max.Y)).ExpandBy(55.f));
+		if (IsWalkable(R) && R->FloorQuad.Num() == 4) { WalkableAt.Add(R->GridCell, R); }
 	}
+
+	const float HalfT = Grid::WallT * 0.5f;
+	for (int32 i = 0; i < Rooms.Num(); ++i)
+	{
+		const ADCRoomModule* R = Rooms[i].Get();
+		if (!R || !R->bPlaced || R->FloorQuad.Num() != 4) { continue; }
+		const FVector2D Q[4] = { R->FloorQuad[0], R->FloorQuad[1], R->FloorQuad[2], R->FloorQuad[3] };
+		if (!IsWalkable(R))
+		{
+			// A building site (or a wing mid-reveal): nobody walks through it.
+			if (IsSolidOutdoors(R)) { Nav.BlockQuad(Q); }
+			continue;
+		}
+		Nav.SetRegion(Q, i);
+		// Walls: every edge is solid except for the doorway the builder cut (DCHideoutGrid.cpp): one centred on each
+		// edge shared with another finished room, and the front door in the Office's front (-Y) wall.
+		for (int32 E = 0; E < 4; ++E)
+		{
+			const FVector2D A = Q[E], B = Q[(E + 1) & 3];
+			const float L = FVector2D::Distance(A, B);
+			const bool bShared = WalkableAt.Contains(Grid::Neighbour(R->GridCell, E));
+			const bool bFront = !bShared && E == 0 && R->GridCell == Grid::OfficeCell();
+			const float DoorW = bShared ? Grid::DoorW : (bFront ? FrontDoorW : 0.f);
+			// a partition straddles the shared edge; an outer wall stands just inside it
+			const float In = bShared ? HalfT : Grid::WallT, Out = bShared ? HalfT : 4.f;
+			if (DoorW <= 0.f) { Nav.BlockWall(A, B, -HalfT, L + HalfT, In, Out); continue; }
+			Nav.BlockWall(A, B, -HalfT, L * 0.5f - DoorW * 0.5f, In, Out);
+			Nav.BlockWall(A, B, L * 0.5f + DoorW * 0.5f, L + HalfT, In, Out);
+			if (bFront || E == 1 || E == 2) // a shared doorway is listed once (by the room on its -side)
+			{
+				FDCNavDoor D;
+				D.Centre = (A + B) * 0.5f;
+				D.Along = (B - A).GetSafeNormal();
+				D.Width = DoorW;
+				D.bFront = bFront;
+				Nav.AddDoor(D);
+			}
+		}
+		// Furniture (laid out by the furnisher for this room's shape and doorways).
+		const FTransform RT = R->GetActorTransform();
+		const float RoomYaw = FMath::DegreesToRadians(RT.Rotator().Yaw);
+		for (const ADCRoomModule::FFootprint& F : R->Footprints)
+		{
+			const FVector C = RT.TransformPositionNoScale(FVector(F.Centre.X, F.Centre.Y, 0.f));
+			Nav.BlockBox(FVector2D(C.X, C.Y), F.Half, RoomYaw + FMath::DegreesToRadians(F.Yaw), 14.f);
+		}
+	}
+
+	// Outdoors: parked cars, the festoon poles by the yard and the lantern posts at the Office's front corners.
 	for (const FCarSlot& S : Slots)
 	{
 		const ADCVehicle* C = S.Car.Get();
-		if (C && C->IsParked()) { Obs.Add(C->GetFootprint().ExpandBy(12.f)); }
+		if (!C || !C->IsParked()) { continue; }
+		const FBox2D B = C->GetFootprint();
+		Nav.BlockBox(B.GetCenter(), B.GetExtent(), 0.f, 10.f);
 	}
-	const FVector2D A2(From.X, From.Y), B2(To.X, To.Y);
-	// Obstacles we start/end inside (stepping out of a doorway) don't block.
-	TArray<bool> Ignore; Ignore.Init(false, Obs.Num());
-	for (int32 i = 0; i < Obs.Num(); ++i) { Ignore[i] = StrictlyInside(Obs[i].ExpandBy(-4.f), A2) || StrictlyInside(Obs[i].ExpandBy(-4.f), B2); }
-	auto Clear = [&](const FVector2D& P, const FVector2D& Q)
+	for (const FVector2D& P : YardFestoonPoles()) { Nav.BlockDisc(P, 10.f + FDCNavGrid::Radius); }
 	{
-		for (int32 i = 0; i < Obs.Num(); ++i) { if (!Ignore[i] && SegmentHitsBox(P, Q, Obs[i].ExpandBy(-4.f))) { return false; } }
-		return true;
-	};
-	if (Clear(A2, B2)) { Out.Add(To); return; }
-
-	TArray<FVector2D> Nodes;
-	Nodes.Add(A2); Nodes.Add(B2);
-	const FBox2D Walk = DCSite::OutdoorWalkRect().ExpandBy(40.f);
-	for (const FBox2D& O : Obs)
-	{
-		for (int32 c = 0; c < 4; ++c)
-		{
-			const FVector2D P((c & 1) ? O.Max.X + 2.f : O.Min.X - 2.f, (c & 2) ? O.Max.Y + 2.f : O.Min.Y - 2.f);
-			if (!Walk.IsInside(P)) { continue; }
-			bool bInside = false;
-			for (const FBox2D& O2 : Obs) { if (StrictlyInside(O2, P)) { bInside = true; break; } }
-			if (!bInside) { Nodes.Add(P); }
-		}
+		FVector2D Q[4]; Grid::Corners(Grid::OfficeCell(), Q);
+		const FVector2D Front = (Q[1] - Q[0]).GetSafeNormal();
+		const FVector2D Outward(Front.Y, -Front.X);
+		Nav.BlockDisc(Q[0] + Outward * 70.f - Front * 30.f, 13.f + FDCNavGrid::Radius);
+		Nav.BlockDisc(Q[1] + Outward * 70.f + Front * 30.f, 13.f + FDCNavGrid::Radius);
 	}
-	const int32 N = Nodes.Num();
-	TArray<float> Dist; Dist.Init(1e12f, N);
-	TArray<int32> Prev; Prev.Init(INDEX_NONE, N);
-	TArray<bool> Done; Done.Init(false, N);
-	Dist[0] = 0.f;
-	for (int32 Iter = 0; Iter < N; ++Iter)
-	{
-		int32 U = INDEX_NONE;
-		for (int32 k = 0; k < N; ++k) { if (!Done[k] && Dist[k] < 1e11f && (U == INDEX_NONE || Dist[k] < Dist[U])) { U = k; } }
-		if (U == INDEX_NONE || U == 1) { break; }
-		Done[U] = true;
-		for (int32 V = 0; V < N; ++V)
-		{
-			if (Done[V] || V == U) { continue; }
-			const float D = Dist[U] + FVector2D::Distance(Nodes[U], Nodes[V]);
-			if (D >= Dist[V] || !Clear(Nodes[U], Nodes[V])) { continue; }
-			Dist[V] = D; Prev[V] = U;
-		}
-	}
-	if (Prev[1] == INDEX_NONE) { Out.Add(To); return; } // boxed in: best effort
-	TArray<FVector> Chain;
-	for (int32 V = Prev[1]; V != 0 && V != INDEX_NONE; V = Prev[V]) { Chain.Insert(FVector(Nodes[V].X, Nodes[V].Y, To.Z), 0); }
-	Out.Append(Chain);
-	Out.Add(To);
+	Nav.Finish();
+	NavBuildMs = (float)((FPlatformTime::Seconds() - T0) * 1000.0);
+	UE_LOG(LogDC, Log, TEXT("WorldDirector nav: %dx%d tiles, %d walkable in %d areas, %d doorways, built in %.2f ms"),
+		Nav.SizeX(), Nav.SizeY(), Nav.NumFree(), Nav.NumComponents(), Nav.GetDoors().Num(), NavBuildMs);
 }
 
 void ADCWorldDirector::PlanPath(const FVector& From, const FVector& To, TArray<FVector>& Out)
 {
-	const int32 Start = Out.Num();
-	PlanPathRaw(From, To, Out);
-	DetourFurniture(From, Out, Start);
-}
-
-void ADCWorldDirector::DetourFurniture(const FVector& From, TArray<FVector>& Out, int32 Start) const
-{
-	FVector Prev = From;
-	for (int32 i = Start; i < Out.Num(); ++i)
-	{
-		const FVector Q = Out[i];
-		const int32 RA = NavRoomAt(Prev);
-		if (RA != INDEX_NONE && RA == NavRoomAt(Q))
-		{
-			const ADCRoomModule* R = Rooms[RA].Get();
-			if (R && R->FloorQuad.Num() == 4 && R->IsWalkBlocked(Prev, Q))
-			{
-				const FVector2D H = (R->FloorQuad[0] + R->FloorQuad[1] + R->FloorQuad[2] + R->FloorQuad[3]) * 0.25f;
-				const FVector Hub(H.X, H.Y, Q.Z);
-				if (FVector::Dist2D(Hub, Prev) > 40.f && FVector::Dist2D(Hub, Q) > 40.f) { Out.Insert(Hub, i); ++i; }
-			}
-		}
-		Prev = Out[i];
-	}
-}
-
-void ADCWorldDirector::PlanPathRaw(const FVector& From, const FVector& To, TArray<FVector>& Out)
-{
 	EnsureNav();
-	const int32 S = NavRoomAt(From), G = NavRoomAt(To);
-	if (S != INDEX_NONE && S == G) { Out.Add(To); return; }
-	if (S != INDEX_NONE && G != INDEX_NONE && PlanRooms(S, G, To, Out)) { return; }
-	if (S == INDEX_NONE && G == INDEX_NONE) { PlanOutdoor(From, To, Out); return; }
-	if (Exits.Num() == 0) { Out.Add(To); return; } // no way out known: best effort
+	TArray<FVector2D> Pts;
+	if (!Nav.FindPath(FVector2D(From.X, From.Y), FVector2D(To.X, To.Y), Pts)) { Out.Add(To); return; } // no map yet: best effort
+	for (const FVector2D& P : Pts) { Out.Add(FVector(P.X, P.Y, To.Z)); }
+}
 
-	// Via the outside: leave through the best open side, walk around, come in through the best open side.
-	TArray<float> DistS, DistG; TArray<int32> Tmp1, Tmp2;
-	if (S != INDEX_NONE) { RoomDistances(S, DistS, Tmp1, Tmp2); }
-	if (G != INDEX_NONE) { RoomDistances(G, DistG, Tmp1, Tmp2); }
-	int32 ExA = INDEX_NONE, ExB = INDEX_NONE;
-	if (S != INDEX_NONE)
+bool ADCWorldDirector::IsOnNavMap(const FVector& P) const
+{
+	return Nav.IsBuilt() && Nav.Contains(FVector2D(P.X, P.Y));
+}
+
+void ADCWorldDirector::SteerPawn(const ADCCriminalPawn* Self, const FVector& Target, bool bCrowd, FVector& Dir, float& Scale) const
+{
+	// Dir comes in as the unit direction to the next waypoint. Two adjustments, both local and cheap:
+	//  1. the others: never overlap, queue behind someone going our way, pass anyone else on a consistent side;
+	//  2. the walls: whatever (1) asked for, the next step stays on free tiles.
+	const FVector Feet = Self->GetFeet();
+	const FVector2D Pos(Feet.X, Feet.Y);
+	const FVector2D Fwd(Dir.X, Dir.Y);
+	const FVector2D Right(-Fwd.Y, Fwd.X);
+	FVector2D Want = Fwd;
+	if (bCrowd)
 	{
-		float Best = 1e12f;
-		for (int32 e = 0; e < Exits.Num(); ++e)
+		constexpr float Personal = 62.f, Look = 125.f;
+		FVector2D Push = FVector2D::ZeroVector;
+		for (const ADCCriminalPawn* O : Pawns)
 		{
-			const float C = DistS[Exits[e].Room] + FVector::Dist2D(From, Exits[e].In) * (Exits[e].Room == S ? 1.f : 0.f) + FVector::Dist2D(Exits[e].Out, To);
-			if (DistS[Exits[e].Room] < 1e8f && C < Best) { Best = C; ExA = e; }
+			if (!O || O == Self || O->IsAway() || O->IsHidden() || O->IsSleeping()) { continue; }
+			const FVector OF = O->GetFeet();
+			FVector2D D(OF.X - Pos.X, OF.Y - Pos.Y);
+			float Dist = D.Size();
+			if (Dist > Look) { continue; }
+			if (Dist < 1.f) { D = (Self->GetCriminalId() < O->GetCriminalId()) ? -Right : Right; Dist = 1.f; }
+			const FVector2D N = D / Dist;
+			if (Dist < Personal) { Push -= N * (1.f - Dist / Personal) * 1.7f; }
+			const float Ahead = FVector2D::DotProduct(N, Fwd);
+			if (Ahead < 0.3f) { continue; }
+			const FVector OV = O->GetVelocity();
+			const bool bSameWay = FVector2D::DotProduct(FVector2D(OV.X, OV.Y), Fwd) > 55.f;
+			// Step round: away from the side they're on, or to our right if they're dead ahead (two pawns meeting
+			// head-on both pick their own right, so they never mirror each other).
+			const float Lat = FVector2D::DotProduct(D, Right);
+			const float Side = Lat > 10.f ? -1.f : 1.f;
+			const float W = (1.f - Dist / Look) * Ahead;
+			Push += Right * Side * W * (bSameWay ? 0.7f : 1.6f);
+			if (bSameWay) { Scale = FMath::Min(Scale, FMath::Clamp((Dist - 56.f) / 50.f, 0.f, 1.f)); }
+		}
+		Want = (Fwd + Push).GetSafeNormal();
+		if (Want.IsNearlyZero()) { Want = Fwd; }
+	}
+
+	// Walls only bind while we're walking between two free tiles (stepping off a bed, or up to a desk, cuts across
+	// the padding around the furniture on purpose).
+	if (Nav.IsBuilt() && Nav.IsFree(Pos) && Nav.IsFree(FVector2D(Target.X, Target.Y)))
+	{
+		constexpr float Probe = 34.f;
+		auto Open = [&](const FVector2D& V) { return Nav.IsFree(Pos + V * Probe) && Nav.IsFree(Pos + V * (Probe * 0.5f)); };
+		if (!Open(Want))
+		{
+			bool bFound = false;
+			// nearest open heading: first around the way we wanted to go, then around the straight line
+			for (const FVector2D& Base : { Want, Fwd })
+			{
+				for (float Deg : { 0.f, 25.f, -25.f, 50.f, -50.f, 75.f, -75.f, 100.f, -100.f })
+				{
+					const FVector2D V = Base.GetRotated(Deg);
+					if (Open(V)) { Want = V; bFound = true; break; }
+				}
+				if (bFound) { break; }
+			}
+			if (!bFound) { Want = Fwd; Scale = FMath::Min(Scale, 0.5f); }
 		}
 	}
-	const FVector Mid = ExA != INDEX_NONE ? Exits[ExA].Out : From;
-	if (G != INDEX_NONE)
-	{
-		float Best = 1e12f;
-		for (int32 e = 0; e < Exits.Num(); ++e)
-		{
-			const float C = DistG[Exits[e].Room] + FVector::Dist2D(Mid, Exits[e].Out) + FVector::Dist2D(Exits[e].In, To) * (Exits[e].Room == G ? 1.f : 0.f);
-			if (DistG[Exits[e].Room] < 1e8f && C < Best) { Best = C; ExB = e; }
-		}
-	}
-	if ((S != INDEX_NONE && ExA == INDEX_NONE) || (G != INDEX_NONE && ExB == INDEX_NONE)) { Out.Add(To); return; }
-	if (ExA != INDEX_NONE)
-	{
-		PlanRooms(S, Exits[ExA].Room, Exits[ExA].In, Out);
-		Out.Add(Exits[ExA].Out);
-	}
-	if (ExB != INDEX_NONE)
-	{
-		PlanOutdoor(Mid, Exits[ExB].Out, Out);
-		Out.Add(Exits[ExB].In);
-		PlanRooms(Exits[ExB].Room, G, To, Out);
-	}
-	else { PlanOutdoor(Mid, To, Out); }
+	Dir = FVector(Want.X, Want.Y, 0.f);
 }
 
 FVector ADCWorldDirector::DriveMouth()
@@ -725,7 +615,7 @@ void ADCWorldDirector::AssignIdleGoal(ADCCriminalPawn* P)
 	{
 		const FAnchor& A = Anchors[Rng.RandHelper(Anchors.Num())];
 		if (IsSpotTaken(A.Point, P)) { continue; }
-		if (Target == Here && Try < 5 && Here->IsWalkBlocked(P->GetFeet(), A.Point)) { continue; } // don't walk through the furniture
+		if (!Nav.IsReachable(FVector2D(P->GetFeet()), FVector2D(A.Point))) { continue; } // a wing cut off by a building site
 		TArray<FVector> Route;
 		PlanPath(P->GetFeet(), A.Point, Route);
 		const float Hold = A.bStation ? Rng.FRandRange(6.f, 14.f) : Rng.FRandRange(2.5f, 7.f) * (bNight ? 1.8f : 1.f);
@@ -1489,7 +1379,217 @@ void ADCWorldDirector::Tick(float DeltaSeconds)
 		UpdateClockLife();
 		TickWalkers();
 	}
+	UpdateDebugView(DeltaSeconds);
 	if (bWorldTest) { TickWorldTest(DeltaSeconds); }
+}
+
+// ─── Debug view ──────────────────────────────────────────────────────────────
+// Draws what the generators produced, as lines over the scene:
+//   grey lattice      the build grid (every cell a room could stand on, with its jittered corners)
+//   teal / amber      room layout: finished rooms / building sites
+//   green / yellow    doorways between rooms / the front door
+//   magenta, yellow   furniture footprints and the spots where crew look busy
+//   blue, red         the walkable tile map inside the house / the outline of every blocked tile
+//   per-pawn colour   each walking pawn's route, waypoints and goal; a ring shows its personal space
+//                     (red while it shoulders through a jam)
+
+namespace
+{
+	constexpr uint8 DbgDepth = SDPG_Foreground;
+	struct FDbgLines
+	{
+		TArray<FBatchedLine> Lines;
+		void Add(const FVector2D& A, const FVector2D& B, float Z, const FLinearColor& C, float Thick) { Lines.Emplace(FVector(A.X, A.Y, Z), FVector(B.X, B.Y, Z), C, 0.f, Thick, DbgDepth); }
+		void Loop(const FVector2D* P, int32 N, float Z, const FLinearColor& C, float Thick) { for (int32 i = 0; i < N; ++i) { Add(P[i], P[(i + 1) % N], Z, C, Thick); } }
+		void Cross(const FVector2D& P, float R, float Z, const FLinearColor& C, float Thick) { Add(P - FVector2D(R, 0), P + FVector2D(R, 0), Z, C, Thick); Add(P - FVector2D(0, R), P + FVector2D(0, R), Z, C, Thick); }
+	};
+}
+
+void ADCWorldDirector::UpdateDebugView(float Dt)
+{
+	DebugPoll -= Dt;
+	if (DebugPoll <= 0.f)
+	{
+		DebugPoll = 0.4f;
+		static const bool bCmd = FParse::Param(FCommandLine::Get(), TEXT("DCDebugView"));
+		const bool bWant = bCmd || DCSettings::DebugView();
+		if (bWant != bDebugView) { bDebugView = bWant; bDebugDirty = true; }
+	}
+	if (!bDebugView)
+	{
+		if (DebugStatic && bDebugDirty) { DebugStatic->Flush(); DebugLive->Flush(); }
+		bDebugDirty = false;
+		return;
+	}
+	if (!DebugStatic)
+	{
+		auto Make = [this](const TCHAR* Name)
+		{
+			ULineBatchComponent* C = NewObject<ULineBatchComponent>(this, Name);
+			C->bCalculateAccurateBounds = false;
+			C->SetupAttachment(GetRootComponent());
+			C->RegisterComponent();
+			return C;
+		};
+		DebugStatic = Make(TEXT("DebugStatic"));
+		DebugLive = Make(TEXT("DebugLive"));
+	}
+	if (bDebugDirty) { bDebugDirty = false; DrawDebugStatic(); }
+	DrawDebugLive();
+}
+
+void ADCWorldDirector::DrawDebugStatic()
+{
+	using namespace DCSite;
+	DebugStatic->Flush();
+	FDbgLines L;
+
+	// Build grid
+	const FLinearColor GridCol(0.62f, 0.68f, 0.78f);
+	for (int32 Y = Grid::MinRow; Y <= Grid::MaxRow; ++Y)
+	{
+		for (int32 X = Grid::MinCol; X <= Grid::MaxCol; ++X)
+		{
+			FVector2D Q[4]; Grid::Corners(FIntPoint(X, Y), Q);
+			L.Loop(Q, 4, 5.f, GridCol, 2.5f);
+			L.Cross(Grid::Centre(FIntPoint(X, Y)), 14.f, 5.f, GridCol, 2.5f);
+		}
+	}
+
+	// Tile map
+	if (Nav.IsBuilt())
+	{
+		const int32 Nx = Nav.SizeX(), Ny = Nav.SizeY();
+		const FVector2D O = Nav.GetOrigin();
+		const float C = FDCNavGrid::Cell;
+		const FLinearColor Wall(1.f, 0.22f, 0.12f), Tile(0.1f, 0.3f, 0.55f), Tight(0.75f, 0.5f, 0.1f);
+		// Kind of the border between two neighbouring tiles: 0 none, 1 blocked|free, 2 indoor floor, 3 tight indoor floor.
+		auto Kind = [&](int32 Xa, int32 Ya, int32 Xb, int32 Yb)
+		{
+			const uint8 A = Nav.ClearAt(Xa, Ya), B = Nav.ClearAt(Xb, Yb);
+			if ((A == 0) != (B == 0)) { return 1; }
+			if (A == 0 || Nav.RegionAt(Xa, Ya) < 0 || Nav.RegionAt(Xb, Yb) < 0) { return 0; }
+			return (A == 1 || B == 1) ? 3 : 2;
+		};
+		auto Emit = [&](int32 K, const FVector2D& A, const FVector2D& B)
+		{
+			if (K == 1) { L.Add(A, B, 7.f, Wall, 2.f); }
+			else if (K == 2) { L.Add(A, B, 4.f, Tile, 0.f); }
+			else if (K == 3) { L.Add(A, B, 4.f, Tight, 0.f); }
+		};
+		// borders are merged into runs so a whole wall is one line
+		for (int32 Y = 1; Y < Ny; ++Y)
+		{
+			int32 Run = 0, X0 = 0;
+			for (int32 X = 0; X <= Nx; ++X)
+			{
+				const int32 K = X < Nx ? Kind(X, Y - 1, X, Y) : 0;
+				if (K == Run) { continue; }
+				Emit(Run, O + FVector2D(X0 * C, Y * C), O + FVector2D(X * C, Y * C));
+				Run = K; X0 = X;
+			}
+		}
+		for (int32 X = 1; X < Nx; ++X)
+		{
+			int32 Run = 0, Y0 = 0;
+			for (int32 Y = 0; Y <= Ny; ++Y)
+			{
+				const int32 K = Y < Ny ? Kind(X - 1, Y, X, Y) : 0;
+				if (K == Run) { continue; }
+				Emit(Run, O + FVector2D(X * C, Y0 * C), O + FVector2D(X * C, Y * C));
+				Run = K; Y0 = Y;
+			}
+		}
+
+		// Doorways
+		for (const FDCNavDoor& D : Nav.GetDoors())
+		{
+			const FLinearColor Col = D.bFront ? FLinearColor(1.f, 0.9f, 0.15f) : FLinearColor(0.2f, 1.f, 0.3f);
+			const FVector2D H = D.Along * (D.Width * 0.5f), N(-D.Along.Y, D.Along.X);
+			L.Add(D.Centre - H, D.Centre + H, 14.f, Col, 7.f);
+			L.Add(D.Centre - H - N * 22.f, D.Centre - H + N * 22.f, 14.f, Col, 4.f);
+			L.Add(D.Centre + H - N * 22.f, D.Centre + H + N * 22.f, 14.f, Col, 4.f);
+			L.Add(D.Centre - N * 70.f, D.Centre + N * 70.f, 14.f, Col, 2.5f);
+		}
+	}
+
+	// Room layout + furniture
+	for (const TWeakObjectPtr<ADCRoomModule>& RW : Rooms)
+	{
+		const ADCRoomModule* R = RW.Get();
+		if (!R || !R->bPlaced || R->FloorQuad.Num() != 4) { continue; }
+		const bool bWalk = IsWalkable(R);
+		if (!bWalk && !IsSolidOutdoors(R)) { continue; }
+		const FLinearColor Col = bWalk ? FLinearColor(0.1f, 0.95f, 0.85f) : FLinearColor(1.f, 0.6f, 0.1f);
+		L.Loop(R->FloorQuad.GetData(), 4, 10.f, Col, 4.5f);
+		if (!bWalk)
+		{
+			L.Add(R->FloorQuad[0], R->FloorQuad[2], 10.f, Col, 2.f);
+			L.Add(R->FloorQuad[1], R->FloorQuad[3], 10.f, Col, 2.f);
+			continue;
+		}
+		const FTransform RT = R->GetActorTransform();
+		const float RoomYaw = FMath::DegreesToRadians(RT.Rotator().Yaw);
+		auto ToWorld = [&](const FVector2D& P) { const FVector W = RT.TransformPositionNoScale(FVector(P.X, P.Y, 0.f)); return FVector2D(W.X, W.Y); };
+		for (const ADCRoomModule::FFootprint& F : R->Footprints)
+		{
+			const float A = RoomYaw + FMath::DegreesToRadians(F.Yaw);
+			const FVector2D X(FMath::Cos(A), FMath::Sin(A)), Y(-X.Y, X.X), Cn = ToWorld(F.Centre);
+			const FVector2D P[4] = { Cn - X * F.Half.X - Y * F.Half.Y, Cn + X * F.Half.X - Y * F.Half.Y, Cn + X * F.Half.X + Y * F.Half.Y, Cn - X * F.Half.X + Y * F.Half.Y };
+			L.Loop(P, 4, 12.f, FLinearColor(1.f, 0.2f, 0.9f), 2.f);
+		}
+		for (const ADCRoomModule::FUseSpot& U : R->UseSpots)
+		{
+			const FVector2D P = ToWorld(U.Point);
+			const float A = RoomYaw + FMath::DegreesToRadians(U.Yaw);
+			L.Cross(P, 9.f, 12.f, FLinearColor(1.f, 0.85f, 0.1f), 2.5f);
+			L.Add(P, P + FVector2D(FMath::Cos(A), FMath::Sin(A)) * 28.f, 12.f, FLinearColor(1.f, 0.85f, 0.1f), 2.5f);
+		}
+	}
+	for (const FVector& S : SleepSpots) { L.Cross(FVector2D(S.X, S.Y), 12.f, 60.f, FLinearColor(0.45f, 0.55f, 1.f), 2.5f); }
+
+	DebugStatic->DrawLines(L.Lines);
+	UE_LOG(LogDC, Log, TEXT("WorldDirector debug view: %d lines (nav rev %u, %d walkable tiles, %d areas, built in %.2f ms)"), L.Lines.Num(), NavRevision, Nav.NumFree(), Nav.NumComponents(), NavBuildMs);
+}
+
+void ADCWorldDirector::DrawDebugLive()
+{
+	DebugLive->Flush();
+	FDbgLines L;
+	for (const ADCCriminalPawn* P : Pawns)
+	{
+		if (!P || P->IsAway() || P->IsHidden()) { continue; }
+		const FVector Feet = P->GetFeet();
+		const float Z = Feet.Z + 16.f;
+		const FLinearColor Col = FLinearColor::MakeFromHSV8((uint8)((P->GetCriminalId() * 53) & 0xFF), 190, 255);
+		const FVector2D Pos(Feet.X, Feet.Y);
+		// personal space
+		const FLinearColor Ring = P->IsShoulderingThrough() ? FLinearColor(1.f, 0.1f, 0.1f) : Col;
+		FVector2D Prev = Pos + FVector2D(31.f, 0.f);
+		for (int32 k = 1; k <= 12; ++k)
+		{
+			const float A = k * (2.f * UE_PI / 12.f);
+			const FVector2D Q = Pos + FVector2D(FMath::Cos(A), FMath::Sin(A)) * 31.f;
+			L.Add(Prev, Q, Z, Ring, 2.f);
+			Prev = Q;
+		}
+		// route
+		const TArray<FVector>& Route = P->GetRoute();
+		FVector2D A = Pos;
+		for (int32 i = 0; i < Route.Num(); ++i)
+		{
+			const FVector2D B(Route[i].X, Route[i].Y);
+			L.Add(A, B, Z, Col, 4.f);
+			if (i + 1 < Route.Num()) { L.Cross(B, 7.f, Z, Col, 3.f); }
+			else
+			{
+				const FVector2D G[4] = { B + FVector2D(14, 0), B + FVector2D(0, 14), B - FVector2D(14, 0), B - FVector2D(0, 14) };
+				L.Loop(G, 4, Z, Col, 4.f);
+			}
+			A = B;
+		}
+	}
+	if (L.Lines.Num()) { DebugLive->DrawLines(L.Lines); }
 }
 
 // ─── -DCWorldTest ────────────────────────────────────────────────────────────
