@@ -46,6 +46,17 @@ START=$(date +%s)
   -clientconfig="$CONFIG" \
   -build -cook -stage -pak -iostore -compressed -prereqs
 
+# Every "/Game/..." path hard-coded in Source must have been cooked. Assets loaded
+# by path from C++ are invisible to the cooker unless their folder is listed in
+# DefaultGame.ini DirectoriesToAlwaysCook; missing ones render as grey/black.
+COOKED_SET="$PROJECT_DIR/Saved/Cooked/Mac/DirectorsCut/Metadata/ReferencedSet.txt"
+MISSING=0
+for p in $(grep -rhoE '"/Game/[^"]+"' "$PROJECT_DIR/Source" | tr -d '"' | sed -E 's/\.[A-Za-z0-9_]+$//' | sort -u); do
+  # Folder paths (e.g. /Game/DC/Audio) count as cooked if anything under them is.
+  grep -qiE "^${p}(/|$)" "$COOKED_SET" || { echo "ERROR: not cooked: $p"; MISSING=1; }
+done
+(( MISSING == 0 )) || { echo "Add the folder(s) to DirectoriesToAlwaysCook in Config/DefaultGame.ini."; exit 1; }
+
 # Don't use UAT's -archive on Mac: it copies the bare Binaries/Mac .app (no
 # Contents/UE, no dylibs), which dies at launch with "libtbb.12.dylib not
 # loaded". The complete, self-contained bundle is the staged one.
