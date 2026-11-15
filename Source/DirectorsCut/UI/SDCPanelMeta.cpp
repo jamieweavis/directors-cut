@@ -494,9 +494,9 @@ TSharedRef<SWidget> SDCRoot::BuildTitle()
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
 			[SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.f))[SNew(SBox).WidthOverride(56.f).HeightOverride(3.f)[SNew(SImage).Image(WhiteBrush()).ColorAndOpacity(Accent)]]]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 22.f, 0.f, 0.f)
-			[SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.05f))[Txt(TEXT("THE"), Font(46.f, EW::Bold, 420), Text)]]
+			[SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.05f))[Txt(TEXT("DIRECTOR'S"), Font(46.f, EW::Bold, 420), Text)]]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, -8.f, 0.f, 0.f)
-			[SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.12f))[Txt(TEXT("DIRECTOR"), Font(46.f, EW::Bold, 420), Accent)]]
+			[SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.12f))[Txt(TEXT("CUT"), Font(46.f, EW::Bold, 420), Accent)]]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 14.f, 0.f, 48.f)
 			[SNew(SBorder).BorderImage(NoBrush()).Padding(0.f).ColorAndOpacity(Fade(0.2f))[Txt(TEXT("Run the crew. Plan the jobs. Take your cut."), Font(12.f), TextDim)]]
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
