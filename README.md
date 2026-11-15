@@ -16,13 +16,7 @@ Director's Cut is a real-time crew management roguelike. You're the director: yo
 
 The clock keeps running. Every dawn is payday, and crew wages and building upkeep come due. If you can't pay, the run is over. Spend your earnings on new rooms, which you place on a wonky hand-built grid so the house grows piece by piece. The Workshop, Ops Room, Clinic, Server Room, Lawyer and others each improve your odds in their own way. Draft perks to change how the run plays, take on risky night work and rare jackpot jobs, and build up to the Big Score: five crew, twenty minutes, and one shot at retiring rich.
 
-Every run deals out different recruits, jobs and perks, so no two runs play out the same. Everything happens in a small toybox diorama with a day/night cycle, cel-shaded and shot with tilt-shift so the farmhouse looks like a model on a table.
-
-- **Build the hideout.** Build and upgrade rooms in your farmhouse to support your crew and operations.
-- **Hire a crew.** Recruit and manage a team of specialists to carry out your operations.
-- **Arrange jobs.** Assign your crew to various missions to maximize profits and minimize risks.
-- **Upgrade your crew.** Improve your team's skills and equipment to handle tougher missions and increase efficiency.
-- **Pick perks.** Choose upgrades from a perk draft to enhance your crew's abilities and strategy.
+Every run deals out different recruits, jobs and perks, so no two runs play out the same.
 
 ## Licensing
 
