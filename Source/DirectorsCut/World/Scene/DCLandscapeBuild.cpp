@@ -145,6 +145,38 @@ void ADCLandscape::BuildVegetation()
 	using namespace DCSite;
 	FRandomStream R(1337);
 	const FName Tufts[3] = { "Tuft0", "Tuft1", "Tuft2" };
+
+	// Grass grows everywhere except the yard, lane, driveway, fields and the front footpath, including over the
+	// lawn and the whole build grid. Tufts over the grid go in their own batches so rooms can clear them.
+	const FBox2D Comp = CompoundRect();
+	const FBox2D HouseZone = Comp.ExpandBy(60.f);
+	FVector2D FP[3];
+	FrontPath(FP);
+	const FVector2D PathEnd(FP[2].X, YardRect().Max.Y - 40.f);
+	auto NearPath = [&](const FVector2D& P)
+	{
+		const FVector Q(P, 0.f);
+		return FMath::PointDistToSegment(Q, FVector(FP[0], 0.f), FVector(FP[1], 0.f)) < 80.f
+			|| FMath::PointDistToSegment(Q, FVector(FP[1], 0.f), FVector(PathEnd, 0.f)) < 80.f;
+	};
+	auto NoGrass = [&](const FVector2D& P) { return (!Comp.IsInside(P) && Blocked(P, 0.f, true)) || NearPath(P); };
+	for (int32 i = 0; i < 3; ++i)
+	{
+		UInstancedStaticMeshComponent* ISM = NewObject<UInstancedStaticMeshComponent>(this);
+		ISM->SetStaticMesh(MeshLib.FindRef(Tufts[i]));
+		ISM->SetMaterial(0, M("Grass"));
+		ISM->SetMobility(EComponentMobility::Static);
+		ISM->SetCastShadow(false);
+		ISM->bAffectDistanceFieldLighting = false;
+		ISM->bVisibleInRayTracing = false;
+		ISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		ISM->bDisableCollision = true;
+		ISM->SetupAttachment(GetRootComponent());
+		ISM->RegisterComponent();
+		AddInstanceComponent(ISM);
+		HouseGrass.Add(ISM);
+	}
+
 	auto Grid = [&](float Ext, float Step, float Inner, float ScaleK)
 	{
 		for (float Y = -Ext; Y <= Ext; Y += Step)
@@ -156,26 +188,23 @@ void ADCLandscape::BuildVegetation()
 				if (Rad < Inner || Rad > Ext) { continue; }
 				const float Dens = VNoise(P.X * 0.0012f, P.Y * 0.0012f, 3.f);
 				if (R.FRand() > 0.35f + 0.8f * Dens) { continue; }
-				if (Blocked(P, 0.f, false)) { continue; }
-				const float H = (0.3f + 0.55f * Dens) * R.FRandRange(0.7f, 1.2f) * ScaleK;
+				if (NoGrass(P)) { continue; }
+				// a little shorter towards the middle of the lawn, blending out to full meadow height at its edge
+				const float LawnD = ((P - LawnC) / LawnR).Size();
+				const float LawnK = FMath::GetMappedRangeValueClamped(FVector2D(0.7f, 1.05f), FVector2D(0.7f, 1.f), LawnD);
+				const float H = (0.3f + 0.55f * Dens) * R.FRandRange(0.7f, 1.2f) * ScaleK * LawnK;
 				const float Sx = R.FRandRange(0.9f, 1.35f);
-				Add(Tufts[R.RandRange(0, 2)], FName("Grass"),
-					FTransform(FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f), FVector(P.X, P.Y, GroundTop), FVector(Sx, Sx, H)), false);
+				const int32 Mesh = R.RandRange(0, 2);
+				const FTransform T(FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f), FVector(P.X, P.Y, GroundTop), FVector(Sx, Sx, H));
+				if (HouseZone.IsInside(P)) { HouseTufts.Add({ P, T, Mesh }); }
+				else { Add(Tufts[Mesh], FName("Grass"), T, false); }
 			}
 		}
 	};
 	Grid(7000.f, 85.f, 0.f, 1.f);
 	Grid(13500.f, 150.f, 7000.f, 1.15f);
+	RefreshHouseGrass();
 
-	// a ragged fringe of taller grass along the lawn edge so the short grass blends into the meadow
-	for (int32 i = 0; i < 520; ++i)
-	{
-		const float A = R.FRandRange(0.f, 2.f * PI);
-		const float K = R.FRandRange(0.93f, 1.03f);
-		const FVector2D P = LawnC + FVector2D(FMath::Cos(A) * LawnR.X * K, FMath::Sin(A) * LawnR.Y * K);
-		if (Blocked(P, 0.f, true)) { continue; }
-		Add(Tufts[i % 3], "Grass", FTransform(FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f), FVector(P.X, P.Y, GroundTop), FVector(0.7f, 0.7f, R.FRandRange(0.25f, 0.5f))), false);
-	}
 	// sparse low tufts on the lawn itself
 	for (int32 i = 0; i < 900; ++i)
 	{
@@ -229,6 +258,40 @@ void ADCLandscape::BuildVegetation()
 			const float A = R.FRandRange(0.f, 2.f * PI), D = S * R.FRandRange(42.f, 62.f);
 			Add(Tufts[k % 3], "Grass", FTransform(FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f), FVector(P.X + FMath::Cos(A) * D, P.Y + FMath::Sin(A) * D, GroundTop), FVector(0.9f, 0.9f, R.FRandRange(0.4f, 0.75f))), false);
 		}
+	}
+}
+
+void ADCLandscape::SetHouseCells(const TArray<FIntPoint>& Cells)
+{
+	HouseCells = Cells;
+	RefreshHouseGrass();
+}
+
+void ADCLandscape::RefreshHouseGrass()
+{
+	if (HouseGrass.Num() != 3) { return; }
+	TArray<FVector2D> Quads;
+	for (const FIntPoint& C : HouseCells)
+	{
+		FVector2D Q[4];
+		DCSite::Grid::Corners(C, Q);
+		Quads.Append(Q, 4);
+	}
+	TArray<FTransform> Keep[3];
+	for (const FHouseTuft& T : HouseTufts)
+	{
+		bool bUnder = false;
+		for (int32 q = 0; q + 3 < Quads.Num() && !bUnder; q += 4)
+		{
+			bUnder = DCSite::Grid::InsideQuad(&Quads[q], T.P, 40.f); // just past the outer wall face
+		}
+		if (!bUnder) { Keep[T.Mesh].Add(T.T); }
+	}
+	for (int32 i = 0; i < 3; ++i)
+	{
+		if (!HouseGrass[i]) { continue; }
+		HouseGrass[i]->ClearInstances();
+		HouseGrass[i]->AddInstances(Keep[i], false, true);
 	}
 }
 

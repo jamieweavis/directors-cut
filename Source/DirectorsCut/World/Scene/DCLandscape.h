@@ -44,6 +44,10 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	/** The meadow grass grows over the whole build grid; it is cleared from every cell in Cells (rooms built or under
+	 *  construction). Called by the house builder whenever the house changes. */
+	void SetHouseCells(const TArray<FIntPoint>& Cells);
+
 protected:
 	bool bBuilt = false;
 	UPROPERTY() TObjectPtr<ADCDayNight> DayNight;
@@ -95,6 +99,13 @@ protected:
 	bool Blocked(const FVector2D& P, float Margin, bool bAllowLawn) const;
 	FVector2D LawnC = FVector2D(-150.f, 150.f);
 	FVector2D LawnR = FVector2D(2500.f, 2550.f);
+
+	// grass over the build grid: kept apart so it can be cleared where rooms stand
+	struct FHouseTuft { FVector2D P; FTransform T; int32 Mesh = 0; };
+	TArray<FHouseTuft> HouseTufts;
+	TArray<FIntPoint> HouseCells;
+	UPROPERTY() TArray<TObjectPtr<UInstancedStaticMeshComponent>> HouseGrass;
+	void RefreshHouseGrass();
 
 	// ------------------------------------------------------------------ night lights
 	struct FNightLight { TWeakObjectPtr<ULightComponent> Light; float Base = 0.f; float Seed = 0.f; float Flicker = 0.f; };

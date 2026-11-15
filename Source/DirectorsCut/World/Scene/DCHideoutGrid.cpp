@@ -3,6 +3,7 @@
 // See DCHideoutBuilder.h for the rules and Core/DCSiteLayout.h for the grid itself.
 #include "World/Scene/DCHideoutBuilder.h"
 #include "World/Scene/DCLandscapeMeshes.h"
+#include "World/Scene/DCLandscape.h"
 #include "World/DCRoomModule.h"
 #include "World/DCStation.h"
 #include "World/DCCriminalSpawnZone.h"
@@ -159,6 +160,13 @@ void ADCHideoutBuilder::SyncGrid(bool bForce)
 	for (int32 i = 0; i < N; ++i) { if (Stage[i] > 0) { StageAt.Add(Cell[i], Stage[i]); } }
 	const double T0 = FPlatformTime::Seconds();
 	for (int32 i = 0; i < N; ++i) { BuildGridRoom(i, Cell[i], Stage[i], StageAt); }
+	// clear the meadow grass from every cell the house now stands (or is being built) on
+	if (ADCLandscape* Land = ADCLandscape::Get(GetWorld()))
+	{
+		TArray<FIntPoint> Cells;
+		StageAt.GetKeys(Cells);
+		Land->SetHouseCells(Cells);
+	}
 	UE_LOG(LogDC, Log, TEXT("[Scene] house rebuilt: %d rooms on the grid, %.1f ms"), StageAt.Num(), (FPlatformTime::Seconds() - T0) * 1000.0);
 }
 
