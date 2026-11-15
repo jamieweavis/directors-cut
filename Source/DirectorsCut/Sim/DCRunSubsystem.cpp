@@ -1166,7 +1166,7 @@ void UDCRunSubsystem::DevAddCash(int32 Amount) { if (bActive && Amount > 0) { Ca
 void UDCRunSubsystem::DevOfferPerks() { if (PerkOffer.Num() == 0) { DCImpl::OfferPerks(*this); } }
 void UDCRunSubsystem::DevEndRun(bool bWon)
 {
-	if (bActive && Phase == EDCGamePhase::Playing) { DCImpl::EndRun(*this, bWon, bWon ? TEXT("The Big Score") : TEXT("Broke at payday")); }
+	if (bActive && Phase == EDCGamePhase::Playing) { DCImpl::EndRun(*this, bWon, bWon ? TEXT("Everyone took their cut and walked away clean.") : TEXT("Broke at payday")); }
 }
 
 bool UDCRunSubsystem::IsFinalPerkOffer() const

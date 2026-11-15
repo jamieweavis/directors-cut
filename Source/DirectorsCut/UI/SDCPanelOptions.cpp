@@ -801,7 +801,7 @@ TSharedRef<SWidget> SDCRoot::SlotCard(const FDCSaveSlotInfo& I, EView Mode)
 				+ SUniformGridPanel::Slot(0, 0)[Stat(TEXT("banknote"), MoneyShort(I.Cash), TEXT("Cash"))]
 				+ SUniformGridPanel::Slot(1, 0)[Stat(TEXT("trophy"), FString::FromInt(I.MissionsSucceeded), TEXT("Jobs done"))]
 				+ SUniformGridPanel::Slot(0, 1)[Stat(TEXT("users"), FString::FromInt(I.RosterCount), TEXT("Crew"))]
-				+ SUniformGridPanel::Slot(1, 1)[Stat(TEXT("hammer"), FString::FromInt(I.RoomsBuilt), TEXT("Wings"))]
+				+ SUniformGridPanel::Slot(1, 1)[Stat(TEXT("hammer"), FString::FromInt(I.RoomsBuilt), TEXT("Buildings"))]
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 10.f, 0.f, 0.f)[HLine()]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f, 0.f, 0.f)

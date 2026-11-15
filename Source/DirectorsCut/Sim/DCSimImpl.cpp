@@ -796,7 +796,7 @@ void FDCSimImpl::CompleteMission(S& Sim, int32 MissionId)
 	Sim.OnMissionCompleted.Broadcast(Sim.Reports[0]);
 
 	if (bSuccess && Sim.MissionsSucceeded % B.PerkEveryN == 0) { OfferPerks(Sim); }
-	if (bSuccess && M.bFinal) { EndRun(Sim, true, TEXT("The Big Score")); return; }
+	if (bSuccess && M.bFinal) { EndRun(Sim, true, TEXT("Everyone took their cut and walked away clean.")); return; }
 	TryPostFinal(Sim);
 }
 
