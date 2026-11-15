@@ -76,19 +76,19 @@ bool FDCAudioMixTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Night at 22:00"), DayFactor(22.f) < 0.01f);
 
 	const FAmbienceMix Noon = ComputeAmbienceMix(true, 12.f, 0.f, false);
-	TestTrue(TEXT("Noon: day bed up"), Noon.Bed[BedCityDay] > 0.95f);
-	TestTrue(TEXT("Noon: night bed down"), Noon.Bed[BedCityNight] < 0.05f);
+	TestTrue(TEXT("Noon: day bed up"), Noon.Bed[BedRuralDay] > 0.95f);
+	TestTrue(TEXT("Noon: night bed down"), Noon.Bed[BedRuralNight] < 0.05f);
 	TestTrue(TEXT("Room tone always"), Noon.Bed[BedInterior] > 0.5f);
 	const FAmbienceMix Night = ComputeAmbienceMix(true, 1.f, 0.f, false);
-	TestTrue(TEXT("Night: night bed up"), Night.Bed[BedCityNight] > 0.95f && Night.Bed[BedCityDay] < 0.05f);
+	TestTrue(TEXT("Night: night bed up"), Night.Bed[BedRuralNight] > 0.95f && Night.Bed[BedRuralDay] < 0.05f);
 	const FAmbienceMix Dusk = ComputeAmbienceMix(true, 19.75f, 0.f, false);
-	const float Power = FMath::Square(Dusk.Bed[BedCityDay]) + FMath::Square(Dusk.Bed[BedCityNight]);
+	const float Power = FMath::Square(Dusk.Bed[BedRuralDay]) + FMath::Square(Dusk.Bed[BedRuralNight]);
 	TestTrue(TEXT("Dusk crossfade is equal-power"), FMath::IsNearlyEqual(Power, 1.f, 0.01f));
 	const FAmbienceMix Paused = ComputeAmbienceMix(true, 12.f, 0.f, true);
-	TestTrue(TEXT("Pause ducks"), Paused.Bed[BedCityDay] < Noon.Bed[BedCityDay] && Paused.Bed[BedInterior] < Noon.Bed[BedInterior]);
+	TestTrue(TEXT("Pause ducks"), Paused.Bed[BedRuralDay] < Noon.Bed[BedRuralDay] && Paused.Bed[BedInterior] < Noon.Bed[BedInterior]);
 	const FAmbienceMix Title = ComputeAmbienceMix(false, 12.f, 0.f, false);
-	TestTrue(TEXT("Title: room tone + night low, no day"), Title.Bed[BedInterior] > 0.5f && Title.Bed[BedCityDay] == 0.f
-		&& Title.Bed[BedCityNight] > 0.f && Title.Bed[BedCityNight] < 0.6f);
+	TestTrue(TEXT("Title: room tone + night low, no day"), Title.Bed[BedInterior] > 0.5f && Title.Bed[BedRuralDay] == 0.f
+		&& Title.Bed[BedRuralNight] > 0.f && Title.Bed[BedRuralNight] < 0.6f);
 	const FAmbienceMix Wet = ComputeAmbienceMix(true, 12.f, 1.f, false);
 	TestTrue(TEXT("Rain bed follows rain"), Wet.Bed[BedRain] > 0.5f && Noon.Bed[BedRain] == 0.f);
 

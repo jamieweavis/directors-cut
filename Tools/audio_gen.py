@@ -6,7 +6,7 @@ recordings, no third-party material), so it is owned by the project. Requires nu
 
     python3 -m venv /tmp/dcvenv && /tmp/dcvenv/bin/pip install numpy scipy
     /tmp/dcvenv/bin/python Tools/audio_gen.py                       # all
-    /tmp/dcvenv/bin/python Tools/audio_gen.py SFX_Click AMB_CityDay  # some
+    /tmp/dcvenv/bin/python Tools/audio_gen.py SFX_Click AMB_RuralDay  # some
 
 Output: 16-bit PCM WAV, 44.1 kHz (mono UI sfx, stereo events/ambience), loudness-normalised
 per sound (see LOUD below), plus Content/RawAudio/manifest.json and LICENSES.md.
@@ -297,7 +297,7 @@ def warehouse(y, wet=0.22, dur=1.4, seed=7150):
 
 
 def outdoors(y, wet=0.9, dur=3.0, seed=7180, dry=0.35):
-    """Distant, outdoor slap-back between buildings; stereo out."""
+    """Distant, open-air slap-back off the hills and tree line; stereo out."""
     ir = make_ir(dur, seed, 0.18, 0.7, predelay=0.05)
     return reverb(y if y.ndim == 2 else stereo(y), ir, wet=wet, dry=dry)
 
@@ -836,7 +836,7 @@ def sfx_car_arrive():
 # ───────────────────────────── ambience beds (stereo loops) ─────────────────────────────
 
 def _swells(n, count, seed, w_lo, w_hi, a_lo=0.4, a_hi=1.0):
-    """Sum of gaussian bumps (cars passing in the distance) as an envelope, per channel with pan."""
+    """Sum of gaussian bumps (gusts of wind) as an envelope, per channel with pan."""
     rr = R(seed)
     t = tt(n)
     env = np.zeros((2, n))
@@ -892,45 +892,73 @@ def bird_phrase(seed):
     return out
 
 
-def car_horn(dur, seed):
-    n = ns(dur)
-    t = tt(n)
-    y = np.zeros(n)
-    for f in (420, 510):
-        y += np.tanh(3 * np.sin(TAU * f * t)) * 0.5
-    y = bp(y, 300, 2200) * att(n, 0.01) * np.clip((dur - t) / 0.03, 0, 1)
-    return y
+def bird_whistle(seed):
+    """A slower slurred whistle of 2-4 notes (a thrush-like phrase), 1.8-3.4 kHz."""
+    rr = R(seed)
+    out = np.zeros(ns(1.8))
+    tp = 0.0
+    for i in range(rr.integers(2, 5)):
+        d = rr.uniform(0.12, 0.26)
+        m = ns(d)
+        tm = tt(m)
+        f0 = rr.uniform(1800, 3400)
+        f1 = f0 * rr.uniform(0.8, 1.25)
+        f = (f0 + (f1 - f0) * (tm / d) ** rr.uniform(0.6, 1.6)) * (1 + 0.012 * np.sin(TAU * rr.uniform(18, 32) * tm))
+        c = np.sin(TAU * np.cumsum(f) / SR) * np.sin(np.pi * tm / d) ** 1.2
+        out = put(out, c, tp, rr.uniform(0.5, 1.0))
+        tp += d + rr.uniform(0.04, 0.16)
+    return out
 
 
-def traffic(n, seed, swells, level, dark=900):
+def dove_coo(seed):
+    """A dove in a tree: five soft low hoots, long-long-short-short-long."""
+    rr = R(seed)
+    out = np.zeros(ns(3.2))
+    f0 = rr.uniform(430, 500)
+    tp = 0.0
+    for d, g in [(0.42, 0.8), (0.5, 1.0), (0.22, 0.7), (0.22, 0.7), (0.45, 0.9)]:
+        m = ns(d)
+        tm = tt(m)
+        ph = TAU * np.cumsum(f0 * (1 + 0.06 * np.sin(np.pi * tm / d))) / SR
+        c = (np.sin(ph) + 0.15 * np.sin(2 * ph)) * np.sin(np.pi * tm / d) ** 2
+        out = put(out, c, tp, g)
+        tp += d + 0.1
+    return out
+
+
+def wind(n, seed, gusts, level, bright=1.0):
+    """Open-country wind: a low air bed plus gusts that brighten as they rise (grass and leaves hissing)."""
     out = np.zeros((2, n))
-    env = _swells(n, swells, seed, 2.0, 6.0)
+    env = _swells(n, gusts, seed, 2.5, 7.0)
     for ch in range(2):
-        wash = lp(pink(n, seed + 10 + ch, 0.9), dark) * 0.6 + bp(pink(n, seed + 20 + ch, 0.4), 400, 2200) * 0.08
-        hiss = bp(white(n, seed + 30 + ch), 600, 3000) * 0.04
-        rumble = lp(pink(n, seed + 40 + ch, 1.0), 120) * 0.5
-        out[ch] = wash * (0.35 + env[ch]) + hiss * env[ch] + rumble * 0.6
+        air = lp(pink(n, seed + 10 + ch, 0.9), 400) * 0.5
+        body = bp(pink(n, seed + 20 + ch, 0.6), 250, 1400) * 0.22
+        flut = lp(white(n, seed + 50 + ch), 9)
+        flut = np.clip(1 + 0.45 * flut / (np.std(flut) + 1e-12), 0, None)  # leaves flutter, never steady hiss
+        leaves = bp(white(n, seed + 30 + ch), 2500, 8000) * 0.035 * bright * flut
+        grass = bp(pink(n, seed + 40 + ch, 0.3), 900, 4000) * 0.06 * bright
+        e = env[ch]
+        out[ch] = air * (0.3 + 0.5 * e) + body * (0.15 + e) + (leaves + grass) * (0.08 + e ** 1.5)
     return out * level
 
 
-def amb_city_day():
-    """Distant daytime city: traffic wash with passing swells, a far horn, birds. 45 s loop."""
-    L = ns(45.0)
+def amb_rural_day():
+    """Open countryside by day: wind in grass and trees, songbirds near and far, a dove, meadow insects. 48 s loop."""
+    L = ns(48.0)
     XF = ns(3.0)
     n = L + XF
-    out = traffic(n, 9400, 22, 0.1)
+    t = tt(n)
+    out = wind(n, 9400, 16, 0.1)
     rr = R(9450)
     birds = np.zeros((2, n))
-    for i in range(14):
-        ph = bird_phrase(9460 + i)
-        birds = put(birds, stereo(ph, rr.uniform(-0.9, 0.9)), rr.uniform(0.5, 44.0), rr.uniform(0.004, 0.012))
-    birds = outdoors(lp(birds, 7500), 0.5, 1.5, 9470, 0.8)[:, :n]
-    out += birds
-    horn = outdoors(stereo(car_horn(0.28, 9480), 0.5), 1.2, 2.5, 9481, 0.25)
-    out = put(out, lp(horn, 1800) * 0.03, 27.0)
-    horn2 = outdoors(stereo(car_horn(0.12, 9482), -0.6), 1.2, 2.5, 9483, 0.25)
-    out = put(out, lp(horn2, 1600) * 0.02, 9.0)
-    out = put(out, lp(horn2, 1600) * 0.02, 9.2)
+    for i in range(26):
+        ph = bird_phrase(9460 + i) if i % 3 else bird_whistle(9460 + i)
+        birds = put(birds, stereo(ph, rr.uniform(-0.9, 0.9)), rr.uniform(0.5, 46.0), rr.uniform(0.005, 0.016))
+    for k, t0 in enumerate((11.0, 33.5)):
+        birds = put(birds, stereo(lp(dove_coo(9490 + k), 1200), -0.5 + k * 0.9), t0, 0.012)
+    out += outdoors(lp(birds, 7500), 0.5, 1.5, 9470, 0.8)[:, :n]
+    insects = np.vstack([bp(white(n, 9495 + c), 5500, 9000) for c in range(2)]) * 0.0022
+    out += insects * (1 + 0.4 * np.sin(TAU * t / 8.0))
     y = xfade_loop(out, L, XF)
     return loopf(y, lambda z: hp(lp(z, 9000), 25))
 
@@ -953,29 +981,47 @@ def cricket(n, seed, carrier, rate, pan):
     return stereo(c * slow, pan)
 
 
-def amb_city_night():
-    """Night city: thinner, darker traffic, constant far hum, crickets and insects. 45 s loop."""
-    L = ns(45.0)
+def frog(n, seed, f0, rate, pan):
+    """One far-off frog: short rattling croaks at `rate` per second, calling in bouts."""
+    rr = R(seed)
+    t = tt(n)
+    gate = np.zeros(n)
+    tp = rr.uniform(0, 1.5)
+    while tp < n / SR - 0.3:
+        a = ns(tp)
+        gate[a:a + ns(rr.uniform(0.09, 0.16))] = 1.0
+        tp += 1.0 / rate * rr.uniform(0.8, 1.3)
+    gate = lp(gate, 60)
+    rattle = np.maximum(0, np.sin(TAU * rr.uniform(48, 62) * t)) ** 2
+    c = np.sin(TAU * f0 * t) * 0.7 + np.sin(TAU * f0 * 2.02 * t) * 0.3
+    bouts = np.clip(np.sin(TAU * t / rr.uniform(14, 26) + rr.uniform(0, TAU)), 0, 1) ** 1.5
+    return stereo(c * rattle * gate * bouts, pan)
+
+
+def amb_rural_night():
+    """Countryside at night: a soft breeze, a field of crickets, frogs by the water, insects. 48 s loop."""
+    L = ns(48.0)
     XF = ns(3.0)
     n = L + XF
     t = tt(n)
-    out = traffic(n, 9500, 7, 0.065, 600)
-    for ch in range(2):
-        out[ch] += lp(pink(n, 9510 + ch, 1.0), 180) * 0.025
-    out += stereo(0.0015 * np.sin(TAU * 100 * t) + 0.001 * np.sin(TAU * 150 * t), 0.0)
+    out = wind(n, 9500, 6, 0.05, 0.5)
     cr = np.zeros((2, n))
-    for i, (f, r, p, g) in enumerate([(4350, 2.6, -0.6, 1.0), (4620, 2.2, 0.5, 0.7), (4100, 3.0, 0.15, 0.5),
-                                      (4800, 2.4, -0.2, 0.35)]):
+    for i, (f, r, p, g) in enumerate([(4350, 2.6, -0.6, 1.0), (4620, 2.2, 0.5, 0.8), (4100, 3.0, 0.15, 0.6),
+                                      (4800, 2.4, -0.2, 0.45), (4480, 2.8, 0.8, 0.4), (4230, 2.1, -0.85, 0.35)]):
         cr += cricket(n, 9520 + i, f, r, p) * g
+    fr = np.zeros((2, n))
+    for i, (f, r, p, g) in enumerate([(820, 1.5, 0.6, 1.0), (1040, 1.9, 0.3, 0.6), (690, 1.2, 0.75, 0.7)]):
+        fr += frog(n, 9550 + i, f, r, p) * g
     insects = np.vstack([bp(white(n, 9530 + c), 5000, 9000) for c in range(2)]) * 0.004
     insects *= 1 + 0.3 * np.sin(TAU * t / 6.0)
-    out += (outdoors(cr, 0.4, 1.2, 9540, 0.8)[:, :n]) * 0.006 + insects
+    out += outdoors(cr, 0.4, 1.2, 9540, 0.8)[:, :n] * 0.007 + insects
+    out += outdoors(lp(fr, 2500), 0.8, 2.0, 9560, 0.4)[:, :n] * 0.004
     y = xfade_loop(out, L, XF)
     return loopf(y, lambda z: hp(lp(z, 9000), 25))
 
 
 def amb_rain():
-    """Rain on the roof and factory windows: dense patter, low roof roar, window taps, gutter drip. 32 s loop."""
+    """Rain on the roof and windows: dense patter, low roof roar, window taps, gutter drip. 32 s loop."""
     L = ns(32.0)
     XF = ns(3.0)
     n = L + XF
@@ -1012,19 +1058,20 @@ def amb_rain():
 
 # ───────────────────────────── ambience one-shots (stereo, baked distance) ─────────────────────────────
 
-def amb_siren():
-    """Distant police siren wail drifting across, between buildings."""
-    dur = 11.0
-    n = ns(dur)
-    t = tt(n)
-    cyc = 3.6
-    ph = (t % cyc) / cyc
-    f = (650 + 750 * np.sin(np.pi * ph) ** 1.6) * (1 + 0.01 * np.sin(TAU * 0.13 * t))
-    y = hp(siren_whoop(f, 9700), 350) * np.sin(np.pi * np.clip(t / dur, 0, 1)) ** 1.4
-    pan = -0.7 + 1.2 * t / dur
-    s = np.vstack([y * np.cos((pan + 1) * np.pi / 4), y * np.sin((pan + 1) * np.pi / 4)])
-    s = outdoors(s, 1.2, 3.5, 9701, 0.35)[:, :n]
-    return fades(lp(s, 2400), 0.3, 1.0)
+def amb_owl():
+    """An owl in the trees past the field: one hoot, a pause, then a short note into a long wavering call."""
+    n = ns(4.6)
+    y = np.zeros(n)
+    for k, (t0, d, f0, vib) in enumerate([(0.0, 0.6, 395, 0.0), (1.55, 0.22, 380, 0.0), (1.9, 1.5, 400, 0.03)]):
+        m = ns(d)
+        tm = tt(m)
+        f = f0 * (1 + 0.05 * np.sin(np.pi * tm / d) - 0.04 * tm / d)
+        f *= 1 + vib * np.sin(TAU * 9 * tm) * np.clip(tm / 0.3, 0, 1)
+        ph = TAU * np.cumsum(f) / SR
+        c = np.sin(ph) + 0.2 * np.sin(2 * ph) + 0.06 * np.sin(3 * ph) + bp(white(m, 9700 + k), 300, 900) * 0.08
+        y = put(y, c * np.sin(np.pi * tm / d) ** 0.7, t0)
+    s = outdoors(stereo(lp(y, 1800), 0.5), 0.8, 2.5, 9710, 0.45)
+    return fades(s, 0.01, 0.8)
 
 
 def dog_bark(seed, f0=420):
@@ -1038,7 +1085,7 @@ def dog_bark(seed, f0=420):
 
 
 def amb_dog_bark():
-    """A dog a few blocks away: three barks, then one more."""
+    """A farm dog across the fields: three barks, then one more."""
     n = ns(2.6)
     y = np.zeros(n)
     for k, (t0, f) in enumerate([(0.0, 430), (0.32, 410), (0.62, 440), (1.6, 400)]):
@@ -1048,7 +1095,7 @@ def amb_dog_bark():
 
 
 def amb_train_horn():
-    """Far freight train horn: a three-chime chord, long-short-long, rolling off the city."""
+    """Far freight train horn: a three-chime chord, long-short-long, rolling across the valley."""
     dur = 6.5
     n = ns(dur)
     t = tt(n)
@@ -1064,39 +1111,55 @@ def amb_train_horn():
     return fades(lp(hp(s, 180), 1500), 0.05, 1.2)
 
 
-def amb_construction():
-    """Distant building site: a few hammer strikes on steel, a short jackhammer burst, a reversing beeper."""
-    dur = 6.0
-    n = ns(dur)
-    y = np.zeros(n)
-    rr = R(9950)
-    for k, t0 in enumerate([0.1, 0.62, 1.15, 1.66]):
-        m = ns(0.4)
-        h = modal(m, [890, 1430, 2210, 3150], [0.5, 0.35, 0.2, 0.1], [0.12, 0.08, 0.05, 0.03], 9951 + k)
-        h += hp(white(m, 9960 + k), 1500) * np.exp(-tt(m) / 0.003)
-        y = put(y, h * rr.uniform(0.7, 1.0), t0)
-    m = ns(1.4)
+def crow_caw(seed, f0=560):
+    d = 0.3
+    m = ns(d)
     tm = tt(m)
-    jh = np.maximum(0, np.sin(TAU * 22 * tm)) ** 6 * (bp(white(m, 9970), 400, 3000) + 0.5 * lp(white(m, 9971), 200))
-    jh *= np.clip(tm / 0.05, 0, 1) * np.clip((1.4 - tm) / 0.05, 0, 1)
-    y = put(y, jh * 0.8, 2.4)
-    for k in range(4):
-        b = np.sin(TAU * 1040 * tt(ns(0.45))) * att(ns(0.45), 0.005) * np.clip((0.45 - tt(ns(0.45))) / 0.01, 0, 1)
-        y = put(y, b * 0.15, 3.4 + k * 0.9)
-    s = outdoors(stereo(lp(y, 2800), 0.4), 1.2, 2.5, 9980, 0.3)[:, :n]
-    return fades(s, 0.01, 0.4)
+    f = f0 * (1.08 - 0.22 * tm / d)
+    rasp = 0.6 + 0.4 * np.sign(np.sin(TAU * np.cumsum(f * 0.5) / SR))
+    src = saw_blep(f) * rasp + white(m, seed) * 0.5
+    y = bp(src, 1100, 1900) + bp(src, 2300, 3400) * 0.6 + bp(src, 500, 800) * 0.3
+    return sat(y * np.clip(tm / 0.02, 0, 1) * np.clip((d - tm) / 0.08, 0, 1) * 1.5, 2.0)
 
 
-def amb_car_pass():
-    """A single car passing in the street outside (Doppler, tyre roar), heard through the walls."""
-    dur = 6.0
+def amb_crow():
+    """A crow over the far field: three caws, then one more."""
+    n = ns(2.8)
+    y = np.zeros(n)
+    for k, (t0, f) in enumerate([(0.0, 570), (0.42, 550), (0.86, 580), (1.9, 540)]):
+        y = put(y, crow_caw(9940 + k, f), t0)
+    s = outdoors(stereo(lp(y, 3000), 0.4), 0.8, 2.2, 9945, 0.4)
+    return fades(s, 0.005, 0.6)
+
+
+def amb_cow():
+    """Cattle lowing across the fields: one long moo, then a shorter answer further off."""
+    n = ns(4.6)
+    y = np.zeros(n)
+    for k, (t0, d, f0, g) in enumerate([(0.0, 1.7, 118, 1.0), (2.9, 1.1, 132, 0.45)]):
+        m = ns(d)
+        tm = tt(m)
+        u = tm / d
+        f = f0 * (0.8 + 0.45 * np.sin(np.pi * np.clip(u * 1.15, 0, 1)) ** 0.7) * (1 + 0.01 * np.sin(TAU * 5.5 * tm))
+        src = saw_blep(f) + white(m, 9950 + k) * 0.08
+        mouth = np.sin(np.pi * u) ** 0.5
+        v = bp(src, 250, 600) + bp(src, 800, 1300) * 0.5 * mouth + bp(src, 2200, 2900) * 0.08 * mouth
+        y = put(y, v * np.clip(tm / 0.12, 0, 1) * np.clip((d - tm) / 0.3, 0, 1) * g, t0)
+    s = outdoors(stereo(lp(y, 2200), -0.5), 0.9, 2.5, 9960, 0.4)
+    return fades(s, 0.01, 0.8)
+
+
+def amb_tractor():
+    """A tractor working a far field: a slow diesel chug that swells and fades on the wind."""
+    dur = 10.0
     n = ns(dur)
     t = tt(n)
-    rpm = 2100 + 150 * np.sin(TAU * t / 5.0)
-    eng = engine(rpm, 4, 9990, np.full(n, 0.5), 0.8) * 0.5
-    tyre = bp(pink(n, 9991, 0.5), 300, 3000) * 0.6
-    s = doppler_pass(eng + tyre, dur, 3.0, 13.0, 15.0)
-    return fades(lp(s, 3000), 0.5, 0.8)
+    rpm = 1250 + 120 * np.sin(TAU * t / 7.0) + 40 * np.sin(TAU * t / 1.9)
+    eng = engine(rpm, 3, 9980, np.full(n, 0.7), 0.7)
+    y = lp(eng, 1100) * np.sin(np.pi * t / dur) ** 1.3 * (1 + 0.25 * np.sin(TAU * t / 3.1))
+    a = (-0.6 + 0.5 * t / dur + 1) * np.pi / 4
+    s = outdoors(np.vstack([y * np.cos(a), y * np.sin(a)]), 0.6, 2.0, 9981, 0.6)[:, :n]
+    return fades(s, 0.5, 1.0)
 
 
 # ───────────────────────────── registry ─────────────────────────────
@@ -1128,14 +1191,15 @@ SOUNDS = {
     "SFX_CarDepart": (sfx_car_depart, "Event", False, -26, "six-cylinder idle, rev blip, pulls away"),
     "SFX_CarArrive": (sfx_car_arrive, "Event", False, -27, "car approaches, brakes, idles, engine off"),
     "AMB_Interior": (amb_interior, "Ambience", True, -36, "warehouse room tone: HVAC air, fridge hum"),
-    "AMB_CityDay": (amb_city_day, "Ambience", True, -32, "distant day city: traffic wash, a far horn, birds"),
-    "AMB_CityNight": (amb_city_night, "Ambience", True, -34, "night city: thin traffic, far hum, crickets"),
-    "AMB_Rain": (amb_rain, "Ambience", True, -31, "rain on the roof and factory windows"),
-    "AMB_Siren": (amb_siren, "AmbienceOneShot", False, -33, "distant police siren wail (night)"),
-    "AMB_DogBark": (amb_dog_bark, "AmbienceOneShot", False, -34, "dog barking a few blocks away (night)"),
+    "AMB_RuralDay": (amb_rural_day, "Ambience", True, -32, "open countryside by day: wind in grass and trees, songbirds, a dove"),
+    "AMB_RuralNight": (amb_rural_night, "Ambience", True, -34, "countryside at night: soft breeze, crickets, far frogs"),
+    "AMB_Rain": (amb_rain, "Ambience", True, -31, "rain on the roof and windows"),
+    "AMB_Owl": (amb_owl, "AmbienceOneShot", False, -35, "owl hooting in the trees (night)"),
+    "AMB_DogBark": (amb_dog_bark, "AmbienceOneShot", False, -34, "farm dog barking across the fields (night)"),
     "AMB_TrainHorn": (amb_train_horn, "AmbienceOneShot", False, -35, "far freight-train horn (night)"),
-    "AMB_Construction": (amb_construction, "AmbienceOneShot", False, -34, "distant building site (day)"),
-    "AMB_CarPass": (amb_car_pass, "AmbienceOneShot", False, -32, "car passing in the street outside"),
+    "AMB_Crow": (amb_crow, "AmbienceOneShot", False, -34, "crow cawing over the far field (day)"),
+    "AMB_Cow": (amb_cow, "AmbienceOneShot", False, -35, "cattle lowing in the distance (day)"),
+    "AMB_Tractor": (amb_tractor, "AmbienceOneShot", False, -34, "tractor working a far field (day)"),
 }
 
 

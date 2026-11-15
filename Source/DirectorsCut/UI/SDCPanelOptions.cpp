@@ -532,7 +532,7 @@ TSharedRef<SWidget> SDCRoot::OptAudio()
 		+ SVerticalBox::Slot().AutoHeight()[Section(TEXT("Volume"))]
 		+ SVerticalBox::Slot().AutoHeight()[Vol(TEXT("volume-2"), TEXT("Master"), TEXT(""), EDCVolumeChannel::Master)]
 		+ SVerticalBox::Slot().AutoHeight()[Vol(TEXT("mouse-pointer-click"), TEXT("Effects"), TEXT("Interface, jobs, cash, builds"), EDCVolumeChannel::SFX)]
-		+ SVerticalBox::Slot().AutoHeight()[Vol(TEXT("building-2"), TEXT("Ambience"), TEXT("The house, the street, the weather"), EDCVolumeChannel::Ambience)]
+		+ SVerticalBox::Slot().AutoHeight()[Vol(TEXT("building-2"), TEXT("Ambience"), TEXT("The house, the fields, the weather"), EDCVolumeChannel::Ambience)]
 		+ SVerticalBox::Slot().AutoHeight()[Section(TEXT("Muting"))]
 		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("volume-x"), TEXT("Mute all"), TEXT("Silence everything without losing your levels"), Toggle(TEXT("MuteAll"), false))]
 		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("app-window"), TEXT("Mute when unfocused"), TEXT("Go quiet while another window is in front"), Toggle(TEXT("MuteWhenUnfocused"), true))];

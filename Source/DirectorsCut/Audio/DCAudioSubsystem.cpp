@@ -3,9 +3,9 @@
 //  - SFX by canonical name (DCSfx::*) via soft paths under /Game/DC/Audio, 2D, with per-sound gain, small pitch
 //    jitter, round-robin variants (Click, Hover) and per-name throttling. The WAVs are loudness-normalised by
 //    Tools/audio_gen.py, so the gains here are only small trims.
-//  - Ambience: four looping beds (interior room tone, day city, night city, rain) crossfaded continuously from the
+//  - Ambience: four looping beds (interior room tone, day countryside, night countryside, rain) crossfaded continuously from the
 //    run clock (DCAudio::ComputeAmbienceMix), ducked while paused; plus quiet random distant one-shots every
-//    30-120 s (day: construction / car pass; night: siren / dog / train horn / car pass). Title: room tone + night low.
+//    30-120 s (day: crow / cattle / tractor; night: owl / dog / train horn). Title: room tone + night low.
 //  - Scores the game automatically from UDCRunSubsystem delegates through a small timed queue, with burst
 //    throttling (e.g. many completions after a bot AdvanceTime jump play one sequence, not twenty).
 //  - Volume channels Master/SFX/Ambience applied live and persisted in GameUserSettings.ini.
@@ -378,7 +378,7 @@ void UDCAudioSubsystem::TickAmbienceOneShots()
 	const bool bDay = bActive && DCAudio::DayFactor(Hour) > 0.5f;
 
 	TArray<FString> Pool = bDay ? DCAudio::DayOneShots() : DCAudio::NightOneShots();
-	if (bDay && (Hour < 7.5f || Hour > 18.f)) { Pool.Remove(TEXT("AMB_Construction")); }   // site only works office hours
+	if (bDay && (Hour < 7.5f || Hour > 18.f)) { Pool.Remove(TEXT("AMB_Tractor")); }   // the farm only works the fields in working hours
 	if (Pool.Num() > 1) { Pool.Remove(RT->LastOneShot); }
 	if (Pool.Num() == 0) { return; }
 	const FString Pick = Pool[RT->Rand.RandHelper(Pool.Num())];

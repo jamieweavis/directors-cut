@@ -48,16 +48,16 @@ namespace DCAudio
 	inline FSoftObjectPath SfxPath(FName Name, int32 Variant = 0) { return MakePath(SfxAssetName(Name, Variant)); }
 
 	/** Looping ambience beds, crossfaded continuously. */
-	enum EBed : int32 { BedInterior = 0, BedCityDay, BedCityNight, BedRain, BedCount };
+	enum EBed : int32 { BedInterior = 0, BedRuralDay, BedRuralNight, BedRain, BedCount };
 	inline const TCHAR* BedAssetName(int32 Bed)
 	{
-		static const TCHAR* Names[BedCount] = { TEXT("AMB_Interior"), TEXT("AMB_CityDay"), TEXT("AMB_CityNight"), TEXT("AMB_Rain") };
+		static const TCHAR* Names[BedCount] = { TEXT("AMB_Interior"), TEXT("AMB_RuralDay"), TEXT("AMB_RuralNight"), TEXT("AMB_Rain") };
 		return Names[FMath::Clamp(Bed, 0, (int32)BedCount - 1)];
 	}
 
 	/** Random distant one-shots (stereo, distance baked in). */
-	inline const TArray<FString>& DayOneShots()   { static const TArray<FString> N = { TEXT("AMB_Construction"), TEXT("AMB_CarPass") }; return N; }
-	inline const TArray<FString>& NightOneShots() { static const TArray<FString> N = { TEXT("AMB_Siren"), TEXT("AMB_DogBark"), TEXT("AMB_TrainHorn"), TEXT("AMB_CarPass") }; return N; }
+	inline const TArray<FString>& DayOneShots()   { static const TArray<FString> N = { TEXT("AMB_Crow"), TEXT("AMB_Cow"), TEXT("AMB_Tractor") }; return N; }
+	inline const TArray<FString>& NightOneShots() { static const TArray<FString> N = { TEXT("AMB_Owl"), TEXT("AMB_DogBark"), TEXT("AMB_TrainHorn") }; return N; }
 
 	/** Every asset that must exist under /Game/DC/Audio. */
 	inline TArray<FString> AllAssetNames()
@@ -73,13 +73,14 @@ namespace DCAudio
 		return Out;
 	}
 
-	/** v1 assets that must be gone (music + theatre sounds). Anything MUS_* is also forbidden. */
+	/** Old assets that must be gone (music, theatre sounds, the city ambience). Anything MUS_* is also forbidden. */
 	inline const TArray<FString>& ObsoleteAssetNames()
 	{
 		static const TArray<FString> N = {
 			TEXT("SFX_Clapper"), TEXT("SFX_Typewriter"), TEXT("SFX_Typewriter_2"), TEXT("SFX_Typewriter_3"), TEXT("SFX_Stamp"),
 			TEXT("SFX_DiceRoll"), TEXT("SFX_Commit"), TEXT("SFX_CounterTick"), TEXT("SFX_StingWrap"), TEXT("SFX_StingCut"),
-			TEXT("SFX_StingLevelUp"), TEXT("SFX_StingRoom"), TEXT("SFX_StingPerk"), TEXT("AMB_Projector"), TEXT("AMB_Neon") };
+			TEXT("SFX_StingLevelUp"), TEXT("SFX_StingRoom"), TEXT("SFX_StingPerk"), TEXT("AMB_Projector"), TEXT("AMB_Neon"),
+			TEXT("AMB_CityDay"), TEXT("AMB_CityNight"), TEXT("AMB_Siren"), TEXT("AMB_Construction"), TEXT("AMB_CarPass") };
 		return N;
 	}
 
@@ -125,15 +126,15 @@ namespace DCAudio
 		{
 			// Title: the empty warehouse at night, low.
 			M.Bed[BedInterior] = 0.9f;
-			M.Bed[BedCityNight] = 0.45f;
+			M.Bed[BedRuralNight] = 0.45f;
 			return M;
 		}
 		const float D = DayFactor(Hour);
 		const float R = FMath::Clamp(Rain, 0.f, 1.f);
-		const float Under = 1.f - 0.35f * R;                  // rain masks the city
+		const float Under = 1.f - 0.35f * R;                  // rain masks the countryside
 		M.Bed[BedInterior] = 0.9f;
-		M.Bed[BedCityDay] = FMath::Sin(D * UE_HALF_PI) * Under;
-		M.Bed[BedCityNight] = FMath::Cos(D * UE_HALF_PI) * Under;
+		M.Bed[BedRuralDay] = FMath::Sin(D * UE_HALF_PI) * Under;
+		M.Bed[BedRuralNight] = FMath::Cos(D * UE_HALF_PI) * Under;
 		M.Bed[BedRain] = 0.9f * R;
 		if (bPaused)
 		{

@@ -178,15 +178,15 @@
       "loudness": -36
     },
     {
-      "file": "AMB_CityDay.wav",
-      "asset": "/Game/DC/Audio/AMB_CityDay.AMB_CityDay",
+      "file": "AMB_RuralDay.wav",
+      "asset": "/Game/DC/Audio/AMB_RuralDay.AMB_RuralDay",
       "category": "Ambience",
       "loop": true,
       "loudness": -32
     },
     {
-      "file": "AMB_CityNight.wav",
-      "asset": "/Game/DC/Audio/AMB_CityNight.AMB_CityNight",
+      "file": "AMB_RuralNight.wav",
+      "asset": "/Game/DC/Audio/AMB_RuralNight.AMB_RuralNight",
       "category": "Ambience",
       "loop": true,
       "loudness": -34
@@ -199,11 +199,11 @@
       "loudness": -31
     },
     {
-      "file": "AMB_Siren.wav",
-      "asset": "/Game/DC/Audio/AMB_Siren.AMB_Siren",
+      "file": "AMB_Owl.wav",
+      "asset": "/Game/DC/Audio/AMB_Owl.AMB_Owl",
       "category": "AmbienceOneShot",
       "loop": false,
-      "loudness": -33
+      "loudness": -35
     },
     {
       "file": "AMB_DogBark.wav",
@@ -220,18 +220,25 @@
       "loudness": -35
     },
     {
-      "file": "AMB_Construction.wav",
-      "asset": "/Game/DC/Audio/AMB_Construction.AMB_Construction",
+      "file": "AMB_Crow.wav",
+      "asset": "/Game/DC/Audio/AMB_Crow.AMB_Crow",
       "category": "AmbienceOneShot",
       "loop": false,
       "loudness": -34
     },
     {
-      "file": "AMB_CarPass.wav",
-      "asset": "/Game/DC/Audio/AMB_CarPass.AMB_CarPass",
+      "file": "AMB_Cow.wav",
+      "asset": "/Game/DC/Audio/AMB_Cow.AMB_Cow",
       "category": "AmbienceOneShot",
       "loop": false,
-      "loudness": -32
+      "loudness": -35
+    },
+    {
+      "file": "AMB_Tractor.wav",
+      "asset": "/Game/DC/Audio/AMB_Tractor.AMB_Tractor",
+      "category": "AmbienceOneShot",
+      "loop": false,
+      "loudness": -34
     }
   ]
 }
