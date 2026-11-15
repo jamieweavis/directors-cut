@@ -246,7 +246,7 @@ namespace DCSite
 		Out.Reset();
 		const FVector P = ParkingSlot(I).GetLocation();
 		Out.Add(P);
-		Out.Add(FVector(P.X, -1880.f, GroundZ));                 // pull forward out of the bay
+		Out.Add(FVector(P.X, -1960.f, GroundZ));                 // pull forward out of the bay (clear of the neighbours' noses)
 		Out.Add(FVector(DriveX, FenceY + 250.f, GroundZ));       // line up with the driveway
 		Out.Add(FVector(DriveX, FenceY - 120.f, GroundZ));       // down the driveway, straight through the gateway
 		Out.Add(FVector(DriveX + 400.f, LaneY + 110.f, GroundZ));// turn onto the lane

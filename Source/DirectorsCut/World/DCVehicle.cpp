@@ -132,6 +132,8 @@ void ADCVehicle::BuildBody(int32 Seed)
 	HeadMID = MakeMID(DCPaths::MatEmissive, FLinearColor(1.f, 0.9f, 0.72f), 0.5f, 0.f);
 	TailMID = MakeMID(DCPaths::MatEmissive, FLinearColor(1.f, 0.03f, 0.02f), 0.4f, 0.f);
 
+	if (BuildModel(Seed)) { return; }
+
 	// Dimensions per style (local: +X nose, +Y right, Z up, origin = ground centre).
 	float BodyTop = 88.f, CabX0 = -120.f, CabX1 = 70.f, CabTop = 146.f, DoorX0 = -55.f, DoorX1 = 60.f;
 	switch (Style)
@@ -258,7 +260,70 @@ void ADCVehicle::BuildBody(int32 Seed)
 		WheelSpin.Add(Sp);
 	}
 
-	// Real lights.
+	BuildLights(HL, HW, LampZ);
+	(void)R;
+}
+
+bool ADCVehicle::BuildModel(int32 Seed)
+{
+	static const bool bEnabled = [] { int32 V = 1; FParse::Value(FCommandLine::Get(), TEXT("DCCarModel="), V); return V != 0; }();
+	if (!bEnabled || UE_ARRAY_COUNT(DCPaths::CarModels) == 0) { return false; }
+	int32 Pick = Seed % UE_ARRAY_COUNT(DCPaths::CarModels);
+	// Dev: -DCCarOnly=<Name> makes every car SM_Car_<Name> (checking one model's fit / lamps).
+	FString Only;
+	if (FParse::Value(FCommandLine::Get(), TEXT("DCCarOnly="), Only))
+	{
+		for (int32 i = 0; i < UE_ARRAY_COUNT(DCPaths::CarModels); ++i)
+		{
+			if (FString(DCPaths::CarModels[i].Mesh).Contains(TEXT("/SM_Car_") + Only + TEXT("."))) { Pick = i; }
+		}
+	}
+	const DCPaths::FCarModel& Def = DCPaths::CarModels[Pick];
+	UStaticMesh* Mesh = LoadQuiet<UStaticMesh>(Def.Mesh);
+	UMaterialInterface* Skin = LoadQuiet<UMaterialInterface>(Def.Skin);
+	if (!Mesh) { UE_LOG(LogTemp, Warning, TEXT("[DCVehicle] car model %s missing, using primitive car"), Def.Mesh); return false; }
+
+	// Model space: ground at Z=0 (Tools/car_import.py); Def.Yaw turns the nose to +X. Fit every model to the same
+	// length/width caps (slots are 225 apart) so parking gaps and gate clearance stay as tuned.
+	constexpr float MaxLength = 450.f, MaxWidth = 195.f;
+	const FBox B = Mesh->GetBoundingBox();
+	const bool bSideways = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Def.Yaw))) > 0.5f;
+	const FVector Ext = B.GetSize();
+	const float ExtL = bSideways ? Ext.Y : Ext.X, ExtW = bSideways ? Ext.X : Ext.Y;
+	if (ExtL < 1.f || ExtW < 1.f) { return false; }
+	const float S = FMath::Min(MaxLength / ExtL, MaxWidth / ExtW);
+	Style = EDCCarStyle::Estate;
+	Length = ExtL * S;
+	Width = ExtW * S;
+	const float Height = Ext.Z * S;
+	WheelR = 0.f; // unused: wheels are part of the mesh
+
+	UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
+	C->SetStaticMesh(Mesh);
+	C->SetupAttachment(BodyPivot);
+	const FVector Centre = B.GetCenter();
+	const FRotator Yaw(0.f, Def.Yaw, 0.f);
+	C->SetRelativeRotation(Yaw);
+	C->SetRelativeScale3D(FVector(S));
+	C->SetRelativeLocation(Yaw.RotateVector(-FVector(Centre.X, Centre.Y, B.Min.Z) * S));
+	C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	if (Skin) { C->SetMaterial(0, Skin); } // paint colour is baked into each model's texture
+	C->RegisterComponent();
+	AddInstanceComponent(C);
+
+	// No glowing lens pads: lamp positions differ per model, so only the real spot / tail lights light up.
+	const float HL = Length * 0.5f, HW = Width * 0.5f;
+	const float HeadZ = Height * 0.42f;
+
+	// No hinged doors or separate wheels: DoorHinge / WheelSteer / WheelSpin stay empty and Tick skips them.
+	DoorHinge.Reset(); WheelSteer.Reset(); WheelSpin.Reset();
+	BuildLights(HL, HW, HeadZ);
+	UE_LOG(LogTemp, Log, TEXT("[DCVehicle] model %s scale %.2f -> %.0f x %.0f x %.0f"), Def.Mesh, S, Length, Width, Height);
+	return true;
+}
+
+void ADCVehicle::BuildLights(float HL, float HW, float LampZ)
+{
 	HeadLights.Reset();
 	for (int32 s = -1; s <= 1; s += 2)
 	{
@@ -290,7 +355,6 @@ void ADCVehicle::BuildBody(int32 Seed)
 	TailLight->SetVisibility(false);
 	TailLight->RegisterComponent();
 	AddInstanceComponent(TailLight);
-	(void)R;
 }
 
 FBox2D ADCVehicle::GetFootprint() const
@@ -344,6 +408,8 @@ void ADCVehicle::DriveAway(int32 SlotIndex)
 	// Start from where we actually are (in case we were nudged).
 	if (Pts.Num()) { Pts[0] = FVector(GetActorLocation().X, GetActorLocation().Y, 0.f); }
 	BuildRoute({ Pts }, { false }, 0.f, Cruise);
+	bAxles = false;
+	BayPos = FVector2D(GetActorLocation()); bBayAtStart = true; bBayAtEnd = false;
 	CheckGateClearance(SlotIndex, false);
 	HideAtS = -1.f;
 	for (const FSample& S : Route) { if (S.P.X > OffscreenX) { HideAtS = S.S; break; } }
@@ -373,10 +439,14 @@ void ADCVehicle::DriveIn(int32 SlotIndex)
 	// Reverse leg: back into the bay so the car ends nose-out (facing the lane), like the parked ones.
 	TArray<FVector> Rev;
 	Rev.Add(Pull);
+	// Back out straight along the line we arrived on first, so the nose doesn't have to swing at the stop.
+	if (Fwd.Num() >= 2) { Rev.Add(Pull + (Pull - Fwd[Fwd.Num() - 2]).GetSafeNormal2D() * -70.f); }
 	Rev.Add(FVector(P.X + Dir * 90.f, PullY + 40.f, 0.f));
 	Rev.Add(FVector(P.X + Dir * 8.f, FMath::Lerp(PullY, P.Y, 0.55f), 0.f));
 	Rev.Add(FVector(P.X, P.Y, 0.f));
 	BuildRoute({ Fwd, Rev }, { false, true }, Cruise, 0.f);
+	bAxles = false;
+	BayPos = FVector2D(P); bBayAtStart = false; bBayAtEnd = true;
 	CheckGateClearance(SlotIndex, true);
 	HideAtS = -1.f;
 	TargetSlot = SlotIndex;
@@ -514,9 +584,25 @@ ADCVehicle::FSample ADCVehicle::SampleAt(float S, FVector* OutTangent) const
 	Out.bReverse = T < 0.5f ? A.bReverse : B.bReverse;
 	if (OutTangent)
 	{
-		// Look a little ahead/behind for a stable heading.
-		const int32 I0 = FMath::Max(0, Lo - 1), I1 = FMath::Min(Route.Num() - 1, Hi + 1);
-		*OutTangent = (Route[I1].P - Route[I0].P).GetSafeNormal2D();
+		// Central-difference tangent at each end of the span, blended across it: a tangent held constant per span
+		// stepped the heading every 20 cm in tight turns.
+		// Neighbours never cross a gear change: the legs either side run in opposite directions, and mixing them
+		// flipped the nose round at the stop before reversing.
+		auto TanAt = [this](int32 I)
+		{
+			int32 I0 = FMath::Max(0, I - 1), I1 = FMath::Min(Route.Num() - 1, I + 1);
+			if (Route[I0].bReverse != Route[I].bReverse) { I0 = I; }
+			if (Route[I1].bReverse != Route[I].bReverse) { I1 = I; }
+			if (I0 == I1) { I0 = FMath::Max(0, I - 1); I1 = I; }
+			return (Route[I1].P - Route[I0].P).GetSafeNormal2D();
+		};
+		const FVector TA = TanAt(Lo), TB = TanAt(Hi);
+		if (A.bReverse != B.bReverse) { *OutTangent = T < 0.5f ? TA : TB; } // matches Out.bReverse, so nose = Tan * Dir stays put
+		else
+		{
+			const FVector Blend = FMath::Lerp(TA, TB, T);
+			*OutTangent = Blend.IsNearlyZero() ? TB : Blend.GetSafeNormal2D();
+		}
 	}
 	return Out;
 }
@@ -601,13 +687,69 @@ void ADCVehicle::Tick(float DeltaSeconds)
 		FVector Tan;
 		const FSample S = SampleAt(RouteS, &Tan);
 		const float Dir = S.bReverse ? -1.f : 1.f;
-		const float Yaw = (Tan * Dir).Rotation().Yaw;
-		FVector L = S.P;
+		const float A = AxleHalf();
+		if (!bAxles)
+		{
+			const FVector2D C(GetActorLocation()), N(GetActorForwardVector().GetSafeNormal2D());
+			FrontAx = C + N * A; RearAx = C - N * A;
+			bPrevReverse = S.bReverse; LeadOffset = FVector2D::ZeroVector; bAxles = true;
+		}
+		// Leading axle: A further along the route, but never past the next gear change / the end (extrapolate there).
+		float GearS = Route.Last().S;
+		for (int32 i = 1; i < Route.Num(); ++i)
+		{
+			if (Route[i].bReverse != Route[i - 1].bReverse && Route[i - 1].S > RouteS) { GearS = Route[i - 1].S; break; }
+		}
+		FVector2D Lead;
+		if (RouteS + A <= GearS) { Lead = FVector2D(SampleAt(RouteS + A, nullptr).P); }
+		else
+		{
+			FVector TG; const FSample G = SampleAt(FMath::Max(GearS - 2.f, 0.f), &TG);
+			Lead = FVector2D(G.P) + FVector2D(TG.GetSafeNormal2D()) * (RouteS + A - GearS + 2.f);
+		}
+		if (S.bReverse != bPrevReverse)
+		{
+			// The other axle now leads: start from where it actually is and ease onto the route.
+			LeadOffset = (S.bReverse ? RearAx : FrontAx) - Lead;
+			bPrevReverse = S.bReverse;
+		}
+		LeadOffset = FMath::Vector2DInterpTo(LeadOffset, FVector2D::ZeroVector, Dt, 3.f);
+		Lead += LeadOffset;
+		FVector2D& LeadAx = S.bReverse ? RearAx : FrontAx;
+		FVector2D& TrailAx = S.bReverse ? FrontAx : RearAx;
+		LeadAx = Lead;
+		const FVector2D Back = TrailAx - LeadAx;
+		TrailAx = LeadAx + (Back.SizeSquared() > 1.f ? Back.GetSafeNormal() : -FVector2D(Tan.GetSafeNormal2D()) * Dir) * (2.f * A);
+
+		FVector2D Centre = (FrontAx + RearAx) * 0.5f;
+		const FVector2D Nose = FrontAx - RearAx;
+		float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Nose.Y, Nose.X));
+		// Around the parking bay the yard manoeuvres (pull out, the whole reverse in) follow the tuned route pose
+		// exactly: bays are only ~30 cm apart and the reverse leg is too tight for a dragged front axle.
+		// Departing: route pose within 3 m of the bay, axle model beyond 6 m. Arriving: blend in on the forward
+		// approach (7 m -> 4.5 m from the bay) so the reverse leg starts already on the route.
+		float W = 0.f;
+		const FVector2D Here(S.P);
+		if (bBayAtStart) { W = FMath::Max(W, 1.f - FMath::SmoothStep(300.f, 600.f, (float)FVector2D::Distance(Here, BayPos))); }
+		if (bBayAtEnd) { W = FMath::Max(W, S.bReverse ? 1.f : 1.f - FMath::SmoothStep(450.f, 700.f, (float)FVector2D::Distance(Here, BayPos))); }
+		if (W > 0.f)
+		{
+			Centre = FMath::Lerp(Centre, Here, W);
+			Yaw += FMath::FindDeltaAngleDegrees(Yaw, (Tan * Dir).Rotation().Yaw) * W;
+		}
+		{
+			// Ease toward the target heading (no hard cap that clips into visible steps), at most 240 deg/s.
+			const float CurYaw = GetActorRotation().Yaw;
+			const float Delta = FMath::FindDeltaAngleDegrees(CurYaw, Yaw);
+			Yaw = CurYaw + FMath::Clamp(Delta * FMath::Min(1.f, Dt * 14.f), -240.f * Dt, 240.f * Dt);
+		}
+		FVector L(Centre.X, Centre.Y, 0.f);
 		const float Gz = TraceGround(L);
 		GroundZ = FMath::FInterpTo(GroundZ, Gz, Dt, 10.f);
 		L.Z = GroundZ;
-		const FRotator Cur3 = GetActorRotation();
-		SetActorLocationAndRotation(L, FRotator(0.f, FMath::FixedTurn(Cur3.Yaw, Yaw, 360.f * Dt), 0.f));
+		static const bool bYawLog = FParse::Param(FCommandLine::Get(), TEXT("DCCarYawLog"));
+		if (bYawLog) { UE_LOG(LogTemp, Log, TEXT("[DCYaw] %.1f %d %.3f"), RouteS, S.bReverse ? 1 : 0, FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, Yaw)); }
+		SetActorLocationAndRotation(L, FRotator(0.f, Yaw, 0.f));
 		Lateral = Speed * Speed * S.Curv;
 		const float SteerTarget = FMath::Clamp(FMath::RadiansToDegrees(FMath::Atan(WheelBase * S.Curv)), -34.f, 34.f) * Dir;
 		Steer = FMath::FInterpTo(Steer, SteerTarget, Dt, 6.f);

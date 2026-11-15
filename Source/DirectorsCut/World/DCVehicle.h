@@ -82,6 +82,16 @@ protected:
 	float DoorTarget[2] = { 0.f, 0.f };
 	float DoorAlpha[2] = { 0.f, 0.f };
 	float LightsAlpha = 0.f;
+	// Axle model: the leading axle (front going forward, rear reversing) follows the route; the other is dragged
+	// behind at wheelbase distance, so the body turns about its trailing axle like a real car.
+	bool bAxles = false;
+	FVector2D FrontAx = FVector2D::ZeroVector, RearAx = FVector2D::ZeroVector;
+	FVector2D LeadOffset = FVector2D::ZeroVector; // eases out the jump when the leading axle swaps at a gear change
+	bool bPrevReverse = false;
+	// Parking bay this route leaves from / ends in (near it the car follows the tuned route pose, see Tick).
+	FVector2D BayPos = FVector2D::ZeroVector;
+	bool bBayAtStart = false, bBayAtEnd = false;
+	float AxleHalf() const { return Length * 0.3f; }
 	int32 TargetSlot = INDEX_NONE;
 	float StuckTime = 0.f;
 	float DriveTime = 0.f;
@@ -89,6 +99,10 @@ protected:
 	UMaterialInstanceDynamic* MakeMID(const TCHAR* Path, const FLinearColor& Color, float A, float B);
 	UStaticMeshComponent* Part(USceneComponent* Parent, UStaticMesh* Mesh, const FVector& Loc, const FVector& Size, UMaterialInterface* Mat, const FRotator& Rot = FRotator::ZeroRotator, bool bShadow = true);
 	void BuildBody(int32 Seed);
+	/** Imported car model (DCPaths::CarModels) instead of primitives; false if unavailable (then BuildBody carries on). */
+	bool BuildModel(int32 Seed);
+	/** Headlight spots + tail point light (shared by both builds). */
+	void BuildLights(float HL, float HW, float LampZ);
 	void BuildRoute(const TArray<TArray<FVector>>& Segments, const TArray<bool>& Reverse, float StartSpeed, float EndSpeed);
 	FSample SampleAt(float S, FVector* OutTangent) const;
 	/** Once per slot and direction: logs the car body's closest approach to the gateway (posts, open gate, mailbox). */
