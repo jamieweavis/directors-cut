@@ -35,6 +35,8 @@ BODIES = [
      "Crew_Hoodie.fbm/T_Crew_Hoodie_normal.jpg"),
     ("LeatherJacket", "Crew_LeatherJacket.fbx", "Crew_LeatherJacket.fbm/T_Crew_LeatherJacket_basecolor.jpg",
      "Crew_LeatherJacket.fbm/T_Crew_LeatherJacket_normal.jpg"),
+    ("Tracksuit", "Crew_Tracksuit.fbx", "Crew_Tracksuit.fbm/T_Crew_Tracksuit_basecolor.jpg",
+     "Crew_Tracksuit.fbm/T_Crew_Tracksuit_normal.jpg"),
 ]
 
 
