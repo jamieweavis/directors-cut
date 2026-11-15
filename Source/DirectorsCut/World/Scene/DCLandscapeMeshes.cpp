@@ -645,7 +645,7 @@ namespace DCLandMesh
 		Cn.CoreR = 420.f;
 		Cn.Wind = 1.f;
 		const FVector3f Mid = Top + FVector3f(0.f, 0.f, 235.f) + Bend * 15.f;
-		Cn.Puffs.Add({ Mid, R.FRandRange(225.f, 255.f), 0.94f });
+		Cn.Puffs.Add({ Mid, float(R.FRandRange(225.f, 255.f)), 0.94f });
 		const int32 N = R.RandRange(5, 6);
 		const float A0 = R.FRandRange(0.f, 2.f * PI);
 		for (int32 i = 0; i < N; ++i)
@@ -662,7 +662,7 @@ namespace DCLandMesh
 				TubePath(B, { S0, S1, S2 }, { TR * 0.5f, TR * 0.36f, TR * 0.16f }, Detail ? 6 : 4, 0);
 			}
 		}
-		Cn.Puffs.Add({ Mid + FVector3f(R.FRandRange(-60.f, 60.f), R.FRandRange(-60.f, 60.f), R.FRandRange(150.f, 185.f)), R.FRandRange(150.f, 180.f), 0.84f });
+		Cn.Puffs.Add({ Mid + FVector3f(R.FRandRange(-60.f, 60.f), R.FRandRange(-60.f, 60.f), R.FRandRange(150.f, 185.f)), float(R.FRandRange(150.f, 180.f)), 0.84f });
 		Cn.Emit(B, Detail ? 2 : 1, Detail ? 95.f : 12.f, Detail ? 62.f : 95.f, 1);
 		return B.Build(Outer, *FString::Printf(TEXT("DCBroadleaf_%d_%d"), Seed, Detail));
 	}
@@ -716,7 +716,7 @@ namespace DCLandMesh
 		Cn.Core = FVector3f(0.f, 0.f, 10.f);
 		Cn.CoreR = 135.f;
 		Cn.Wind = 0.6f;
-		Cn.Puffs.Add({ FVector3f(0.f, 0.f, 58.f), R.FRandRange(66.f, 76.f), 0.84f });
+		Cn.Puffs.Add({ FVector3f(0.f, 0.f, 58.f), float(R.FRandRange(66.f, 76.f)), 0.84f });
 		const int32 N = R.RandRange(4, 5);
 		const float A0 = R.FRandRange(0.f, 2.f * PI);
 		for (int32 i = 0; i < N; ++i)
@@ -725,7 +725,7 @@ namespace DCLandMesh
 			const float D = R.FRandRange(48.f, 76.f), Rr = R.FRandRange(44.f, 60.f);
 			Cn.Puffs.Add({ FVector3f(FMath::Cos(A) * D, FMath::Sin(A) * D, Rr * 0.5f + R.FRandRange(0.f, 14.f)), Rr, 0.82f });
 		}
-		Cn.Puffs.Add({ FVector3f(R.FRandRange(-22.f, 22.f), R.FRandRange(-22.f, 22.f), R.FRandRange(92.f, 104.f)), R.FRandRange(40.f, 50.f), 0.85f });
+		Cn.Puffs.Add({ FVector3f(R.FRandRange(-22.f, 22.f), R.FRandRange(-22.f, 22.f), R.FRandRange(92.f, 104.f)), float(R.FRandRange(40.f, 50.f)), 0.85f });
 		Cn.Emit(B, 2, 330.f, 21.f, 0);
 		if (bFlowers)
 		{
@@ -766,7 +766,7 @@ namespace DCLandMesh
 		{
 			const FVector3f N = FVector3f(R.VRand());
 			const float Reach = (N * Sh).Size() * 50.f; // how far the ellipsoid extends along N
-			Planes.Add({ N, Reach * R.FRandRange(1.f - Depth, 0.93f) });
+			Planes.Add({ N, float(Reach * R.FRandRange(1.f - Depth, 0.93f)) });
 		}
 		for (int32 Pass = 0; Pass < 3; ++Pass)
 		{

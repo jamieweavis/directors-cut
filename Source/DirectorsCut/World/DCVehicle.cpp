@@ -22,7 +22,7 @@ namespace
 	constexpr float AccelYard = 230.f, AccelLane = 420.f;
 	constexpr float DecelYard = 270.f, DecelLane = 520.f;
 	constexpr float StopDecel = 140.f;    // the last couple of metres into the bay
-	constexpr float Step = 10.f;          // route sample spacing (cm)
+	constexpr float RouteStep = 10.f;     // route sample spacing (cm)
 	constexpr float MaxLock = 40.f;       // front wheel steer limit for the visuals (deg)
 
 	template <typename T>
@@ -54,7 +54,7 @@ namespace
 			const FVector2D A = Out.Last();
 			const float L = FVector2D::Distance(A, B);
 			if (L < 0.5f) { return; }
-			const int32 M = FMath::Max(1, FMath::CeilToInt(L / Step));
+			const int32 M = FMath::Max(1, FMath::CeilToInt(L / RouteStep));
 			for (int32 k = 1; k <= M; ++k) { Out.Add(FMath::Lerp(A, B, (float)k / M)); }
 		};
 		Out.Add(C[0]);
@@ -69,7 +69,7 @@ namespace
 			const FVector2D Nrm = Cross > 0.f ? FVector2D(-A.Y, A.X) : FVector2D(A.Y, -A.X);
 			const FVector2D Ctr = P0 + Nrm * Rad;
 			const float A0 = FMath::Atan2(P0.Y - Ctr.Y, P0.X - Ctr.X), Sgn = Cross > 0.f ? 1.f : -1.f;
-			const int32 M = FMath::Max(2, FMath::CeilToInt(Rad * Theta[i] / Step));
+			const int32 M = FMath::Max(2, FMath::CeilToInt(Rad * Theta[i] / RouteStep));
 			for (int32 k = 1; k <= M; ++k)
 			{
 				const float Ang = A0 + Sgn * Theta[i] * k / M;
@@ -90,9 +90,9 @@ namespace
 		{
 			const FVector2D A = In[i - 1], B = In[i];
 			const float L = FVector2D::Distance(A, B);
-			float At = Step - Carry;
-			while (At <= L) { Out.Add(FMath::Lerp(A, B, At / L)); At += Step; }
-			Carry = L - (At - Step);
+			float At = RouteStep - Carry;
+			while (At <= L) { Out.Add(FMath::Lerp(A, B, At / L)); At += RouteStep; }
+			Carry = L - (At - RouteStep);
 		}
 		if (FVector2D::Distance(Out.Last(), In.Last()) > 1.f) { Out.Add(In.Last()); } else { Out.Last() = In.Last(); }
 	}
