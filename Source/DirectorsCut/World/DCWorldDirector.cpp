@@ -258,8 +258,10 @@ void ADCWorldDirector::BuildNav()
 			}
 			if (bBlocked) { continue; }
 			const FVector2D A = R->FloorQuad[E], B = R->FloorQuad[(E + 1) & 3], N = Inward(R, E);
+			const bool bFrontDoor = E == 0 && R->GridCell == DCSite::Grid::OfficeCell(); // that wall has a doorway: use it
 			for (float T : { 0.3f, 0.5f, 0.7f })
 			{
+				if (bFrontDoor && T != 0.5f) { continue; }
 				const FVector2D P = FMath::Lerp(A, B, T);
 				FExit X;
 				X.Room = i;

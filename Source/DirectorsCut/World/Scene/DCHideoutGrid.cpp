@@ -270,7 +270,9 @@ void ADCHideoutBuilder::BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 
 			if (Grid::IsFrontEdge(e))
 			{
 				// Collapsed front: razed to a low stub just above the floor so the camera sees the whole room.
-				RuinEdge(A, B, St, S, 16.f + H01(S, 1) * 8.f, 16.f + H01(S, 2) * 8.f);
+				// The Office's -Y front also carries the front door.
+				const bool bDoor = e == 0 && Cell == Grid::OfficeCell();
+				RuinEdge(A, B, St, S, 16.f + H01(S, 1) * 8.f, 16.f + H01(S, 2) * 8.f, bDoor ? DCSite::FrontDoorW : 0.f);
 			}
 			else
 			{
@@ -426,21 +428,36 @@ void ADCHideoutBuilder::TallEdge(const FVector2D& A, const FVector2D& B, float H
 	}
 }
 
-void ADCHideoutBuilder::RuinEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed, float EndA, float EndB)
+void ADCHideoutBuilder::RuinEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed, float EndA, float EndB, float DoorW)
 {
 	const float L = FVector2D::Distance(A, B);
 	const float HalfT = GWallT * 0.5f;
-	EdgeBox(A, B, -HalfT, L + HalfT, HalfT, -4.f, 9.f, GWallT + 12.f, "StoneDark");                 // foundation lip
+	const bool bDoor = DoorW > 0.f;
+	const float D0 = L * 0.5f - DoorW * 0.5f, D1 = L * 0.5f + DoorW * 0.5f;
+	// foundation lip (broken by the doorway, where the threshold sits instead)
+	if (bDoor)
+	{
+		EdgeBox(A, B, -HalfT, D0, HalfT, -4.f, 9.f, GWallT + 12.f, "StoneDark");
+		EdgeBox(A, B, D1, L + HalfT, HalfT, -4.f, 9.f, GWallT + 12.f, "StoneDark");
+	}
+	else { EdgeBox(A, B, -HalfT, L + HalfT, HalfT, -4.f, 9.f, GWallT + 12.f, "StoneDark"); }
 
 	// the last course or two of the old wall: a low, slightly uneven stub along the whole edge, the odd gap
 	float Tc = -HalfT;
 	int32 K = 0;
 	while (Tc < L + HalfT - 1.f)
 	{
-		const float Len = FMath::Min(40.f + H01(Seed, 100 + K) * 50.f, L + HalfT - Tc);
+		float Len = FMath::Min(40.f + H01(Seed, 100 + K) * 50.f, L + HalfT - Tc);
+		if (bDoor)
+		{
+			// the stub stops at the doorway and picks up again on the far side
+			if (Tc >= D0 - 1.f && Tc < D1) { Tc = D1; ++K; continue; }
+			if (Tc < D0 && Tc + Len > D0) { Len = D0 - Tc; }
+		}
 		const float U = FMath::Clamp((Tc + Len * 0.5f) / L, 0.f, 1.f);
 		const bool bEnd = Tc < 40.f || Tc + Len > L - 40.f;
-		if (bEnd || H01(Seed, 200 + K) < 0.9f)
+		const bool bJamb = bDoor && (FMath::Abs(Tc + Len - D0) < 1.f || FMath::Abs(Tc - D1) < 1.f); // never a gap beside the door
+		if (bEnd || bJamb || H01(Seed, 200 + K) < 0.9f)
 		{
 			const float Hc = FMath::Max(10.f, FMath::Lerp(EndA, EndB, U) + HS(Seed, 300 + K) * 5.f);
 			EdgeBox(A, B, Tc, Tc + Len - 1.5f, HalfT + HS(Seed, 400 + K) * 1.5f, 0.f, Hc, GWallT - 2.f, St.Front);
@@ -449,11 +466,28 @@ void ADCHideoutBuilder::RuinEdge(const FVector2D& A, const FVector2D& B, const F
 		++K;
 	}
 
-	// weeds pushing through outside the stub
+	if (bDoor)
+	{
+		// Cutaway front door: an open timber frame standing in the low stub (no leaf, so the camera sees straight
+		// through), with a worn threshold and a stone step down to the path.
+		const float FrameH = 208.f, Post = 9.f;
+		for (int32 s = 0; s < 2; ++s)
+		{
+			const float Sg = s == 0 ? -1.f : 1.f, Edge = s == 0 ? D0 : D1;
+			const float J0 = FMath::Min(Edge, Edge + Sg * Post), J1 = FMath::Max(Edge, Edge + Sg * Post);
+			EdgeBox(A, B, J0, J1, HalfT, 0.f, FrameH, Post + 3.f, "TimberDark");                                          // jamb
+		}
+		EdgeBox(A, B, D0 - Post - 4.f, D1 + Post + 4.f, HalfT, FrameH, FrameH + 11.f, Post + 5.f, "TimberDark");          // head
+		EdgeBox(A, B, D0, D1, HalfT, -1.f, 3.f, GWallT + 14.f, "Timber");                                                // threshold
+		EdgeBox(A, B, D0 - 12.f, D1 + 12.f, -26.f, -8.f, -1.5f, 44.f, "StoneDark");                                      // step
+	}
+
+	// weeds pushing through outside the stub (to one side of the doorway, if there is one)
 	const FVector2D D = (B - A).GetSafeNormal();
 	const FVector2D N(-D.Y, D.X);
-	const FVector2D WP = A + D * (L * (0.3f + 0.4f * H01(Seed, 1400))) - N * 55.f;
-	Weeds(FVector(WP.X, WP.Y, 0.f), 70.f, 9, Seed, 55.f);
+	const float WT = bDoor ? (H01(Seed, 1400) < 0.5f ? 0.2f : 0.8f) : 0.3f + 0.4f * H01(Seed, 1400);
+	const FVector2D WP = A + D * (L * WT) - N * 55.f;
+	Weeds(FVector(WP.X, WP.Y, 0.f), bDoor ? 50.f : 70.f, 9, Seed, 55.f);
 }
 
 void ADCHideoutBuilder::PartitionEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed)

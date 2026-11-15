@@ -157,6 +157,24 @@ namespace DCSite
 	/** Gravel yard where cars park (Landscape draws it; nothing tall inside it). */
 	inline FBox2D YardRect() { return FBox2D(FVector2D(-950, -2050), FVector2D(900, -1200)); }
 
+	/** The Office's front door: a doorway cut into its collapsed front (-Y) wall, centred on that edge. House builds
+	 *  the frame, World sends crew out through it, Landscape lays the footpath from it to the yard. */
+	constexpr float FrontDoorW = 130.f;
+	inline FVector2D FrontDoor()
+	{
+		FVector2D Q[4]; Grid::Corners(Grid::OfficeCell(), Q);
+		return (Q[0] + Q[1]) * 0.5f;
+	}
+	/** Footpath from the front door to the car park: door, a slight bend, then the yard edge. It veers towards -X
+	 *  (where the first cars park) and so passes clear of the middle festoon pole. */
+	inline void FrontPath(FVector2D Out[3])
+	{
+		const FVector2D D = FrontDoor();
+		Out[0] = D;
+		Out[1] = FVector2D(D.X - 25.f, D.Y - 120.f);
+		Out[2] = FVector2D(D.X - 185.f, YardRect().Max.Y + 30.f);
+	}
+
 	/** Festoon poles along the house side of the yard (just outside it, so nothing tall stands where cars drive). */
 	inline TArray<FVector2D> YardFestoonPoles()
 	{

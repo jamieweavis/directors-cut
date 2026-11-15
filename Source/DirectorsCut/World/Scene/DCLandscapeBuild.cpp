@@ -115,6 +115,11 @@ void ADCLandscape::BuildTerrain()
 	Strip("Path", FireC + FVector2D(-120.f, 200.f), PondMid, 100.f, GroundTop + 0.65f);
 	Strip("Path", PondMid, PondEdge, 100.f, GroundTop + 0.65f);
 	Strip("Path", FVector2D(YardRect().Min.X + 120.f, YardRect().Max.Y + 30.f), FVector2D(Comp.Min.X - 60.f, Comp.Min.Y + 250.f), 110.f, GroundTop + 0.65f);
+	// front door -> car park
+	FVector2D FP[3];
+	FrontPath(FP);
+	Strip("Path", FP[0], FP[1], 135.f, GroundTop + 0.65f);
+	Strip("Path", FP[1], FP[2], 135.f, GroundTop + 0.65f);
 	// pond: muddy rim + water
 	Slab("Mud", Disc, FVector(PondC.X, PondC.Y, GroundTop + 0.9f), FVector(PondR.X * 1.22f / 50.f, PondR.Y * 1.25f / 50.f, 1.f), 8.f);
 	Slab("Water", Disc, FVector(PondC.X, PondC.Y, GroundTop + 1.6f), FVector(PondR.X / 50.f, PondR.Y / 50.f, 1.f), 8.f);

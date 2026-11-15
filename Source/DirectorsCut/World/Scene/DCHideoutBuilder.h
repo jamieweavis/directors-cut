@@ -249,7 +249,8 @@ protected:
 	/** Where TallEdge puts its windows and broken ends (shared with the furnisher so furniture respects them).
 	 *  OutSteps: (t0, t1, height) of each broken-down stretch. */
 	static void TallEdgePlan(float L, float H, int32 Seed, bool bStepStart, bool bStepEnd, TArray<FOpening>& OutWin, TArray<FVector>& OutSteps);
-	void RuinEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed, float EndA, float EndB);
+	/** DoorW > 0 cuts a front doorway of that width at the edge midpoint: an open timber frame, threshold and step. */
+	void RuinEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed, float EndA, float EndB, float DoorW = 0.f);
 	void PartitionEdge(const FVector2D& A, const FVector2D& B, const FGridStyle& St, int32 Seed);
 	/** Wall lamp on the inside face of edge A->B at fraction T, height Z (room light). */
 	void BracketLamp(const FVector2D& A, const FVector2D& B, float T, float Z, const FLinearColor& Col, float Cd, float Radius);
