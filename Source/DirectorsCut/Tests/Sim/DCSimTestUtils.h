@@ -24,6 +24,9 @@ struct FDCSimTestAccess
 	static TArray<FDCCriminal>& Roster(UDCRunSubsystem& S) { return S.Roster; }
 	static TArray<FDCMission>& Missions(UDCRunSubsystem& S) { return S.Missions; }
 	static TArray<FDCPerk>& PerksTaken(UDCRunSubsystem& S) { return S.PerksTaken; }
+	static TArray<FDCPerk>& PerkOffer(UDCRunSubsystem& S) { return S.PerkOffer; }
+	static TArray<FName>& PerksDiscarded(UDCRunSubsystem& S) { return S.PerksDiscarded; }
+	static int32& Streak(UDCRunSubsystem& S) { return S.SuccessStreak; }
 	static TArray<FDCRoom>& Rooms(UDCRunSubsystem& S) { return S.Rooms; }
 	static double& NextPostAt(UDCRunSubsystem& S) { return S.NextPostAt; }
 	static int32 NewId(UDCRunSubsystem& S) { return S.NextId++; }

@@ -458,6 +458,124 @@ bool FDCSimInjuryArrest::RunTest(const FString&)
 	return true;
 }
 
+namespace
+{
+	float HitChance(const FDCSuccessBreakdown& B, FName Id)
+	{
+		const FDCModifierHit* H = B.Modifiers.FindByPredicate([Id](const FDCModifierHit& X) { return X.Id == Id; });
+		return H ? H->ChanceDelta : 0.f;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCSimPerksSpecial, "DirectorsCut.Sim.PerksSpecial", DCSimFlags)
+bool FDCSimPerksSpecial::RunTest(const FString&)
+{
+	TStrongObjectPtr<UDCRunSubsystem> S = DCSimTest::NewSim();
+	DCSimTest::FEndGuard G(S.Get());
+	S->StartNewRun(23);
+	A::ClearRun(*S);
+
+	// Foreman: two builds at once, never the same room twice.
+	A::Successes(*S) = 100;
+	A::Cash(*S) = 1000000;
+	TestEqual(TEXT("1 build slot"), S->GetBuildSlots(), 1);
+	A::AddPerk(*S, TEXT("foreman"));
+	TestEqual(TEXT("2 build slots"), S->GetBuildSlots(), 2);
+	TestTrue(TEXT("build 1"), S->BuildRoom(EDCRoomType::Lounge));
+	EDCPlanBlock Block = EDCPlanBlock::None;
+	TestFalse(TEXT("same room twice"), S->BuildRoom(EDCRoomType::Lounge, &Block));
+	TestTrue(TEXT("build 2"), S->BuildRoom(EDCRoomType::Workshop));
+	TestTrue(TEXT("capacity full"), S->IsBuildCapacityFull());
+	TestFalse(TEXT("no third build"), S->BuildRoom(EDCRoomType::Garage, &Block));
+	TestEqual(TEXT("no capacity"), Block, EDCPlanBlock::NoCapacity);
+	A::PerksTaken(*S).Reset();
+	A::Successes(*S) = 0;
+
+	// Solo Act, Fresh Blood, Hot Streak show as modifiers in the preview.
+	FDCCriminal& Rookie = A::AddCriminal(*S, EDCCriminalType::Muscle, 2, { TEXT("brawler") });
+	const int32 RId = Rookie.Id;
+	const int32 MisId = A::AddMission(*S, 2, 1, { EDCThreat::Guards }, 120.f, 0, 1000).Id;
+	FDCCrewPlan P; P.MissionId = MisId; P.CriminalIds = { RId }; P.Cut = 0.3f;
+	A::AddPerk(*S, TEXT("solo_act"));
+	A::AddPerk(*S, TEXT("fresh_blood"));
+	A::AddPerk(*S, TEXT("hot_streak"));
+	FDCSuccessBreakdown B = S->PreviewPlan(P);
+	TestEqual(TEXT("solo act"), HitChance(B, TEXT("solo_act")), 0.15f, 1e-4f);
+	TestEqual(TEXT("fresh blood on first job"), HitChance(B, TEXT("fresh_blood")), 0.15f, 1e-4f);
+	TestEqual(TEXT("no streak yet"), HitChance(B, TEXT("hot_streak")), 0.f, 1e-4f);
+	A::Streak(*S) = 2;
+	TestEqual(TEXT("streak 2"), HitChance(S->PreviewPlan(P), TEXT("hot_streak")), 0.06f, 1e-4f);
+	A::Streak(*S) = 10;
+	TestEqual(TEXT("streak capped"), HitChance(S->PreviewPlan(P), TEXT("hot_streak")), 0.15f, 1e-4f);
+	FDCSimTestAccess::Roster(*S)[0].MissionsRun = 1;
+	TestEqual(TEXT("no fresh blood after a job"), HitChance(S->PreviewPlan(P), TEXT("fresh_blood")), 0.f, 1e-4f);
+	A::Missions(*S).Reset();
+
+	// Insurance: a failure refunds half the cost and resets the streak.
+	A::AddPerk(*S, TEXT("insurance"));
+	A::Cash(*S) = 0;
+	FDCMission& Fail = A::AddMission(*S, 1, 1, { EDCThreat::Guards }, 60.f, 1000, 1000);
+	A::ForceRun(*S, Fail, { RId }, 0.f);
+	S->AdvanceTime(61.0);
+	TestEqual(TEXT("refund"), S->GetCash(), 500);
+	TestEqual(TEXT("streak reset"), S->GetSuccessStreak(), 0);
+	FDCMission& Win = A::AddMission(*S, 1, 1, { EDCThreat::Guards }, 60.f, 0, 1000);
+	A::ForceRun(*S, Win, { RId }, 2.f);
+	S->AdvanceTime(61.0);
+	TestEqual(TEXT("streak 1"), S->GetSuccessStreak(), 1);
+	A::PerksTaken(*S).Reset();
+
+	// Nest Egg: interest before upkeep, capped.
+	const int32 Due = S->GetUpkeepDue();
+	A::AddPerk(*S, TEXT("nest_egg"));
+	A::Cash(*S) = 4000;
+	FDCSimImpl::Payday(*S);
+	TestEqual(TEXT("interest"), S->GetCash(), 4000 + 200 - Due);
+	A::Cash(*S) = 100000;
+	FDCSimImpl::Payday(*S);
+	TestEqual(TEXT("interest cap"), S->GetCash(), 100000 + 500 - Due);
+	A::PerksTaken(*S).Reset();
+
+	// Line of Credit: survive a payday at -$300, not at -$600.
+	A::AddPerk(*S, TEXT("line_of_credit"));
+	A::Cash(*S) = Due - 300;
+	FDCSimImpl::Payday(*S);
+	TestEqual(TEXT("still playing on credit"), S->GetPhase(), EDCGamePhase::Playing);
+	A::Cash(*S) = Due - 600;
+	FDCSimImpl::Payday(*S);
+	TestEqual(TEXT("broke past the credit line"), S->GetPhase(), EDCGamePhase::GameOver);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCSimPerkFinalDraft, "DirectorsCut.Sim.PerkFinalDraft", DCSimFlags)
+bool FDCSimPerkFinalDraft::RunTest(const FString&)
+{
+	TStrongObjectPtr<UDCRunSubsystem> S = DCSimTest::NewSim();
+	DCSimTest::FEndGuard G(S.Get());
+	S->StartNewRun(5);
+	A::ClearRun(*S);
+	const TArray<FName> Order = A::Data(*S).PerkOrder;
+	TestTrue(TEXT("enough perks"), Order.Num() >= 5);
+	// Leave 4 perks: the next draft is a normal one (one goes back to the pool).
+	for (int32 i = 0; i < Order.Num() - 4; ++i) { A::AddPerk(*S, Order[i]); }
+	FDCSimImpl::OfferPerks(*S);
+	TestEqual(TEXT("offer 3"), S->GetPerkOffer().Num(), 3);
+	TestFalse(TEXT("not final with 4 left"), S->IsFinalPerkOffer());
+	TestTrue(TEXT("pick"), S->PickPerk(S->GetPerkOffer()[0].Id));
+	TestEqual(TEXT("nothing discarded"), A::PerksDiscarded(*S).Num(), 0);
+	// 3 left: final draft; the 2 unpicked are discarded.
+	FDCSimImpl::OfferPerks(*S);
+	TestEqual(TEXT("final offer 3"), S->GetPerkOffer().Num(), 3);
+	TestTrue(TEXT("final"), S->IsFinalPerkOffer());
+	const FName Pick = S->GetPerkOffer()[1].Id;
+	TestTrue(TEXT("final pick"), S->PickPerk(Pick));
+	TestEqual(TEXT("2 discarded"), A::PerksDiscarded(*S).Num(), 2);
+	TestFalse(TEXT("picked one not discarded"), A::PerksDiscarded(*S).Contains(Pick));
+	FDCSimImpl::OfferPerks(*S);
+	TestFalse(TEXT("no more drafts"), S->HasPendingPerkOffer());
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDCSimPerksXP, "DirectorsCut.Sim.PerksAndXP", DCSimFlags)
 bool FDCSimPerksXP::RunTest(const FString&)
 {
@@ -648,7 +766,7 @@ bool FDCSimSoak::RunTest(const FString&)
 		int64 Expected = S->GetCash();
 		int32 SeenReports = 0;
 		S->OnPayday.AddLambda([&](int32, int32 Amt) { Expected -= Amt; });
-		S->OnMissionCompleted.AddLambda([&](const FDCMissionReport& R) { Expected += R.DirectorTake; ++SeenReports; });
+		S->OnMissionCompleted.AddLambda([&](const FDCMissionReport& R) { Expected += R.DirectorTake + R.Refund; ++SeenReports; });
 		S->OnMissionStarted.AddLambda([&](const FDCMission& M) { Expected -= M.Cost; });
 		S->OnCriminalHired.AddLambda([&](const FDCCriminal&) { Expected = -1; }); // hire cost: resync below
 		S->OnRoomChanged.AddLambda([&](const FDCRoom&) {});

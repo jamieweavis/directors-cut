@@ -18,7 +18,7 @@ using DCImpl = FDCSimImpl;
 namespace
 {
 	const FName K_rosterCap(TEXT("rosterCap")), K_maxActive(TEXT("maxActive")), K_gearSlots(TEXT("gearSlots")), K_gearTier(TEXT("gearTier")),
-		K_upkeepMult(TEXT("upkeepMult")), K_patchUp(TEXT("patchUp")), K_bail(TEXT("bail")), K_unlockTier(TEXT("unlockTier"));
+		K_upkeepMult(TEXT("upkeepMult")), K_patchUp(TEXT("patchUp")), K_bail(TEXT("bail")), K_unlockTier(TEXT("unlockTier")), K_buildSlots(TEXT("buildSlots"));
 	constexpr int32 BaseRosterCap = 4;
 	constexpr int32 BaseMaxActive = 1;
 
@@ -68,7 +68,7 @@ void UDCRunSubsystem::ResetRunState()
 	GameSpeed = 0; bSpeedPaused = false; // speed is per session, never saved: new run / load = 1x, running
 	Seed = 0; RunTime = 0.0; Cash = 0; NextId = 1;
 	Roster.Reset(); Fallen.Reset(); Recruits.Reset(); Missions.Reset(); Reports.Reset(); Stash.Reset(); Rooms.Reset();
-	PerkOffer.Reset(); PerksTaken.Reset();
+	PerkOffer.Reset(); PerksTaken.Reset(); PerksDiscarded.Reset(); SuccessStreak = 0;
 	NextPostAt = RecruitRefreshAt = NextAutosaveAt = 0.0;
 	LastDawnIndex = 0; MissionsSucceeded = MissionsAttempted = TotalTake = BestMissionTake = RoomsBuilt = PendingPerkOffers = 0;
 	BestMissionName.Reset(); EndReason.Reset();
@@ -181,6 +181,7 @@ bool UDCRunSubsystem::WriteSlot(int32 Slot)
 	SG->Stash = Stash; SG->Rooms = Rooms;
 	for (const FDCPerk& P : PerkOffer) { SG->PerkOffer.Add(P.Id); }
 	for (const FDCPerk& P : PerksTaken) { SG->PerksTaken.Add(P.Id); }
+	SG->PerksDiscarded = PerksDiscarded; SG->SuccessStreak = SuccessStreak;
 	SG->NextPostAt = NextPostAt; SG->RecruitRefreshAt = RecruitRefreshAt; SG->NextAutosaveAt = NextAutosaveAt;
 	SG->LastDawnIndex = LastDawnIndex; SG->MissionsSucceeded = MissionsSucceeded; SG->MissionsAttempted = MissionsAttempted;
 	SG->TotalTake = TotalTake; SG->BestMissionTake = BestMissionTake; SG->BestMissionName = BestMissionName; SG->RoomsBuilt = RoomsBuilt;
@@ -232,6 +233,7 @@ bool UDCRunSubsystem::ApplySave(const UDCSaveGame& SG)
 	}
 	for (FName Id : SG.PerkOffer) { if (const FDCPerkDef* P = Data->Perks.Find(Id)) { PerkOffer.Add(P->Perk); } }
 	for (FName Id : SG.PerksTaken) { if (const FDCPerkDef* P = Data->Perks.Find(Id)) { PerksTaken.Add(P->Perk); } }
+	PerksDiscarded = SG.PerksDiscarded; SuccessStreak = SG.SuccessStreak;
 	NextPostAt = SG.NextPostAt; RecruitRefreshAt = SG.RecruitRefreshAt; NextAutosaveAt = SG.NextAutosaveAt;
 	LastDawnIndex = SG.LastDawnIndex; MissionsSucceeded = SG.MissionsSucceeded; MissionsAttempted = SG.MissionsAttempted;
 	TotalTake = SG.TotalTake; BestMissionTake = SG.BestMissionTake; BestMissionName = SG.BestMissionName; RoomsBuilt = SG.RoomsBuilt;
@@ -1040,7 +1042,7 @@ FDCRoom UDCRunSubsystem::GetRoom(EDCRoomType Type) const
 	if (R.bMaxLevel || MissionsSucceeded < R.RequiredSuccesses) { R.Block = EDCPlanBlock::Locked; }
 	else if (Cash < R.NextCost) { R.Block = EDCPlanBlock::NoCash; }
 	else { R.Block = EDCPlanBlock::None; }
-	R.bCanAct = bActive && Phase == EDCGamePhase::Playing && R.Block == EDCPlanBlock::None && !IsAnyRoomBuilding();
+	R.bCanAct = bActive && Phase == EDCGamePhase::Playing && R.Block == EDCPlanBlock::None && R.State != EDCRoomState::Building && !IsBuildCapacityFull();
 	return R;
 }
 
@@ -1069,7 +1071,7 @@ bool UDCRunSubsystem::GetRoomCell(EDCRoomType Type, FIntPoint& OutCell) const
 bool UDCRunSubsystem::BuildRoom(EDCRoomType Type, EDCPlanBlock* OutBlock, const FIntPoint* Cell)
 {
 	const FDCRoom V = GetRoom(Type);
-	if (OutBlock) { *OutBlock = (V.Block == EDCPlanBlock::None && IsAnyRoomBuilding()) ? EDCPlanBlock::NoCapacity : V.Block; }
+	if (OutBlock) { *OutBlock = (V.Block == EDCPlanBlock::None && (IsBuildCapacityFull() || V.State == EDCRoomState::Building)) ? EDCPlanBlock::NoCapacity : V.Block; }
 	if (!V.bCanAct) { return false; }
 	FDCRoom* R = Rooms.FindByPredicate([Type](const FDCRoom& X) { return X.Type == Type; });
 	if (!R) { return false; }
@@ -1097,6 +1099,11 @@ bool UDCRunSubsystem::BuildRoom(EDCRoomType Type, EDCPlanBlock* OutBlock, const 
 }
 
 bool UDCRunSubsystem::IsAnyRoomBuilding() const { return Rooms.ContainsByPredicate([](const FDCRoom& R) { return R.State == EDCRoomState::Building; }); }
+int32 UDCRunSubsystem::GetBuildSlots() const { return FMath::Max(1, 1 + FMath::RoundToInt(DCImpl::SumGlobal(*this, K_buildSlots))); }
+bool UDCRunSubsystem::IsBuildCapacityFull() const
+{
+	return Rooms.FilterByPredicate([](const FDCRoom& R) { return R.State == EDCRoomState::Building; }).Num() >= GetBuildSlots();
+}
 
 int32 UDCRunSubsystem::GetPatchUpCost(int32 CriminalId) const
 {
@@ -1154,11 +1161,30 @@ bool UDCRunSubsystem::HasPendingPerkOffer() const { return PerkOffer.Num() > 0; 
 TArray<FDCPerk> UDCRunSubsystem::GetPerkOffer() const { return PerkOffer; }
 TArray<FDCPerk> UDCRunSubsystem::GetPerksTaken() const { return PerksTaken; }
 
+bool UDCRunSubsystem::IsFinalPerkOffer() const
+{
+	if (PerkOffer.Num() == 0 || !Data.IsValid()) { return false; }
+	for (FName Id : Data->PerkOrder)
+	{
+		const auto Same = [Id](const FDCPerk& X) { return X.Id == Id; };
+		if (!PerksTaken.ContainsByPredicate(Same) && !PerksDiscarded.Contains(Id) && !PerkOffer.ContainsByPredicate(Same)) { return false; }
+	}
+	return true;
+}
+
 bool UDCRunSubsystem::PickPerk(FName PerkId)
 {
 	const FDCPerk* P = PerkOffer.FindByPredicate([PerkId](const FDCPerk& X) { return X.Id == PerkId; });
 	if (!P) { return false; }
-	PerksTaken.Add(*P);
+	const bool bFinal = IsFinalPerkOffer();
+	const FDCPerk Picked = *P;
+	PerksTaken.Add(Picked);
+	if (bFinal)
+	{
+		// The last draft: what wasn't picked is gone for the run, so no draft ever shows fewer than a full hand.
+		for (const FDCPerk& X : PerkOffer) { if (X.Id != Picked.Id) { PerksDiscarded.AddUnique(X.Id); } }
+		PendingPerkOffers = 0;
+	}
 	PerkOffer.Reset();
 	MarkChanged();
 	if (PendingPerkOffers > 0) { PendingPerkOffers--; DCImpl::OfferPerks(*this); }

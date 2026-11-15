@@ -577,7 +577,7 @@ int32 SDCRoot::NewPostingCount() const
 bool SDCRoot::CanBuildSomething() const
 {
 	const UDCRunSubsystem* R = Run();
-	if (!R || !R->HasActiveRun() || R->IsAnyRoomBuilding()) { return false; }
+	if (!R || !R->HasActiveRun() || R->IsBuildCapacityFull()) { return false; }
 	for (const FDCRoom& Room : R->GetRooms()) { if (Room.bCanAct && !Room.bMaxLevel) { return true; } }
 	return false;
 }

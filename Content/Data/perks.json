@@ -16,6 +16,14 @@
     { "id": "good_lawyer",     "displayName": "Good Lawyer",     "description": "First arrest is dropped",  "icon": "gavel",           "effects": [ { "kind": "preventFirstArrest", "value": 1 } ] },
     { "id": "quick_study",     "displayName": "Quick Study",     "description": "+25% XP",                  "icon": "brain",           "effects": [ { "kind": "xpMult", "value": 1.25 } ] },
     { "id": "lucky_find",      "displayName": "Lucky Find",      "description": "+8% loot chance",          "icon": "clover",          "effects": [ { "kind": "lootChanceAdd", "value": 0.08 } ] },
-    { "id": "fast_cars",       "displayName": "Fast Cars",       "description": "-15% job time",            "icon": "fuel",            "effects": [ { "kind": "durationMult", "value": 0.85 } ] }
+    { "id": "fast_cars",       "displayName": "Fast Cars",       "description": "-15% job time",            "icon": "fuel",            "effects": [ { "kind": "durationMult", "value": 0.85 } ] },
+    { "id": "foreman",         "displayName": "Foreman",         "description": "Build 2 rooms at once",    "icon": "hard-hat",        "effects": [ { "kind": "buildSlots", "value": 1 } ] },
+    { "id": "hot_streak",      "displayName": "Hot Streak",      "description": "+3% per win in a row, max +15%", "icon": "flame",     "effects": [ { "kind": "chanceStreak", "value": 0.03, "threshold": 0.15 } ] },
+    { "id": "solo_act",        "displayName": "Solo Act",        "description": "+15% on one-person jobs",  "icon": "user",            "effects": [ { "kind": "chanceSolo", "value": 0.15 } ] },
+    { "id": "insurance",       "displayName": "Insurance Policy","description": "Failed jobs refund 50% of cost", "icon": "umbrella", "effects": [ { "kind": "failRefund", "value": 0.5 } ] },
+    { "id": "nest_egg",        "displayName": "Nest Egg",        "description": "+5% interest at dawn, max $500", "icon": "piggy-bank", "effects": [ { "kind": "dawnInterest", "value": 0.05, "threshold": 500 } ] },
+    { "id": "fresh_blood",     "displayName": "Fresh Blood",     "description": "+15% per crew on first job", "icon": "sprout",        "effects": [ { "kind": "chanceRookie", "value": 0.15 } ] },
+    { "id": "line_of_credit",  "displayName": "Line of Credit",  "description": "Cash can dip to -$500",    "icon": "credit-card",     "effects": [ { "kind": "creditLine", "value": 500 } ] },
+    { "id": "all_in",          "displayName": "All In",          "description": "+25% payout, +50% arrest risk", "icon": "dices",      "effects": [ { "kind": "payoutMult", "value": 1.25 }, { "kind": "arrestMult", "value": 1.5 } ] }
   ]
 }

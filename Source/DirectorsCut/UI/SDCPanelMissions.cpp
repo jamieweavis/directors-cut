@@ -1305,10 +1305,15 @@ TSharedRef<SWidget> SDCRoot::ReportCard(const FDCMissionReport& Rep)
 		];
 
 	const int32 Take = Rep.DirectorTake;
-	TSharedRef<SWidget> Payout = SNew(SVerticalBox)
+	TSharedRef<SVerticalBox> Payout = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)[Label(TEXT("Your take"), TextFaint, 7.5f)]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
 		[TxtA(TAttribute<FText>::CreateLambda([Phase, Take]() { const float P = FMath::Clamp((Phase() - 1.0f) / 0.8f, 0.f, 1.f); return FText::FromString(Money(FMath::RoundToInt(Take * EaseOut(P)))); }), Mono(16.f), FSlateColor(Take > 0 ? Accent : TextFaint))];
+	if (Rep.Refund > 0)
+	{
+		Payout->AddSlot().AutoHeight().HAlign(HAlign_Right).Padding(0.f, 2.f, 0.f, 0.f)
+			[IconText(TEXT("umbrella"), FString::Printf(TEXT("Insured +%s"), *Money(Rep.Refund)), Font(8.5f), Good, Good, 10.f, 4.f)];
+	}
 
 	// Members
 	TSharedRef<SWrapBox> Members = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(10.f, 8.f));

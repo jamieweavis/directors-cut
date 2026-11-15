@@ -127,7 +127,8 @@ namespace
 			"chanceTierMin", "chanceIfType", "durationMult", "payoutMult", "costMult", "xpMult", "injuryChanceMult", "injuryTimeMult",
 			"arrestMult", "fairCutAdd", "willMin", "loyaltyIdlePerDay", "rosterCap", "maxActive", "boardSize", "postIntervalMult",
 			"gearSlots", "gearTier", "gearPriceMult", "upkeepMult", "recruitLevelAdd", "recruitQualityAdd", "recruitBoardAdd", "preventFirstArrest",
-			"patchUp", "bail", "unlockTier", "unlockFinal", "lootChanceAdd" };
+			"patchUp", "bail", "unlockTier", "unlockFinal", "lootChanceAdd",
+			"buildSlots", "chanceStreak", "chanceRookie", "failRefund", "dawnInterest", "creditLine" };
 		TArray<FDCEffect> Out;
 		if (!A) { return Out; }
 		for (const TSharedPtr<FJsonValue>& V : *A)

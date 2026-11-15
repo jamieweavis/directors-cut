@@ -12,5 +12,13 @@
   { "id": "loyal_crew", "displayName": "Loyal Crew", "description": "Willingness at least 60%", "icon": "heart-handshake", "effects": [ { "kind": "willMin", "value": 0.6 } ] },
   { "id": "more_leads", "displayName": "More Leads", "description": "+1 board posting", "icon": "list-plus", "effects": [ { "kind": "boardSize", "value": 1 } ] },
   { "id": "talent_scout", "displayName": "Talent Scout", "description": "Better recruits", "icon": "star", "effects": [ { "kind": "recruitQualityAdd", "value": 0.5 } ] },
-  { "id": "lucky_charm", "displayName": "Lucky Charm", "description": "+10% loot chance", "icon": "clover", "effects": [ { "kind": "lootChanceAdd", "value": 0.10 } ] }
+  { "id": "lucky_charm", "displayName": "Lucky Charm", "description": "+10% loot chance", "icon": "clover", "effects": [ { "kind": "lootChanceAdd", "value": 0.10 } ] },
+  { "id": "foreman",         "displayName": "Foreman",         "description": "Build 2 rooms at once",    "icon": "hard-hat",        "effects": [ { "kind": "buildSlots", "value": 1 } ] },
+  { "id": "hot_streak",      "displayName": "Hot Streak",      "description": "+3% per win in a row, max +15%", "icon": "flame",     "effects": [ { "kind": "chanceStreak", "value": 0.03, "threshold": 0.15 } ] },
+  { "id": "solo_act",        "displayName": "Solo Act",        "description": "+15% on one-person jobs",  "icon": "user",            "effects": [ { "kind": "chanceSolo", "value": 0.15 } ] },
+  { "id": "insurance",       "displayName": "Insurance Policy","description": "Failed jobs refund 50% of cost", "icon": "umbrella", "effects": [ { "kind": "failRefund", "value": 0.5 } ] },
+  { "id": "nest_egg",        "displayName": "Nest Egg",        "description": "+5% interest at dawn, max $500", "icon": "piggy-bank", "effects": [ { "kind": "dawnInterest", "value": 0.05, "threshold": 500 } ] },
+  { "id": "fresh_blood",     "displayName": "Fresh Blood",     "description": "+15% per crew on first job", "icon": "sprout",        "effects": [ { "kind": "chanceRookie", "value": 0.15 } ] },
+  { "id": "line_of_credit",  "displayName": "Line of Credit",  "description": "Cash can dip to -$500",    "icon": "credit-card",     "effects": [ { "kind": "creditLine", "value": 500 } ] },
+  { "id": "all_in",          "displayName": "All In",          "description": "+25% payout, +50% arrest risk", "icon": "dices",      "effects": [ { "kind": "payoutMult", "value": 1.25 }, { "kind": "arrestMult", "value": 1.5 } ] }
 ] }

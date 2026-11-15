@@ -95,7 +95,12 @@ TSharedRef<SWidget> SDCRoot::RoomTile(const FDCRoom& Room)
 		FString BlockTip;
 		if (Block == EDCPlanBlock::NoCash) { BlockTip = TEXT("Not enough cash"); }
 		else if (Block == EDCPlanBlock::Locked) { BlockTip = Room.RequiredSuccesses > 0 ? FString::Printf(TEXT("Needs %d successful jobs"), Room.RequiredSuccesses) : TEXT("Locked"); }
-		else if (!Room.bCanAct) { BlockTip = TEXT("One extension at a time"); }
+		else if (!Room.bCanAct)
+		{
+			const UDCRunSubsystem* X = Run();
+			const int32 Slots = X ? X->GetBuildSlots() : 1;
+			BlockTip = Slots > 1 ? FString::Printf(TEXT("%d extensions at a time"), Slots) : TEXT("One extension at a time");
+		}
 		TSharedRef<SHorizontalBox> Req = SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 			[TxtA(FText::FromString(Money(Room.NextCost)), Mono(12.f), TAttribute<FSlateColor>::CreateLambda([RR, C = Room.NextCost]() { const UDCRunSubsystem* X = RR(); return FSlateColor((X && X->GetCash() < C) ? Bad : Text); }))]

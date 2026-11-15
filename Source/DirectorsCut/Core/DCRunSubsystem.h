@@ -202,6 +202,10 @@ public:
 	/** Where a room stands on the build grid (false = not placed yet). Cheap; safe every frame. */
 	bool GetRoomCell(EDCRoomType Type, FIntPoint& OutCell) const;
 	bool IsAnyRoomBuilding() const;
+	/** Rooms that may be under construction at once (1, +buildSlots perks). */
+	int32 GetBuildSlots() const;
+	/** True when every build slot is taken. */
+	bool IsBuildCapacityFull() const;
 
 	// Room actions
 	int32 GetPatchUpCost(int32 CriminalId) const;          // Clinic L2+; -1 if not possible
@@ -214,6 +218,10 @@ public:
 	TArray<FDCPerk> GetPerkOffer() const;
 	bool PickPerk(FName PerkId);
 	TArray<FDCPerk> GetPerksTaken() const;
+	/** The current offer holds every perk still obtainable: the unpicked ones are discarded for the run. */
+	bool IsFinalPerkOffer() const;
+	/** Successful missions in a row (a failure or bust resets it). */
+	int32 GetSuccessStreak() const { return SuccessStreak; }
 
 	// ── Delegates ────────────────────────────────────────────────────────────
 	FDCOnRunStateChanged  OnRunStateChanged;
@@ -262,6 +270,7 @@ private:
 	TArray<FDCRoom> Rooms;
 	TArray<FDCPerk> PerkOffer;
 	TArray<FDCPerk> PerksTaken;
+	TArray<FName> PerksDiscarded;         // left over from the final draft: never offered again this run
 
 	// timers (run seconds) and run bookkeeping
 	double NextPostAt = 0.0;
@@ -276,6 +285,7 @@ private:
 	int32 RoomsBuilt = 0;
 	int32 PendingPerkOffers = 0;          // queued offers beyond the current one
 	bool bArrestPreventUsed = false;
+	int32 SuccessStreak = 0;
 	FString EndReason;
 	TMap<int32, double> ArrestedAt;      // fallen criminal id -> run time of arrest (bail window)
 

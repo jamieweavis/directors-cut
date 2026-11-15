@@ -13,7 +13,8 @@ namespace
 		K_arrestMult(TEXT("arrestMult")), K_fairCutAdd(TEXT("fairCutAdd")), K_willMin(TEXT("willMin")), K_loyaltyIdlePerDay(TEXT("loyaltyIdlePerDay")),
 		K_boardSize(TEXT("boardSize")), K_postIntervalMult(TEXT("postIntervalMult")), K_gearPriceMult(TEXT("gearPriceMult")),
 		K_recruitLevelAdd(TEXT("recruitLevelAdd")), K_recruitQualityAdd(TEXT("recruitQualityAdd")), K_recruitBoardAdd(TEXT("recruitBoardAdd")), K_preventFirstArrest(TEXT("preventFirstArrest")),
-		K_unlockFinal(TEXT("unlockFinal")), K_lootChanceAdd(TEXT("lootChanceAdd"));
+		K_unlockFinal(TEXT("unlockFinal")), K_lootChanceAdd(TEXT("lootChanceAdd")), K_chanceStreak(TEXT("chanceStreak")), K_chanceRookie(TEXT("chanceRookie")),
+		K_failRefund(TEXT("failRefund")), K_dawnInterest(TEXT("dawnInterest")), K_creditLine(TEXT("creditLine"));
 
 	bool TypeMatches(const FString& Param, EDCCriminalType T) { return Param.Equals(DC::TypeName(T), ESearchCase::IgnoreCase); }
 	int32 Round50(float V) { return FMath::RoundToInt(V / 50.f) * 50; }
@@ -580,7 +581,19 @@ FDCSuccessBreakdown FDCSimImpl::Evaluate(const S& Sim, const FDCMission& M, cons
 	{
 		float dChance = 0.f, dDur = 1.f, dPay = 1.f;
 		bool bApplied = false;
-		if (IsChanceKind(E.Kind)) { if (ChanceApplies(E, INDEX_NONE)) { dChance = E.Value; bApplied = true; } }
+		if (E.Kind == K_chanceStreak)
+		{
+			const float Cap = E.Threshold > 0.f ? E.Threshold : TNumericLimits<float>::Max();
+			dChance = FMath::Min(Cap, E.Value * Sim.SuccessStreak);
+			bApplied = Sim.SuccessStreak > 0;
+		}
+		else if (E.Kind == K_chanceRookie)
+		{
+			const int32 Rookies = Crew.FilterByPredicate([](const FDCCriminal* X) { return X->MissionsRun == 0; }).Num();
+			dChance = E.Value * Rookies;
+			bApplied = Rookies > 0;
+		}
+		else if (IsChanceKind(E.Kind)) { if (ChanceApplies(E, INDEX_NONE)) { dChance = E.Value; bApplied = true; } }
 		else if (E.Kind == K_durationMult) { dDur = E.Value; bApplied = true; }
 		else if (E.Kind == K_payoutMult) { if (E.Param.IsEmpty() || AnyType(E.Param, INDEX_NONE)) { dPay = E.Value; PayMult *= E.Value; bApplied = true; } }
 		else if (E.Kind == K_costMult) { CostMult *= E.Value; bApplied = true; }
@@ -653,6 +666,17 @@ void FDCSimImpl::CompleteMission(S& Sim, int32 MissionId)
 		Sim.Cash += Rep.DirectorTake;
 		Sim.TotalTake += Rep.DirectorTake;
 		if (Rep.DirectorTake > Sim.BestMissionTake) { Sim.BestMissionTake = Rep.DirectorTake; Sim.BestMissionName = M.DisplayName; }
+		Sim.SuccessStreak++;
+	}
+	else
+	{
+		Sim.SuccessStreak = 0;
+		const float RefundFrac = FMath::Clamp(SumGlobal(Sim, K_failRefund), 0.f, 1.f);
+		if (RefundFrac > 0.f && M.Cost > 0)
+		{
+			Rep.Refund = FMath::RoundToInt(M.Cost * RefundFrac);
+			Sim.Cash += Rep.Refund;
+		}
 	}
 
 	const float GXp = ProdGlobal(Sim, K_xpMult);
@@ -780,7 +804,10 @@ void FDCSimImpl::OfferPerks(S& Sim)
 {
 	if (Sim.PerkOffer.Num() > 0) { Sim.PendingPerkOffers++; return; }
 	TArray<FName> Pool;
-	for (FName P : Sim.Data->PerkOrder) { if (!Sim.PerksTaken.ContainsByPredicate([P](const FDCPerk& X) { return X.Id == P; })) { Pool.Add(P); } }
+	for (FName P : Sim.Data->PerkOrder)
+	{
+		if (!Sim.PerksDiscarded.Contains(P) && !Sim.PerksTaken.ContainsByPredicate([P](const FDCPerk& X) { return X.Id == P; })) { Pool.Add(P); }
+	}
 	if (Pool.Num() == 0) { return; }
 	Shuffle(Sim.Rng, Pool);
 	for (int32 i = 0; i < Pool.Num() && i < Bal(Sim).PerkOfferSize; ++i) { Sim.PerkOffer.Add(Sim.Data->Perks[Pool[i]].Perk); }
@@ -879,10 +906,23 @@ void FDCSimImpl::Payday(S& Sim)
 	const FDCBalance& B = Bal(Sim);
 	const int32 Day = Sim.GetDay();
 	const int32 Due = Sim.GetUpkeepDue();
+	// Interest on the cash held overnight (before upkeep), one capped sum per perk. Payday reports the net.
+	int32 Interest = 0;
+	if (Sim.Cash > 0)
+	{
+		ForEachGlobalEffect(Sim, [&](const FDCEffect& E, FName, FName, const FString&)
+		{
+			if (E.Kind != K_dawnInterest) { return; }
+			const int32 V = FMath::RoundToInt(Sim.Cash * E.Value);
+			Interest += E.Threshold > 0.f ? FMath::Min(V, FMath::RoundToInt(E.Threshold)) : V;
+		});
+		Interest = FMath::Max(0, Interest);
+		Sim.Cash += Interest;
+	}
 	Sim.Cash -= Due;
 	Sim.MarkChanged();
 	Sim.bSaveDirty = true;
-	Sim.OnPayday.Broadcast(Day, Due);
+	Sim.OnPayday.Broadcast(Day, Due - Interest);
 	const int32 Idle = FMath::RoundToInt(SumGlobal(Sim, K_loyaltyIdlePerDay));
 	if (Idle != 0)
 	{
@@ -891,7 +931,7 @@ void FDCSimImpl::Payday(S& Sim)
 			if (C.Status != EDCCriminalStatus::Injured) { C.Loyalty = FMath::Clamp(C.Loyalty + Idle, B.LoyaltyMin, B.LoyaltyMax); }
 		}
 	}
-	if (Sim.Cash < B.CashFloor) { EndRun(Sim, false, TEXT("Broke at payday")); return; }
+	if (Sim.Cash < B.CashFloor - FMath::RoundToInt(SumGlobal(Sim, K_creditLine))) { EndRun(Sim, false, TEXT("Broke at payday")); return; }
 	Sim.OnDayStarted.Broadcast(Day);
 }
 

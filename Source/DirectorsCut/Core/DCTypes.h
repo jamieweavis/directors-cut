@@ -402,6 +402,7 @@ struct FDCMissionReport
 	UPROPERTY(BlueprintReadOnly) bool bBonus = false;
 	UPROPERTY(BlueprintReadOnly) int32 PayoutTotal = 0;
 	UPROPERTY(BlueprintReadOnly) int32 DirectorTake = 0;
+	UPROPERTY(BlueprintReadOnly) int32 Refund = 0;             // failRefund perk: cost paid back on a failure
 	UPROPERTY(BlueprintReadOnly) FName LootGearId;            // dropped into the stash (NAME_None = none)
 	UPROPERTY(BlueprintReadOnly) TArray<FDCCrewMemberResult> Members;
 	UPROPERTY(BlueprintReadOnly) double CompletedAt = 0.0;

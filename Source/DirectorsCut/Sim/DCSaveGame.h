@@ -54,6 +54,10 @@ public:
 	UPROPERTY() bool bWon = false;
 	UPROPERTY() FString EndReason;
 	UPROPERTY() FDCRunSummary Summary;      // as shown at the end (informational; GetRunSummary recomputes it)
+
+	// v2 additions (tagged properties; older saves load them as defaults)
+	UPROPERTY() TArray<FName> PerksDiscarded;
+	UPROPERTY() int32 SuccessStreak = 0;
 };
 
 /** Persistent leaderboard of finished runs (slot "DCLeaderboard"). */

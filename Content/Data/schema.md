@@ -40,7 +40,7 @@ When an effect appears more than once, it **stacks**: chance effects add; `*Mult
 | `chanceDay` | trait, perk | +value if it starts by day |
 | `chanceShort` | trait | +value if final duration ≤ `threshold` s |
 | `chanceLong` | trait | +value if final duration ≥ `threshold` s |
-| `chanceSolo` | trait | +value if CrewSize == 1 |
+| `chanceSolo` | trait, perk | +value if CrewSize == 1 |
 | `chanceThreat` | trait, perk | +value if the mission has threat `param` |
 | `chanceWithType` | trait | +value if another crew member is of type `param` |
 | `chanceTierMin` | trait, perk, room | +value if mission tier ≥ `threshold` |
@@ -72,6 +72,12 @@ When an effect appears more than once, it **stacks**: chance effects add; `*Mult
 | `unlockTier` | room | allows missions of tier ≥ value to post (OpsRoom: 3) |
 | `unlockFinal` | room | allows The Big Score to post |
 | `lootChanceAdd` | perk, room | + loot chance |
+| `buildSlots` | perk | + rooms that can be under construction at once (base 1) |
+| `chanceStreak` | perk | +value per success in a row, capped at `threshold`; a failure resets the streak |
+| `chanceRookie` | perk | +value per crew member on their first job |
+| `failRefund` | perk | a failed or busted job refunds value × its cost |
+| `dawnInterest` | perk | at dawn, before upkeep: + value × cash (when positive), capped at `threshold` $ |
+| `creditLine` | perk | payday game over only once cash falls below `gameOver.cashFloor` − value |
 
 ---
 

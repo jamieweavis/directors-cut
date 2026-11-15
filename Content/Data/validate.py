@@ -30,7 +30,7 @@ EFFECT_SCOPES = {
     "chanceDay": {"trait", "perk"},
     "chanceShort": {"trait"},
     "chanceLong": {"trait"},
-    "chanceSolo": {"trait"},
+    "chanceSolo": {"trait", "perk"},
     "chanceThreat": {"trait", "perk"},
     "chanceWithType": {"trait"},
     "chanceTierMin": {"trait", "perk", "room"},
@@ -62,8 +62,14 @@ EFFECT_SCOPES = {
     "unlockTier": {"room"},
     "unlockFinal": {"room"},
     "lootChanceAdd": {"perk", "room"},
+    "buildSlots": {"perk"},
+    "chanceStreak": {"perk"},
+    "chanceRookie": {"perk"},
+    "failRefund": {"perk"},
+    "dawnInterest": {"perk"},
+    "creditLine": {"perk"},
 }
-NEEDS_THRESHOLD = {"chanceShort", "chanceLong", "chanceTierMin", "bail"}
+NEEDS_THRESHOLD = {"chanceShort", "chanceLong", "chanceTierMin", "bail", "chanceStreak", "dawnInterest"}
 NEEDS_THREAT_PARAM = {"chanceThreat"}
 NEEDS_TYPE_PARAM = {"chanceWithType", "chanceIfType"}
 OPTIONAL_TYPE_PARAM = {"payoutMult"}
