@@ -70,7 +70,7 @@ namespace
 				MD.CreateTriangle(PG, Tri);
 			}
 			UStaticMesh* SM = NewObject<UStaticMesh>(Outer, FName(Name));
-			SM->GetStaticMaterials().Add(FStaticMaterial(nullptr, FName("M0"), FName("M0")));
+			SM->GetStaticMaterials().Add(FStaticMaterial(nullptr, FName("M0")));
 			UStaticMesh::FBuildMeshDescriptionsParams Params;
 			Params.bMarkPackageDirty = false;
 			Params.bBuildSimpleCollision = false;
