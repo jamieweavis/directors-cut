@@ -70,6 +70,9 @@ public:
 	static FVector DriveMouth();
 	void LaneWalkPoints(TArray<FVector>& Out, bool bLeaving) const;
 
+	/** Dev (-DCAutoPlay): rebuild the whole world from the run, as a loaded save does (no reveals, crew and cars in place). */
+	void DevResync() { ResetForNewRun(); }
+
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 

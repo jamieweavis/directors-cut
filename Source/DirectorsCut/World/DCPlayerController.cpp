@@ -142,6 +142,9 @@ void ADCPlayerController::EndPlay(const EEndPlayReason::Type Reason)
 bool ADCPlayerController::IsWorldBlocked() const
 {
 	if (CameraRig && CameraRig->IsInCinematic()) { return true; }
+	// Screenshot runs (-DCShots) drive the camera and panels themselves: a stray mouse must not click a station or pan.
+	static const bool bShotRun = FCString::Strifind(FCommandLine::Get(), TEXT("DCShots=")) != nullptr;
+	if (bShotRun) { return true; }
 	const UDCUISubsystem* UI = UDCUISubsystem::Get(this);
 	return UI && UI->IsWorldInputBlocked();
 }

@@ -39,6 +39,8 @@ void UDCRunSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	EnsureData();
 	float Scale = 1.f;
 	if (FParse::Value(FCommandLine::Get(), TEXT("DCTimeScale="), Scale)) { TimeScale = FMath::Max(0.f, Scale); }
+	// Dev/screenshot runs: -DCSaveSlot=Prefix keeps every save and the leaderboard away from the player's real ones.
+	FParse::Value(FCommandLine::Get(), TEXT("DCSaveSlot="), SaveSlotOverride);
 }
 
 void UDCRunSubsystem::Deinitialize()
@@ -1161,6 +1163,10 @@ bool UDCRunSubsystem::HasPendingPerkOffer() const { return PerkOffer.Num() > 0; 
 TArray<FDCPerk> UDCRunSubsystem::GetPerkOffer() const { return PerkOffer; }
 TArray<FDCPerk> UDCRunSubsystem::GetPerksTaken() const { return PerksTaken; }
 void UDCRunSubsystem::DevOfferPerks() { if (PerkOffer.Num() == 0) { DCImpl::OfferPerks(*this); } }
+void UDCRunSubsystem::DevEndRun(bool bWon)
+{
+	if (bActive && Phase == EDCGamePhase::Playing) { DCImpl::EndRun(*this, bWon, bWon ? TEXT("The Big Score") : TEXT("Broke at payday")); }
+}
 
 bool UDCRunSubsystem::IsFinalPerkOffer() const
 {

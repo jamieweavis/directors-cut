@@ -688,7 +688,8 @@ TArray<FDCRunRecord> SDCRoot::LeaderboardRows() const
 		{
 			FDCRunRecord R; R.bWon = bWon; R.PlayTime = T; R.DaysSurvived = Days; R.MissionsSucceeded = Jobs; R.TotalTake = Take; R.EndedAt = FDateTime::UtcNow() - FTimespan::FromDays(Ago); L.Add(R);
 		};
-		Add(true, 9874.0, 8, 34, 512000, 1); Add(true, 11873.0, 9, 38, 412000, 2); Add(false, 6120.0, 5, 17, 96000, 3); Add(false, 2210.0, 2, 6, 21500, 6);
+		Add(true, 9874.0, 8, 34, 512000, 1); Add(true, 10642.0, 8, 36, 468000, 4); Add(true, 11873.0, 9, 38, 412000, 2); Add(true, 13390.0, 10, 41, 455500, 9);
+		Add(false, 8815.0, 7, 24, 187000, 5); Add(false, 6120.0, 5, 17, 96000, 3); Add(false, 3904.0, 3, 9, 38500, 8); Add(false, 2210.0, 2, 6, 21500, 6);
 		return L;
 	}
 	const UDCRunSubsystem* R = Run();

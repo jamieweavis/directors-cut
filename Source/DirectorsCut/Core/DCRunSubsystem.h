@@ -222,6 +222,8 @@ public:
 	bool IsFinalPerkOffer() const;
 	/** Dev/screenshot hook (-DCPerkOffer): put a perk offer on the table now. */
 	void DevOfferPerks();
+	/** Dev/screenshot hook (-DCEndRun=win|lose): end the run now, as a win or a loss. */
+	void DevEndRun(bool bWon);
 	/** Successful missions in a row (a failure or bust resets it). */
 	int32 GetSuccessStreak() const { return SuccessStreak; }
 
@@ -249,7 +251,7 @@ private:
 
 	TSharedPtr<struct FDCSimData> Data;   // loaded JSON
 	FString DataDirOverride;              // tests: force a data directory
-	FString SaveSlotOverride;             // tests: use a separate save slot
+	FString SaveSlotOverride;             // tests and -DCSaveSlot=: use a separate save slot
 
 	bool bActive = false;
 	bool bPaused = false;
