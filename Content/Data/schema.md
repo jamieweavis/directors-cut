@@ -207,7 +207,7 @@ Hothead (chance −0.05), Rat (arrestMult 1.5 for the holder), Slow (durationMul
 { "rooms": [ { "type": "Garage", "displayName": "Garage", "description": "Run more jobs at once", "icon": "warehouse",
   "cost": [6000, 12000, 22000], "buildSec": [60, 120, 180], "requiredSuccesses": [2, 5, 9],
   "upkeepPerDay": [200, 300, 450],
-  "levelEffects": ["+1 active mission", "+1 active, -10% time", "+1 active, -20% time"],
+  "levelEffects": ["+1 job at once", "+1 job at once, 10% quicker", "+2 jobs at once, 20% quicker"],
   "levels": [ { "effects": [ { "kind": "maxActive", "value": 1 } ] }, { "effects": [...] }, { "effects": [...] } ] } ] }
 ```
 - Effects are **per level, not cumulative**: list the full effect set for each level.

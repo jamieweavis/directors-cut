@@ -21,7 +21,7 @@ QUALITIES = ["Street", "Pro", "Elite"]
 SLOTS = ["Tool", "Outfit", "Gadget"]
 ROOMS = ["Office", "Lounge", "Workshop", "Garage", "OpsRoom", "Clinic", "ServerRoom", "LawyerOffice"]
 
-NAME_MAX, DESC_MAX, FLAVOUR_MAX, LEVEL_EFFECT_MAX = 22, 40, 60, 28
+NAME_MAX, DESC_MAX, FLAVOUR_MAX, LEVEL_EFFECT_MAX = 22, 40, 60, 34
 
 # kind -> set of scopes where it may appear
 EFFECT_SCOPES = {

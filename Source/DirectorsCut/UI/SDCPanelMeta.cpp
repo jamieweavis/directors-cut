@@ -59,6 +59,8 @@ TSharedRef<SWidget> SDCRoot::RoomTile(const FDCRoom& Room)
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 6.f, 0.f)
 			[Icon(bHave ? TEXT("check") : (bNext ? TEXT("chevron-right") : TEXT("minus")), 9.f, bHave ? Good : (bNext ? Accent : TextFaint))]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 6.f, 0.f)
+			[SNew(SBox).MinDesiredWidth(24.f)[Txt(FString::Printf(TEXT("LV %d"), i + 1), Caps(7.f), bNext ? Accent : TextFaint)]]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 			[SNew(STextBlock).Text(FText::FromString(Room.LevelEffects[i])).Font(Font(9.f, bNext ? EW::Medium : EW::Regular)).ColorAndOpacity(bHave ? TextDim : (bNext ? Text : TextFaint)).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
 		];
@@ -138,7 +140,8 @@ TSharedRef<SWidget> SDCRoot::RoomTile(const FDCRoom& Room)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top)
 			[Room.UpkeepPerDay > 0 ? (TSharedRef<SWidget>)(SNew(SBox).ToolTip(Tip(TEXT("Upkeep"), TEXT("Per day, paid at dawn"), TEXT("wallet")))[IconText(TEXT("wallet"), Money(Room.UpkeepPerDay), Mono(8.5f), TextFaint, TextFaint, 9.f, 4.f)]) : SNullWidget::NullWidget]
 		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 12.f, 0.f, 0.f)[Effects]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 12.f, 0.f, 0.f)
+		[SNew(SBox).ToolTip(Tip(TEXT("Room levels"), TEXT("Each line is the room's total bonus at that level. Upgrading replaces the line above."), IconName))[Effects]]
 		+ SVerticalBox::Slot().FillHeight(1.f)[SNullWidget::NullWidget]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 10.f, 0.f, 10.f)[HLine()]
 		+ SVerticalBox::Slot().AutoHeight()[SNew(SBox).MinDesiredHeight(32.f).VAlign(VAlign_Center)[Footer]];
@@ -226,9 +229,15 @@ TSharedRef<SWidget> SDCRoot::BuildRoomPanel(EDCPanel P)
 	TSharedRef<SVerticalBox> Body = SNew(SVerticalBox);
 	// Room effects summary
 	TSharedRef<SVerticalBox> Eff = SNew(SVerticalBox);
-	for (int32 i = 0; i < Room.LevelEffects.Num() && i < Room.Level; ++i)
+	// Each level's line is the room's total bonus, so only the current level applies.
+	if (Room.LevelEffects.IsValidIndex(Room.Level - 1))
 	{
-		Eff->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)[IconText(TEXT("check"), Room.LevelEffects[i], Font(10.f), Good, TextDim, 10.f, 6.f)];
+		Eff->AddSlot().AutoHeight()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)[Txt(FString::Printf(TEXT("LV %d"), Room.Level), Caps(7.5f), Accent)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[IconText(TEXT("check"), Room.LevelEffects[Room.Level - 1], Font(10.f), Good, TextDim, 10.f, 6.f)]
+		];
 	}
 	Body->AddSlot().AutoHeight()[CardBox(Eff, FMargin(14.f, 12.f))];
 	Body->AddSlot().AutoHeight().Padding(0.f, 18.f, 0.f, 10.f)[SNullWidget::NullWidget];
