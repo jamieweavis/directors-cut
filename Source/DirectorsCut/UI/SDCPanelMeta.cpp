@@ -164,19 +164,18 @@ TSharedRef<SWidget> SDCRoot::BuildBuild()
 	TSharedRef<SUniformGridPanel> Grid = SNew(SUniformGridPanel).SlotPadding(FMargin(5.f));
 	for (int32 i = 0; i < Rooms.Num(); ++i) { Grid->AddSlot(i % 3, i / 3)[RoomTile(Rooms[i])]; }
 
-	TSharedRef<SHorizontalBox> Perks = SNew(SHorizontalBox);
+	// Wraps onto new rows so a long run's perks stay inside the panel.
+	TSharedRef<SWrapBox> Perks = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(6.f, 6.f));
 	for (const FDCPerk& P : R->GetPerksTaken())
 	{
 		TSharedRef<SWidget> W = IconTile(P.Icon, 34.f, Accent);
 		W->SetToolTip(Tip(P.DisplayName, P.Description, P.Icon));
-		Perks->AddSlot().AutoWidth().Padding(0.f, 0.f, 6.f, 0.f)[W];
+		Perks->AddSlot()[W];
 	}
-	if (R->GetPerksTaken().Num() == 0) { Perks->AddSlot().AutoWidth().VAlign(VAlign_Center)[Txt(TEXT("Every 3 successful jobs, pick a perk."), Font(9.5f), TextFaint)]; }
-	if (R->HasPendingPerkOffer())
-	{
-		Perks->AddSlot().FillWidth(1.f).HAlign(HAlign_Right).VAlign(VAlign_Center)
-		[TextButton(TEXT("sparkles"), TEXT("Pick a perk"), [this]() { Open(EDCPanel::PerkDraft); }, EBtn::Primary)];
-	}
+	if (R->GetPerksTaken().Num() == 0) { Perks->AddSlot().VAlign(VAlign_Center)[Txt(TEXT("Every 3 successful jobs, pick a perk."), Font(9.5f), TextFaint)]; }
+	TSharedRef<SWidget> PickPerk = R->HasPendingPerkOffer()
+		? TextButton(TEXT("sparkles"), TEXT("Pick a perk"), [this]() { Open(EDCPanel::PerkDraft); }, EBtn::Primary)
+		: SNullWidget::NullWidget;
 
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().FillHeight(1.f)[Scroll(SNew(SBox).Padding(FMargin(-5.f, -5.f, -5.f, 0.f))[Grid])]
@@ -186,6 +185,7 @@ TSharedRef<SWidget> SDCRoot::BuildBuild()
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 14.f, 0.f)[Label(TEXT("Perks"))]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[Perks]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(R->HasPendingPerkOffer() ? 10.f : 0.f, 0.f, 0.f, 0.f)[PickPerk]
 		];
 
 	auto RR = [this]() { return Run(); };
