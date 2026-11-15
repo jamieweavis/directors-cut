@@ -18,8 +18,9 @@
   "tiers": {"unlockSuccesses": [0, 9, 16, 24], "levelRange": [[1, 2], [2, 3], [4, 5], [6, 8]]},
   "success": {
     "threatPoints": 1.5,
-    "levelFactor": {"atOrAbove": 1.0, "perLevelAbove": 0.05, "maxFactor": 1.2, "below": [0.75, 0.5, 0.1]},
-    "maxChance": 2.0
+    "baseMult": 0.88,
+    "levelFactor": {"atOrAbove": 1.0, "perLevelAbove": 0.03, "maxFactor": 1.1, "below": [0.75, 0.5, 0.1]},
+    "maxChance": 1.5
   },
   "cut": {
     "min": 0.1,

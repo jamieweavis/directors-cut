@@ -98,6 +98,7 @@ struct FDCBalance
 	float LFAtOrAbove = 1.f, LFPerLevelAbove = 0.05f, LFMaxFactor = 1.2f;
 	TArray<float> LFBelow = { 0.75f, 0.5f, 0.1f };
 	float MaxChance = 2.f;
+	float BaseMult = 1.f; // execution risk: scales crew + counter odds (not modifiers)
 
 	float CutMin = 0.1f, CutMax = 0.9f, CutStep = 0.05f, CutDefault = 0.3f;
 	float FairCutBase = 0.3f, FairCutLoyaltyDiv = 500.f;

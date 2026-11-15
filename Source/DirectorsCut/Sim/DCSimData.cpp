@@ -240,6 +240,7 @@ bool FDCSimData::Load(const FString& DirOverride)
 		if (Has(LF, TEXT("below"))) { B.LFBelow = NumArr(LF, TEXT("below")); } else { C.Warn(TEXT("missing levelFactor.below")); }
 		while (B.LFBelow.Num() < 3) { B.LFBelow.Add(0.1f); }
 		B.MaxChance = Num(C, Su, TEXT("maxChance"), B.MaxChance);
+		B.BaseMult = Num(C, Su, TEXT("baseMult"), B.BaseMult, false);
 
 		const FObj Cu = Obj(R, TEXT("cut"));
 		B.CutMin = Num(C, Cu, TEXT("min"), B.CutMin);

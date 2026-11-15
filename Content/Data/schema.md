@@ -105,7 +105,8 @@ When an effect appears more than once, it **stacks**: chance effects add; `*Mult
     "threatPoints": 1.5,           // each threat is worth this many points; each crew slot is worth 1
     "levelFactor": { "atOrAbove": 1.0, "perLevelAbove": 0.05, "maxFactor": 1.2,
                      "below": [0.75, 0.5, 0.1] },  // 1, 2, 3+ levels under the mission level
-    "maxChance": 2.0                // 100..200% = bonus odds
+    "maxChance": 2.0,               // 100..200% = bonus odds
+    "baseMult": 1.0                 // optional execution risk: scales CrewChance and ThreatChance (not modifiers)
   },
   "cut": { "min": 0.1, "max": 0.9, "step": 0.05, "default": 0.3,
            "fairCutBase": 0.30, "fairCutLoyaltyDiv": 500,
@@ -136,10 +137,10 @@ LevelFactor(c)  = EffLevel(c) >= M.Level ? min(maxFactor, atOrAbove + perLevelAb
                                          : below[min(3, ceil(M.Level-EffLevel)) - 1]
 EffLevel(c)     = Level + Σ gear Power + perk adds
 Points          = CrewSize + threatPoints * NumThreats
-CrewChance      = Σ_c LevelFactor(c) / Points
+CrewChance      = baseMult * Σ_c LevelFactor(c) / Points
 Counters        = each threat instance is matched to at most one unused counter (ability or gear) from the crew;
                   greedy in threat order, preferring the lowest-level crew member's counter
-ThreatChance    = threatPoints * Countered / Points
+ThreatChance    = baseMult * threatPoints * Countered / Points
 ModifierChance  = Σ chance effects (traits on crew, perks, rooms, night bonus)
 Willingness(c)  = clamp(1 - willSlope * max(0, Cut - FairCut(c)), willMin, 1);  FairCut = fairCutBase + (Loyalty-50)/fairCutLoyaltyDiv + fairCutAdd
 WillFactor      = willFactorBase + willFactorScale * mean(Willingness)      // refusal if any Willingness < refusalThreshold

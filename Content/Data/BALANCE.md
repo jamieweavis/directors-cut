@@ -11,20 +11,22 @@ The bot follows a simple greedy policy and plays at cut 0.30:
 - It hires the best affordable recruit while the roster is under the cap, keeping the same reserve.
 - It picks perks at random.
 
-## Result (seed 1, 200 runs, v4 rebalance)
+## Result (seed 1, 200 runs, v5 harder odds)
 | Milestone | reached | p25 | median | p75 | target |
 |---|---|---|---|---|---|
-| First success | 100% | 1.3 | 1.5 | 1.7 | ≤ 2.5 min |
-| First room (Garage) | 100% | 4.9 | 6.3 | 10.4 | ≤ 6 min |
-| Tier 2 unlocked | 99% | 13.0 | 16.2 | 20.3 | ~10–12 min |
-| Tier 3 unlocked | 98% | 23.7 | 29.8 | 35.9 | ~25–35 min |
-| Tier 4 unlocked | 96% | 36.6 | 43.9 | 52.6 | |
-| Big Score unlocked | 89% | 63.9 | 72.4 | 83.8 | ~55–75 min |
-| **Big Score won** | **34%** | 84 | 99 | 108 | 30–60% |
-| **Game over** | **2%** | 41 | 59 | 83 | 10–25% |
+| First success | 100% | 1.3 | 1.5 | 1.8 | ≤ 2.5 min |
+| First room (Garage) | 100% | 5.3 | 7.9 | 12.4 | ≤ 6 min |
+| Tier 2 unlocked | 97% | 14.9 | 19.2 | 23.2 | ~10–12 min |
+| Tier 3 unlocked | 97% | 28.9 | 35.6 | 44.5 | ~25–35 min |
+| Tier 4 unlocked | 94% | 42.6 | 51.9 | 62.5 | |
+| Big Score unlocked | 79% | 72.8 | 85.1 | 92.8 | ~55–75 min |
+| **Big Score won (120 min)** | **17%** | 105 | 107 | 111 | 30–60% |
+| **Big Score won (160 min)** | **48%** | 111 | 128 | 144 | |
+| **Game over** | **3%** | 95 | 95 | 119 | 10–25% |
 
-- Game overs are well under the old 10–25% target. Payouts are flatter and mission costs are lower than the old tier 3/4 stakes, so one failure no longer empties the bank. The pressure now comes from slow growth (cash sits at about 5–8k all run), not from sudden collapses.
-- **Mission success by tier (bot, ≥ 50% plans only):** tier 1 84%, tier 2 91%, tier 3 92%, tier 4 87%, Big Score 80%.
+- **v5 (harder odds):** `success.baseMult` 0.88 scales the Crew and Counters odds, so a level-matched, fully countered plan shows 88%. Traits, perks, rooms and night jobs are what push a job to 100%. The over-level bonus is smaller (`perLevelAbove` 0.05 → 0.03, `maxFactor` 1.2 → 1.1), and `maxChance` is 1.5 (was 2.0). Runs have no time limit, so the lower 120-min win rate reflects slower pacing (the Big Score unlocks about 13 min later), not a wall. With 160 min, the bot wins 48%.
+- Game overs are well under the old 10–25% target. Payouts are flatter and mission costs are lower than the old tier 3/4 stakes, so one failure no longer empties the bank.
+- **Mission success by tier (bot, ≥ 50% plans only):** tier 1 78%, tier 2 86%, tier 3 88%, tier 4 78%, Big Score 67% (v4: 84 / 91 / 92 / 87 / 80).
 - **Typical room order:** Garage 6m → Ops L1 24m → Clinic 34m → Lounge 44m → Workshop 57m → Ops L2 68m (Big Score) → Clinic L2 → Office L2 …
 
 ## Key numbers
@@ -59,13 +61,14 @@ The bot follows a simple greedy policy and plays at cut 0.30:
 - **Room L1 costs:** Garage 1.5k, Ops 2.5k, Clinic 3.0k, Lounge 3.5k, Workshop 4.0k, Server 7.0k, Lawyer 8.0k. L2/L3 run from 4.5k to 20k.
 
 ## Changes from the example values in schema.md
-These are data choices; the formula is unchanged:
+These are data choices. The only formula change is the optional `success.baseMult`, which defaults to 1.0:
 - `tiers.unlockSuccesses` [0,3,8,15] → [0,9,16,24]
 - `tiers.levelRange` → [[1,2],[2,3],[4,5],[6,8]]
 - `final.requiredSuccesses` 15 → 34
 - `levels.xpExp` 1.4 → 1.3
 - `upkeep.perCriminalPerDay` 300 → 500
 - `outcome.bustedBand` 0.25 → 0.4
+- `success.baseMult` (new) 0.88, `levelFactor.perLevelAbove` 0.05 → 0.03, `levelFactor.maxFactor` 1.2 → 1.1, `maxChance` 2.0 → 1.5
 
 The Office L1 has no effect (4 leads, 1 active). Its levels add board and active slots, and the Garage is the first "+1 active" room.
 

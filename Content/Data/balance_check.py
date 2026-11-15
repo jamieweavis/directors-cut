@@ -326,7 +326,8 @@ class Sim:
         sc = self.b["success"]
         tp = sc["threatPoints"]
         points = len(team) + tp * len(p["threats"])
-        crew_ch = sum(self.level_factor(c, p["level"]) for c in team) / points
+        bm = sc.get("baseMult", 1.0)
+        crew_ch = bm * sum(self.level_factor(c, p["level"]) for c in team) / points
         # counters: greedy in threat order, preferring the lowest-level crew member's counter
         pool = []
         for c in team:
@@ -340,7 +341,7 @@ class Sim:
                     slot[2] = True
                     countered += 1
                     break
-        threat_ch = tp * countered / points
+        threat_ch = bm * tp * countered / points
         night = self.is_night(start_t)
         dur = self.final_duration(p, team)
         types = [c.type for c in team]

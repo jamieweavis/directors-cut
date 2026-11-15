@@ -514,8 +514,9 @@ FDCSuccessBreakdown FDCSimImpl::Evaluate(const S& Sim, const FDCMission& M, cons
 		Bd.MemberFactor.Add(C->Id, LF);
 		LFSum += LF;
 	}
-	Bd.CrewChance = LFSum / Points;
-	Bd.ThreatChance = B.ThreatPoints * Countered / Points;
+	// baseMult is the execution risk: a perfect plan alone falls short of 100%; modifiers close the gap.
+	Bd.CrewChance = B.BaseMult * LFSum / Points;
+	Bd.ThreatChance = B.BaseMult * B.ThreatPoints * Countered / Points;
 
 	// Duration first (chanceShort/chanceLong look at the final duration).
 	float DurMult = 1.f;

@@ -583,6 +583,8 @@ def main():
         sc = req(b, "success", c, "dict") or {}
         req(sc, "threatPoints", f"{c}.success", "num")
         req(sc, "maxChance", f"{c}.success", "num")
+        if "baseMult" in sc and not (isinstance(sc["baseMult"], (int, float)) and 0 < sc["baseMult"] <= 1):
+            err(f"{c}.success.baseMult must be a number in (0, 1]")
         lf = req(sc, "levelFactor", f"{c}.success", "dict") or {}
         for k in ("atOrAbove", "perLevelAbove", "maxFactor"):
             req(lf, k, f"{c}.success.levelFactor", "num")
