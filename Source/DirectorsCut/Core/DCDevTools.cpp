@@ -42,7 +42,8 @@ void UDCDevTools::Initialize(FSubsystemCollectionBase& Collection)
 	FParse::Value(Cmd, TEXT("DCAutoPlay="), AutoPlaySeconds);
 	bClockFlags = FCString::Strifind(Cmd, TEXT("DCHour=")) || FCString::Strifind(Cmd, TEXT("DCTimeScale="));
 	bContinue = FParse::Param(Cmd, TEXT("DCContinue"));
-	if (Shots.Num() || QuitAfter > 0.f || AutoPlaySeconds > 0 || bClockFlags || bContinue)
+	FParse::Value(Cmd, TEXT("DCHireCrew="), HireCrew);
+	if (Shots.Num() || QuitAfter > 0.f || AutoPlaySeconds > 0 || bClockFlags || bContinue || HireCrew > 0)
 	{
 		IFileManager::Get().MakeDirectory(*ShotDir, true);
 		TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UDCDevTools::Tick));
@@ -102,6 +103,21 @@ void UDCDevTools::ApplyContinue()
 	const bool bOk = bHad && Run->ContinueRun();
 	UE_LOG(LogDC, Display, TEXT("[DevTools] -DCContinue: save %d, loaded %d (t=%.0fs day %d %.1fh)"), bHad ? 1 : 0, bOk ? 1 : 0, Run->GetRunTime(), Run->GetDay(), Run->GetHourOfDay());
 	if (UDCUISubsystem* UI = UDCUISubsystem::Get(GetGameWorld())) { if (bOk) { UI->ClosePanel(); } }
+}
+
+void UDCDevTools::ApplyHireCrew()
+{
+	UDCRunSubsystem* Run = UDCRunSubsystem::Get(GetGameWorld());
+	if (!Run) { return; }
+	if (!Run->HasActiveRun()) { Run->StartNewRun(GetCmdSeed()); }
+	int32 Hired = 0;
+	for (int32 k = 0; k < HireCrew; ++k)
+	{
+		const TArray<FDCCriminal>& Recruits = Run->GetRecruits();
+		if (Recruits.Num() == 0 || !Run->Hire(Recruits[0].Id)) { break; }
+		++Hired;
+	}
+	UE_LOG(LogDC, Display, TEXT("[DevTools] -DCHireCrew: hired %d / %d (roster %d, cash $%d)"), Hired, HireCrew, Run->GetRoster().Num(), Run->GetCash());
 }
 
 void UDCDevTools::ApplyClockFlags()
@@ -189,6 +205,7 @@ bool UDCDevTools::Tick(float DeltaTime)
 	const bool bWorldUp = GetGameWorld() && GetGameWorld()->HasBegunPlay();
 	if (bContinue && bWorldUp) { ApplyContinue(); bContinue = false; }
 	if (bClockFlags && bWorldUp && Elapsed > 0.5) { ApplyClockFlags(); bClockFlags = false; }
+	if (HireCrew > 0 && bWorldUp && Elapsed > 1.0) { ApplyHireCrew(); HireCrew = 0; }
 	if (Elapsed < NextAt) { return true; }
 	if (Step == 0 && AutoPlaySeconds > 0) { RunAutoPlay(); AutoPlaySeconds = 0; NextAt = Elapsed + 1.0; return true; }
 

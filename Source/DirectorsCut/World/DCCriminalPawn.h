@@ -12,6 +12,7 @@ class UStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UWidgetComponent;
 class UPointLightComponent;
+class UDCCrewBodyComponent;
 
 UENUM()
 enum class EDCPawnMode : uint8
@@ -135,6 +136,7 @@ protected:
 
 	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> BodyMIDs;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> PropComps;
+	UPROPERTY() TObjectPtr<UDCCrewBodyComponent> CrewBody; // set = the mannequin is hidden and only drives this body
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Bandage;
 	UPROPERTY() TObjectPtr<UWidgetComponent> Plate;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> LevelRing;

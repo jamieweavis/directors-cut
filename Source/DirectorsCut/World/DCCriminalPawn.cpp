@@ -4,6 +4,7 @@
 #include "World/DCGarageDoor.h"
 #include "World/DCWorldLabel.h"
 #include "World/DCWorldDirector.h"
+#include "World/DCCrewBody.h"
 #include "Animation/AnimSequence.h"
 #include "Core/DCAssetPaths.h"
 #include "AnimationRuntime.h"
@@ -28,6 +29,9 @@ namespace
 	constexpr float HurrySpeed = 300.f;     // walking out to / in from the door
 	constexpr float HurryLimpSpeed = 140.f;
 	constexpr float LevelUpLength = 1.1f;
+
+	TAutoConsoleVariable<int32> CVarCrewBody(TEXT("dc.CrewBody"), 1,
+		TEXT("1 = crew wear the imported crew body (posed from a hidden mannequin), 0 = plain mannequins. Affects crew spawned afterwards."));
 
 	template <typename T>
 	T* LoadQuiet(const TCHAR* Path) { return LoadObject<T>(nullptr, Path, nullptr, LOAD_NoWarn | LOAD_Quiet); }
@@ -136,11 +140,38 @@ void ADCCriminalPawn::SetupVisuals()
 			M->SetAnimationMode(EAnimationMode::AnimationBlueprint);
 			M->SetAnimInstanceClass(AnimClass);
 		}
-		UMaterialInterface* Crim = LoadQuiet<UMaterialInterface>(DCPaths::MatCriminal);
-		for (int32 i = 0; i < M->GetNumMaterials(); ++i)
+		// The crew body: the mannequin stays (hidden) as the animation driver and its pose is copied onto it.
+		USkeletalMesh* BodyMesh = CVarCrewBody.GetValueOnGameThread() != 0 ? LoadQuiet<USkeletalMesh>(DCPaths::CrewBodyMesh) : nullptr;
+		if (BodyMesh)
 		{
-			UMaterialInstanceDynamic* MID = Crim ? UMaterialInstanceDynamic::Create(Crim, this) : MakeSurfaceMID(FLinearColor(0.04f, 0.04f, 0.045f), 0.f);
-			if (MID) { M->SetMaterial(i, MID); BodyMIDs.Add(MID); }
+			UDCCrewBodyComponent* B = NewObject<UDCCrewBodyComponent>(this, TEXT("CrewBody"));
+			if (B->Init(BodyMesh, M))
+			{
+				B->RegisterComponent();
+				AddInstanceComponent(B);
+				CrewBody = B;
+				M->SetVisibility(false, /*bPropagateToChildren*/ false);
+				M->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+				if (UMaterialInterface* Skin = LoadQuiet<UMaterialInterface>(DCPaths::MatCrewSkin))
+				{
+					for (int32 i = 0; i < B->GetNumMaterials(); ++i)
+					{
+						UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Skin, this);
+						B->SetMaterial(i, MID);
+						BodyMIDs.Add(MID);
+					}
+				}
+			}
+			else { B->DestroyComponent(); }
+		}
+		if (!CrewBody)
+		{
+			UMaterialInterface* Crim = LoadQuiet<UMaterialInterface>(DCPaths::MatCriminal);
+			for (int32 i = 0; i < M->GetNumMaterials(); ++i)
+			{
+				UMaterialInstanceDynamic* MID = Crim ? UMaterialInstanceDynamic::Create(Crim, this) : MakeSurfaceMID(FLinearColor(0.04f, 0.04f, 0.045f), 0.f);
+				if (MID) { M->SetMaterial(i, MID); BodyMIDs.Add(MID); }
+			}
 		}
 	}
 	else
@@ -212,12 +243,15 @@ void ADCCriminalPawn::ApplyBodyTint()
 		MID->SetVectorParameterValue(TEXT("BaseColor"), Base);
 		MID->SetVectorParameterValue(TEXT("AccentColor"), bInjured ? FMath::Lerp(Accent, FLinearColor(0.6f, 0.6f, 0.6f), 0.5f) : Accent);
 		MID->SetVectorParameterValue(TEXT("Color"), bUsingFallbackBody ? Accent * 0.35f : Base); // BasicShapeMaterial fallback
+		MID->SetVectorParameterValue(TEXT("Tint"), bInjured ? FLinearColor(1.f, 0.55f, 0.5f) : FLinearColor::White); // M_DC_CrewSkin
 	}
 }
 
 UStaticMeshComponent* ADCCriminalPawn::AddProp(UStaticMesh* SM, const FName& Bone, const FVector& MeshSpaceOffset, const FRotator& MeshSpaceRot, const FVector& Scale, const FLinearColor& Color, float Emissive)
 {
 	if (!SM) { return nullptr; }
+	// The crew body has its own headgear (WIP: the hats / headset / bandage were sized for the mannequin's head).
+	if (CrewBody && Bone == TEXT("head")) { return nullptr; }
 	UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
 	C->SetStaticMesh(SM);
 	C->SetCollisionEnabled(ECollisionEnabled::NoCollision);

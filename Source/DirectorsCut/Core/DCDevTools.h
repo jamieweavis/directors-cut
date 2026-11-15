@@ -15,6 +15,7 @@
 //   -DCQuitAfter=S          quit after S seconds (when not taking shots)
 //   -DCDebugView            draw the generated layout (build grid, rooms, doorways, furniture, nav tile map, crew routes);
 //                           same as Options > Gameplay > Debug view
+//   -DCHireCrew=N           hire the first N recruits right after start (crew close-ups; stops when cash runs out)
 //   -DCContinue             load the saved run (UDCRunSubsystem::ContinueRun) right after start instead of a new run
 #pragma once
 
@@ -43,6 +44,7 @@ private:
 	float AutoPlaySeconds = 0.f;
 	bool bClockFlags = false;
 	bool bContinue = false;
+	int32 HireCrew = 0;
 	double Elapsed = 0.0;
 	int32 Step = 0;
 	double NextAt = 0.0;
@@ -54,5 +56,6 @@ private:
 	void RunAutoPlay();
 	void ApplyClockFlags();
 	void ApplyContinue();
+	void ApplyHireCrew();
 	UWorld* GetGameWorld() const;
 };

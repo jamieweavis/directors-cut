@@ -36,6 +36,10 @@ namespace DCPaths
 	inline const TCHAR* UnarmedAnimBP = TEXT("/Game/Characters/Mannequins/Anims/Unarmed/ABP_Unarmed.ABP_Unarmed_C");
 	inline const TCHAR* AnimIdle      = TEXT("/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle.MM_Idle");
 	inline const TCHAR* AnimWalkFwd   = TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Walk/MF_Unarmed_Walk_Fwd.MF_Unarmed_Walk_Fwd");
+	// Crew body (Tools/crew_import.py from Art/Crew). Posed from the hidden mannequin by UDCCrewBodyComponent.
+	//   M_DC_CrewSkin: textured. Params: Tint(vec), Roughness, AccentColor(vec), RimStrength
+	inline const TCHAR* CrewBodyMesh  = TEXT("/Game/DC/Characters/Crew/SK_Crew_Hooded.SK_Crew_Hooded");
+	inline const TCHAR* MatCrewSkin   = TEXT("/Game/DC/Materials/M_DC_CrewSkin.M_DC_CrewSkin");
 
 	// Audio (imported later; Audio subsystem falls back to runtime WAV loading from Content/RawAudio)
 	inline const TCHAR* AudioRoot = TEXT("/Game/DC/Audio");
