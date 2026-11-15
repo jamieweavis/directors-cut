@@ -819,17 +819,32 @@ TSharedRef<SWidget> SDCRoot::BuildHudStats()
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)[Icon(TEXT("banknote"), 15.f, Accent)]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 		[
-			SNew(SBox).MinDesiredWidth(96.f)
+			// Min width covers cash + daily drain so the bar doesn't jitter as the counter ticks.
+			SNew(SBox).MinDesiredWidth(170.f)
 			[
-				TxtA(TAttribute<FText>::CreateLambda([this]() { return FText::FromString(Money((int64)FMath::RoundToDouble(DisplayCash))); }), Mono(16.f),
-					TAttribute<FSlateColor>::CreateLambda([this]()
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					TxtA(TAttribute<FText>::CreateLambda([this]() { return FText::FromString(Money((int64)FMath::RoundToDouble(DisplayCash))); }), Mono(16.f),
+						TAttribute<FSlateColor>::CreateLambda([this]()
+						{
+							const float F = 1.f - FMath::Clamp((float)(Now() - CashFlashT0) / 0.9f, 0.f, 1.f);
+							return FSlateColor(FLinearColor::LerpUsingHSV(Text, bCashFlashUp ? Good : Bad, F * 0.85f));
+						}))
+				]
+				// Daily drain (crew wages + building upkeep), charged at dawn.
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(7.f, 2.f, 0.f, 0.f)
+				[
+					TxtA(TAttribute<FText>::CreateLambda([R]()
 					{
-						const float F = 1.f - FMath::Clamp((float)(Now() - CashFlashT0) / 0.9f, 0.f, 1.f);
-						return FSlateColor(FLinearColor::LerpUsingHSV(Text, bCashFlashUp ? Good : Bad, F * 0.85f));
-					}))
+						const UDCRunSubsystem* X = R();
+						const int32 Due = X ? X->GetUpkeepDue() : 0;
+						return Due > 0 ? FText::FromString(FString::Printf(TEXT("%s/day"), *Money(-Due))) : FText::GetEmpty();
+					}), Mono(11.f), FSlateColor(A(Bad, 0.85f)))
+				]
 			]
 		];
-	Cash->SetToolTip(Tip(TEXT("Cash"), TEXT("Your take from every job. Pays for gear, new wings, hires and wages."), TEXT("banknote")));
+	Cash->SetToolTip(Tip(TEXT("Cash"), TEXT("Your take from every job. Pays for gear, new wings, hires and wages. The red figure is the daily upkeep (crew wages + buildings), paid at 06:00."), TEXT("banknote")));
 
 	TSharedRef<SWidget> Crew = IconTextA(TEXT("users"), TAttribute<FText>::CreateLambda([R]()
 		{
