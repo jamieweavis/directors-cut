@@ -202,8 +202,6 @@ void ADCLandscape::InitAssets()
 	MeshLib.Add("Rock1", DCLandMesh::Rock(this, 29, FVector(1.f, 0.9f, 0.85f), 20, 0.38f));  // boulder
 	MeshLib.Add("Rock2", DCLandMesh::Rock(this, 43, FVector(1.1f, 0.8f, 0.4f), 13, 0.45f));  // slab
 	MeshLib.Add("Rock3", DCLandMesh::Rock(this, 61, FVector(0.8f, 0.75f, 1.f), 15, 0.42f));  // standing stone
-	MeshLib.Add("WallStone0", DCLandMesh::Rock(this, 71, FVector(1.f, 1.f, 1.f), 12, 0.45f)); // blocky (dry-stone wall)
-	MeshLib.Add("WallStone1", DCLandMesh::Rock(this, 83, FVector(1.f, 1.f, 1.f), 14, 0.5f));
 	MeshLib.Add("Post", DCLandMesh::Tube(this, 6, 0.9f));
 	MeshLib.Add("Disc", DCLandMesh::Disc(this, 40, 0.12f, 7));
 	MeshLib.Add("DiscRound", DCLandMesh::Disc(this, 40, 0.f, 1));

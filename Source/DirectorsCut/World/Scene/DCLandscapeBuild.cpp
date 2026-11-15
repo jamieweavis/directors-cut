@@ -39,7 +39,7 @@ namespace
 	const FBox2D SoilField(FVector2D(-7200.f, DCSite::LaneY - 5100.f), FVector2D(-1100.f, DCSite::LaneY - 950.f));
 	const FBox2D StubbleField(FVector2D(1100.f, DCSite::LaneY - 5100.f), FVector2D(7200.f, DCSite::LaneY - 950.f));
 	using DCSite::FenceY;                              // post-and-rail fence on the house side of the lane (site contract)
-	constexpr float BoundaryY = DCSite::LaneY - 430.f;// stone wall / hedgerow on the field side
+	constexpr float BoundaryY = DCSite::LaneY - 430.f;// hedgerow on the field side
 	constexpr float PoleY = DCSite::LaneY - 330.f;    // telegraph poles on the far verge
 }
 
@@ -464,16 +464,23 @@ void ADCLandscape::BuildFieldsAndFences()
 		Rod("PaintWhite", End + FVector(0, 0, 25.f), End + FVector(0, 0, 122.f), 8.f);
 	}
 
-	// dry-stone wall along the ploughed field
-	for (float X = SoilField.Min.X; X < SoilField.Max.X + 300.f; X += 52.f)
+	// stones cleared off the ploughed field, left scattered loosely over the verge between the lane and the soil
 	{
-		for (int32 Course = 0; Course < 3; ++Course)
+		const FName VergeRocks[4] = { "Rock0", "Rock1", "Rock2", "Rock3" };
+		const FName VergeMats[3] = { "Stone", "StoneWarm", "StoneDark" };
+		TArray<FVector2D> Spots;
+		for (int32 Try = 0; Try < 400 && Spots.Num() < 26; ++Try)
 		{
-			const float XX = X + (Course % 2) * 26.f + R.FRandRange(-6.f, 6.f);
-			const float S = (Course == 2) ? R.FRandRange(0.38f, 0.5f) : R.FRandRange(0.55f, 0.75f);
-			const float Z = GroundTop + 18.f + Course * 30.f;
-			Add(Course % 2 ? FName("WallStone0") : FName("WallStone1"), R.FRand() < 0.35f ? FName("StoneDark") : (R.FRand() < 0.5f ? FName("StoneWarm") : FName("Stone")),
-				FTransform(FRotator(R.FRandRange(-10.f, 10.f), R.FRandRange(-15.f, 15.f), Course == 2 ? 70.f : 0.f), FVector(XX, BoundaryY + R.FRandRange(-6.f, 6.f), Z), FVector(S * 1.1f, S * 0.75f, S * 0.6f)));
+			const FVector2D P(R.FRandRange(SoilField.Min.X - 300.f, SoilField.Max.X + 300.f), R.FRandRange(SoilField.Max.Y + 60.f, DCSite::LaneY - 400.f));
+			bool bNear = false;
+			for (const FVector2D& Q : Spots) { if (FVector2D::DistSquared(P, Q) < FMath::Square(320.f)) { bNear = true; break; } }
+			if (bNear) { continue; }
+			Spots.Add(P);
+			const float S = R.FRand() < 0.25f ? R.FRandRange(0.9f, 1.4f) : R.FRandRange(0.35f, 0.8f);
+			const int32 Main = R.RandRange(0, 3);
+			const float MainZ = (Main == 3 ? 1.f : (Main == 2 ? 0.4f : 0.7f)) * 50.f * S;
+			Add(VergeRocks[Main], VergeMats[R.RandRange(0, 2)], FTransform(FRotator(float(R.FRandRange(-8.f, 8.f)), float(R.FRandRange(0.f, 360.f)), float(R.FRandRange(-8.f, 8.f))),
+				FVector(P.X, P.Y, GroundTop + MainZ * 0.5f), FVector(S, S, S)));
 		}
 	}
 	// hedgerow along the stubble field, with a field gate gap
