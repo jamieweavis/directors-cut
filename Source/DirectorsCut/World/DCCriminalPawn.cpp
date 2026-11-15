@@ -141,7 +141,15 @@ void ADCCriminalPawn::SetupVisuals()
 		USkeletalMesh* BodyMesh = nullptr;
 		UMaterialInterface* Skin = nullptr;
 		const int32 NumBodies = UE_ARRAY_COUNT(DCPaths::CrewBodies);
-		const int32 First = FMath::Abs(CriminalId) % NumBodies;
+		int32 First = FMath::Abs(CriminalId) % NumBodies;
+		FString ForceBody; // -DCCrewBody=<Name>: everyone wears SK_Crew_<Name> (checking a new body)
+		if (FParse::Value(FCommandLine::Get(), TEXT("DCCrewBody="), ForceBody))
+		{
+			for (int32 k = 0; k < NumBodies; ++k)
+			{
+				if (FString(DCPaths::CrewBodies[k].Mesh).Contains(TEXT("SK_Crew_") + ForceBody + TEXT("."))) { First = k; }
+			}
+		}
 		for (int32 k = 0; k < NumBodies && !BodyMesh; ++k)
 		{
 			const DCPaths::FCrewBody& Body = DCPaths::CrewBodies[(First + k) % NumBodies];

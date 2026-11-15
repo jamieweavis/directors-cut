@@ -16,7 +16,8 @@
 //   -DCDebugView            draw the generated layout (build grid, rooms, doorways, furniture, nav tile map, crew routes);
 //                           same as Options > Gameplay > Debug view
 //   -DCHireCrew=N           hire the first N recruits right after start (crew close-ups; stops when cash runs out)
-//   -DCContinue             load the saved run (UDCRunSubsystem::ContinueRun) right after start instead of a new run
+//   -DCCrewBody=Name        every crew member wears SK_Crew_<Name> (checking a newly imported body)
+//   -DCContinue            load the saved run (UDCRunSubsystem::ContinueRun) right after start instead of a new run
 #pragma once
 
 #include "CoreMinimal.h"

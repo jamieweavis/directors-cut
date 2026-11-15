@@ -39,7 +39,14 @@ BODIES = [
      "Crew_Tracksuit.fbm/T_Crew_Tracksuit_normal.jpg"),
     ("Casual", "Crew_Casual.fbx", "Crew_Casual.fbm/T_Crew_Casual_basecolor.jpg",
      "Crew_Casual.fbm/T_Crew_Casual_normal.jpg"),
+    ("NavySweats", "Crew_NavySweats.fbx", "Crew_NavySweats.fbm/T_Crew_NavySweats_basecolor.jpg",
+     "Crew_NavySweats.fbm/T_Crew_NavySweats_normal.jpg"),
 ]
+
+# Bodies Interchange mangles: it rejects the FBX bind pose ("Imported skeleton has some invalid bind poses"),
+# rebinds at time zero and comes out ~100x too big with stretched skin. The legacy FBX importer recreates the bind
+# pose from the rest pose (identical in these files) and imports them cleanly.
+LEGACY_FBX = {"NavySweats"}
 
 
 def log(msg):
@@ -58,6 +65,24 @@ def import_file(path, name, options=None):
         t.set_editor_property("options", options)
     AT.import_asset_tasks([t])
     return list(t.get_editor_property("imported_object_paths") or [])
+
+
+def import_legacy_fbx(path, name):
+    """Skeletal FBX through the pre-Interchange importer (see LEGACY_FBX)."""
+    ui = unreal.FbxImportUI()
+    ui.set_editor_property("import_mesh", True)
+    ui.set_editor_property("import_as_skeletal", True)
+    ui.set_editor_property("mesh_type_to_import", unreal.FBXImportType.FBXIT_SKELETAL_MESH)
+    ui.set_editor_property("import_animations", False)
+    ui.set_editor_property("import_materials", False)
+    ui.set_editor_property("import_textures", False)
+    ui.set_editor_property("create_physics_asset", True)
+    ui.skeletal_mesh_import_data.set_editor_property("convert_scene_unit", True)
+    unreal.SystemLibrary.execute_console_command(None, "Interchange.FeatureFlags.Import.FBX False")
+    try:
+        return import_file(path, name, ui)
+    finally:
+        unreal.SystemLibrary.execute_console_command(None, "Interchange.FeatureFlags.Import.FBX True")
 
 
 def make_skin_material():
@@ -125,7 +150,10 @@ def import_body(art, name, fbx, base_jpg, normal_jpg, skin):
     log("%s textures: %s %s" % (name, tex_paths, ntex))
 
     before = set(EAL.list_assets(DEST, recursive=True, include_folder=False))
-    mesh_paths = import_file(os.path.join(art, fbx), "SK_Crew_" + name)
+    if name in LEGACY_FBX:
+        mesh_paths = import_legacy_fbx(os.path.join(art, fbx), "SK_Crew_" + name)
+    else:
+        mesh_paths = import_file(os.path.join(art, fbx), "SK_Crew_" + name)
     log("%s fbx imported: %s" % (name, mesh_paths))
     mesh = None
     for p in mesh_paths:
