@@ -14,6 +14,7 @@
 #include "Engine/Engine.h"
 #include "Engine/ExponentialHeightFog.h"
 #include "Engine/PostProcessVolume.h"
+#include "Core/DCStyle.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -120,9 +121,9 @@ void ADCLandscape::Ground(FName Key, int32 Pattern, const FLinearColor& A, const
 {
 	UMaterialInstanceDynamic* D = MakeMID(GroundPath, Key);
 	if (!D) { return; }
-	D->SetVectorParameterValue("ColorA", A);
-	D->SetVectorParameterValue("ColorB", B);
-	D->SetVectorParameterValue("ColorC", C);
+	D->SetVectorParameterValue("ColorA", DCStyle::Tone(A));
+	D->SetVectorParameterValue("ColorB", DCStyle::Tone(B));
+	D->SetVectorParameterValue("ColorC", DCStyle::Tone(C));
 	D->SetScalarParameterValue("Pattern", (float)Pattern);
 	D->SetScalarParameterValue("Roughness", Rough);
 	D->SetScalarParameterValue("Axis", Axis);
@@ -131,28 +132,29 @@ void ADCLandscape::Ground(FName Key, int32 Pattern, const FLinearColor& A, const
 	GroundMIDs.Add(D);
 }
 
-void ADCLandscape::Foliage(FName Key, const FLinearColor& A, const FLinearColor& B, const FLinearColor& C, float CMix, float Wind, float AOMin)
+void ADCLandscape::Foliage(FName Key, const FLinearColor& A, const FLinearColor& B, const FLinearColor& C, float CMix, float Wind, float AOMin, float UpN)
 {
 	UMaterialInstanceDynamic* D = MakeMID(FoliagePath, Key);
 	if (!D) { return; }
-	D->SetVectorParameterValue("ColorA", A);
-	D->SetVectorParameterValue("ColorB", B);
-	D->SetVectorParameterValue("ColorC", C);
+	D->SetVectorParameterValue("ColorA", DCStyle::Tone(A));
+	D->SetVectorParameterValue("ColorB", DCStyle::Tone(B));
+	D->SetVectorParameterValue("ColorC", DCStyle::Tone(C));
 	D->SetScalarParameterValue("CMix", CMix);
 	D->SetScalarParameterValue("Wind", Wind);
 	D->SetScalarParameterValue("AOMin", AOMin);
+	D->SetScalarParameterValue("UpN", UpN);
 }
 
 void ADCLandscape::Proc(FName Key, int32 Pattern, const FLinearColor& A, const FLinearColor& B, float Rough, float Scale, float Dirt, float Axis)
 {
 	UMaterialInstanceDynamic* D = MakeMID(ProcPath, Key);
 	if (!D) { return; }
-	D->SetVectorParameterValue("ColorA", A);
-	D->SetVectorParameterValue("ColorB", B);
+	D->SetVectorParameterValue("ColorA", DCStyle::Tone(A));
+	D->SetVectorParameterValue("ColorB", DCStyle::Tone(B));
 	D->SetScalarParameterValue("Pattern", (float)Pattern);
 	D->SetScalarParameterValue("Roughness", Rough);
 	D->SetScalarParameterValue("Scale", Scale);
-	D->SetScalarParameterValue("Dirt", Dirt);
+	D->SetScalarParameterValue("Dirt", DCStyle::Dirt(Dirt));
 	D->SetScalarParameterValue("Axis", Axis);
 }
 
@@ -214,10 +216,10 @@ void ADCLandscape::InitAssets()
 	Ground("HillMat", 0, C(0.05f, 0.11f, 0.035f), C(0.13f, 0.14f, 0.06f), C(0.035f, 0.075f, 0.03f), 0.95f);
 
 	// ---- foliage (M_DC_Foliage)
-	Foliage("Grass", C(0.06f, 0.14f, 0.03f), C(0.17f, 0.19f, 0.06f), C(0.26f, 0.22f, 0.09f), 0.55f, 5.f, 0.6f);
-	Foliage("GrassLush", C(0.045f, 0.13f, 0.03f), C(0.09f, 0.18f, 0.04f), C(0.16f, 0.2f, 0.06f), 0.3f, 4.f, 0.6f);
-	Foliage("Reeds", C(0.13f, 0.17f, 0.05f), C(0.30f, 0.26f, 0.10f), C(0.35f, 0.3f, 0.12f), 0.4f, 7.f, 0.35f);
-	Foliage("Crop", C(0.08f, 0.18f, 0.03f), C(0.14f, 0.21f, 0.05f), C(0.2f, 0.25f, 0.05f), 0.2f, 3.f, 0.55f);
+	Foliage("Grass", C(0.06f, 0.14f, 0.03f), C(0.17f, 0.19f, 0.06f), C(0.26f, 0.22f, 0.09f), 0.55f, 5.f, 0.85f, 1.f);
+	Foliage("GrassLush", C(0.045f, 0.13f, 0.03f), C(0.09f, 0.18f, 0.04f), C(0.16f, 0.2f, 0.06f), 0.3f, 4.f, 0.85f, 1.f);
+	Foliage("Reeds", C(0.13f, 0.17f, 0.05f), C(0.30f, 0.26f, 0.10f), C(0.35f, 0.3f, 0.12f), 0.4f, 7.f, 0.35f, 0.7f);
+	Foliage("Crop", C(0.08f, 0.18f, 0.03f), C(0.14f, 0.21f, 0.05f), C(0.2f, 0.25f, 0.05f), 0.2f, 3.f, 0.55f, 1.f);
 	Foliage("PetalWhite", C(0.85f, 0.85f, 0.80f), C(0.95f, 0.92f, 0.75f), C(0.9f, 0.9f, 0.8f), 0.f, 4.f, 1.f);
 	Foliage("PetalYellow", C(0.85f, 0.62f, 0.04f), C(0.95f, 0.80f, 0.10f), C(0.9f, 0.7f, 0.1f), 0.f, 4.f, 1.f);
 	Foliage("PetalViolet", C(0.35f, 0.15f, 0.65f), C(0.55f, 0.30f, 0.80f), C(0.5f, 0.2f, 0.7f), 0.f, 4.f, 1.f);
@@ -423,16 +425,41 @@ void ADCLandscape::BuildLightingAndPost()
 	S.bOverride_SceneFringeIntensity = true; S.SceneFringeIntensity = 0.f;
 	S.bOverride_MotionBlurAmount = true; S.MotionBlurAmount = 0.f;
 	S.bOverride_LensFlareIntensity = true; S.LensFlareIntensity = 0.f;
-	// lush rural grade: gentle saturation lift, soft contrast, warm highlights, cool-teal shadows
-	S.bOverride_ColorSaturation = true; S.ColorSaturation = FVector4(1.f, 1.f, 1.f, 1.0f);
-	S.bOverride_ColorContrast = true; S.ColorContrast = FVector4(1.f, 1.f, 1.f, 1.04f);
-	S.bOverride_ColorGainShadows = true; S.ColorGainShadows = FVector4(0.96f, 1.0f, 1.05f, 1.f);
-	S.bOverride_ColorGainHighlights = true; S.ColorGainHighlights = FVector4(1.03f, 1.0f, 0.96f, 1.f);
+	// toybox grade: clean saturated colour, soft violet-blue shadows that never go black, warm highlights
+	S.bOverride_ColorSaturation = true; S.ColorSaturation = FVector4(1.f, 1.f, 1.f, 1.12f);
+	S.bOverride_ColorContrast = true; S.ColorContrast = FVector4(1.f, 1.f, 1.f, 1.03f);
+	S.bOverride_ColorGainShadows = true; S.ColorGainShadows = FVector4(0.95f, 0.98f, 1.10f, 1.06f);
+	S.bOverride_ColorOffsetShadows = true; S.ColorOffsetShadows = FVector4(0.004f, 0.003f, 0.010f, 0.f);
+	S.bOverride_ColorGainHighlights = true; S.ColorGainHighlights = FVector4(1.04f, 1.0f, 0.95f, 1.f);
+	S.bOverride_FilmToe = true; S.FilmToe = 0.42f;
 	S.bOverride_ToneCurveAmount = true; S.ToneCurveAmount = 1.f;
 	S.bOverride_LumenSceneLightingQuality = true; S.LumenSceneLightingQuality = 1.f;
 	S.bOverride_LumenFinalGatherQuality = true; S.LumenFinalGatherQuality = 1.f;
 	S.bOverride_LumenSkylightLeaking = true; S.LumenSkylightLeaking = 0.3f;
 	S.bOverride_IndirectLightingIntensity = true; S.IndirectLightingIntensity = 1.1f;
+
+	// Ink outlines + cel-banded lighting (one cheap post pass; see Tools/style_materials.py and Core/DCStyle.h).
+	if (DCStyle::ToonEnabled())
+	{
+		if (UMaterialInterface* Toon = LoadObject<UMaterialInterface>(nullptr, DCStyle::ToonMaterialPath))
+		{
+			ToonMID = UMaterialInstanceDynamic::Create(Toon, this);
+			auto Param = [this](const TCHAR* Flag, const TCHAR* Name)
+			{
+				float V = 0.f;
+				if (FParse::Value(FCommandLine::Get(), Flag, V)) { ToonMID->SetScalarParameterValue(Name, V); }
+			};
+			Param(TEXT("DCToonOutline="), TEXT("Outline"));
+			Param(TEXT("DCToonThick="), TEXT("Thickness"));
+			Param(TEXT("DCToonBand="), TEXT("Band"));
+			Param(TEXT("DCToonStep="), TEXT("BandStep"));
+			Param(TEXT("DCToonSoft="), TEXT("BandSoft"));
+			Param(TEXT("DCToonDepth="), TEXT("DepthEdge"));
+			Param(TEXT("DCToonNormal="), TEXT("NormalEdge"));
+			S.AddBlendable(ToonMID, 1.f);
+		}
+		else { UE_LOG(LogDC, Warning, TEXT("[Landscape] M_DC_Toon missing: run Tools/style_materials.py")); }
+	}
 
 	// Height fog: a thin distance haze + a ground-hugging mist layer (both driven per hour by ADCDayNight).
 	AExponentialHeightFog* Fog = GetWorld()->SpawnActor<AExponentialHeightFog>(FVector(0.f, 0.f, -3.f), FRotator::ZeroRotator);

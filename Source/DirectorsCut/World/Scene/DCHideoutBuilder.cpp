@@ -22,6 +22,7 @@
 #include "Engine/ExponentialHeightFog.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/PostProcessVolume.h"
+#include "Core/DCStyle.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Engine/Engine.h"
@@ -231,11 +232,11 @@ void ADCHideoutBuilder::Proc(FName Key, int32 Pattern, const FLinearColor& A, co
 	if (ProcBase)
 	{
 		D = UMaterialInstanceDynamic::Create(ProcBase, this);
-		D->SetVectorParameterValue("ColorA", A);
-		D->SetVectorParameterValue("ColorB", B);
+		D->SetVectorParameterValue("ColorA", DCStyle::Tone(A));
+		D->SetVectorParameterValue("ColorB", DCStyle::Tone(B));
 		D->SetScalarParameterValue("Pattern", (float)Pattern);
 		D->SetScalarParameterValue("Scale", Scale);
-		D->SetScalarParameterValue("Dirt", Dirt);
+		D->SetScalarParameterValue("Dirt", DCStyle::Dirt(Dirt));
 		D->SetScalarParameterValue("Axis", Axis);
 	}
 	else if (UMaterialInterface* Surf = LoadObject<UMaterialInterface>(nullptr, DCPaths::MatSurface))

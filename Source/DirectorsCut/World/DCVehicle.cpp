@@ -1,4 +1,5 @@
 #include "World/DCVehicle.h"
+#include "Core/DCStyle.h"
 #include "Core/DCAssetPaths.h"
 #include "Core/DCSiteLayout.h"
 #include "Core/DCRunSubsystem.h"
@@ -70,7 +71,7 @@ UMaterialInstanceDynamic* ADCVehicle::MakeMID(const TCHAR* Path, const FLinearCo
 	if (bBasic) { M->SetVectorParameterValue(TEXT("Color"), Color); Owned.Add(M); return M; }
 	if (Path == DCPaths::MatSurface)
 	{
-		M->SetVectorParameterValue(TEXT("BaseColor"), Color);
+		M->SetVectorParameterValue(TEXT("BaseColor"), DCStyle::Tone(Color));
 		M->SetScalarParameterValue(TEXT("Roughness"), A);
 		M->SetScalarParameterValue(TEXT("Metallic"), B);
 	}

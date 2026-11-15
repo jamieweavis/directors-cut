@@ -6,6 +6,33 @@
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "DirectorsCut.h"
+#include "Widgets/SLeafWidget.h"
+#include "Rendering/DrawElements.h"
+
+/** Title-screen scrim: solid dark on the left 40%, easing out to clear on the right. */
+class SDCTitleShade : public SLeafWidget
+{
+public:
+	SLATE_BEGIN_ARGS(SDCTitleShade) {}
+	SLATE_END_ARGS()
+	void Construct(const FArguments&) { SetVisibility(EVisibility::HitTestInvisible); }
+	virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(8.f, 8.f); }
+	virtual int32 OnPaint(const FPaintArgs&, const FGeometry& Geo, const FSlateRect&, FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& Style, bool) const override
+	{
+		const float W = Geo.GetLocalSize().X;
+		const float Tint = Style.GetColorAndOpacityTint().A;
+		TArray<FSlateGradientStop> Stops;
+		const int32 N = 32;
+		for (int32 i = 0; i <= N; ++i)
+		{
+			const float X = (float)i / N;
+			const float Alpha = X < 0.4f ? 0.84f : 0.84f * FMath::Pow(1.f - (X - 0.4f) / 0.6f, 1.6f);
+			Stops.Emplace(FVector2f(X * W, 0.f), FLinearColor(0.01f, 0.012f, 0.016f, Alpha * Tint));
+		}
+		FSlateDrawElement::MakeGradient(Out, Layer, Geo.ToPaintGeometry(), MoveTemp(Stops), Orient_Vertical);
+		return Layer;
+	}
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Build
@@ -438,14 +465,8 @@ TSharedRef<SWidget> SDCRoot::BuildTitle()
 	Menu->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 10.f)[MenuBtn(TEXT("settings"), TEXT("Options"), FString(), [this]() { SetView(EView::Options); }, EBtn::Secondary, true)];
 	Menu->AddSlot().AutoHeight()[MenuBtn(TEXT("power"), TEXT("Quit"), FString(), [this]() { QuitGame(); }, EBtn::Ghost, true)];
 
-	// Smooth left-to-right shade: many thin slices with an eased falloff.
-	TSharedRef<SHorizontalBox> Shade = SNew(SHorizontalBox);
-	for (int32 i = 0; i < 48; ++i)
-	{
-		const float X = i / 47.f;
-		const float Alpha = X < 0.4f ? 0.84f : 0.84f * FMath::Pow(1.f - (X - 0.4f) / 0.6f, 1.6f);
-		Shade->AddSlot().FillWidth(1.f)[SNew(SImage).Image(WhiteBrush()).ColorAndOpacity(FLinearColor(0.01f, 0.012f, 0.016f, Alpha))];
-	}
+	// Smooth left-to-right shade: one real gradient (slices leave visible steps and seams over a bright scene).
+	TSharedRef<SWidget> Shade = SNew(SDCTitleShade);
 
 	return SNew(SOverlay)
 		// left-side shade so the wordmark reads over the scene

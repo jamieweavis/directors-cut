@@ -81,6 +81,6 @@ protected:
 	float EVNight = -1.6f;
 	float SunLux = 110.f;
 	float MoonLux = 4.f;
-	float SkyDay = 10.f;
+	float SkyDay = 20.f;   // generous sky fill: shadows read as colour, not black
 	float SkyNight = 1.2f;
 };

@@ -20,7 +20,7 @@
 #   M_DC_Ground    : opaque lit procedural terrain (world-aligned). ColorA/B/C, FarColor (vec); Pattern, Scale, Roughness,
 #                    Axis, Center, Width, FarStart, FarEnd. Pattern: 0 meadow 1 mown lawn 2 gravel 3 dirt track (ruts,
 #                    grass centre strip; Axis 0 = along X, Center/Width across) 4 ploughed rows 5 mud/soil
-#   M_DC_Foliage   : two-sided lit foliage, per-instance hue (ColorA..ColorB), macro tint ColorC (CMix), vertex colour
+#   M_DC_Foliage   : two-sided lit foliage, per-instance hue (ColorA..ColorB), UpN (1 = lit as flat ground), macro tint ColorC (CMix), vertex colour
 #                    R = height/AO, G = wind weight. Wind WPO. Params ColorA, ColorB, ColorC, CMix, Wind, Roughness, AOMin
 #   M_DC_Water     : opaque glossy water with animated ripples + night glow. Color, Deep, GlowColor, Glow, Ripple
 import unreal
@@ -632,6 +632,10 @@ def ground():
     c = custom(m, GROUND_CODE, ins, out_type=unreal.CustomMaterialOutputType.CMOT_FLOAT4, desc="DCGround")
     MEL.connect_material_property(mask(m, c, True, True, True, False, -200, -200), "", MP.MP_BASE_COLOR)
     MEL.connect_material_property(mask(m, c, False, False, False, True, -200, 0), "", MP.MP_ROUGHNESS)
+    # Specular 0 = "soft" surface class: matte toy look, and M_DC_Toon keeps ink lines off grass and leaf facets
+    sp0 = expr(m, unreal.MaterialExpressionConstant, -400, 420)
+    sp0.set_editor_property("r", 0.0)
+    MEL.connect_material_property(sp0, "", MP.MP_SPECULAR)
     return m
 
 
@@ -668,6 +672,25 @@ def foliage():
                                   ("CMix", cm), ("AOMin", ao)], desc="DCFoliage", y=-300)
     MEL.connect_material_property(c, "", MP.MP_BASE_COLOR)
     MEL.connect_material_property(rgh, "", MP.MP_ROUGHNESS)
+    # Specular 0 = "soft" surface class: matte toy look, and M_DC_Toon keeps ink lines off grass and leaf facets
+    sp0 = expr(m, unreal.MaterialExpressionConstant, -400, 420)
+    sp0.set_editor_property("r", 0.0)
+    MEL.connect_material_property(sp0, "", MP.MP_SPECULAR)
+    # UpN 1 = shade as if facing straight up (grass blades take the ground's lighting instead of going dark side-on)
+    upn = sparam(m, "UpN", 0.0, -1200, 600)
+    upc = expr(m, unreal.MaterialExpressionConstant3Vector, -1200, 680)
+    upc.set_editor_property("constant", unreal.LinearColor(0, 0, 1, 0))
+    upt = expr(m, unreal.MaterialExpressionTransform, -900, 680)
+    upt.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_WORLD)
+    upt.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_TANGENT)
+    MEL.connect_material_expressions(upc, "", upt, "")
+    upl = expr(m, unreal.MaterialExpressionLinearInterpolate, -600, 640)
+    MEL.connect_material_expressions(upc, "", upl, "A")
+    # two-sided materials flip the shading normal on back faces: undo that for the up vector or half the blades go black
+    ups = mul(m, upt, expr(m, unreal.MaterialExpressionTwoSidedSign, -900, 760), -750, 700)
+    MEL.connect_material_expressions(ups, "", upl, "B")
+    MEL.connect_material_expressions(upn, "", upl, "Alpha")
+    MEL.connect_material_property(upl, "", MP.MP_NORMAL)
     w = custom(m, WIND_CODE, [("P", wp), ("VC", vc), ("R", pr), ("T", t), ("Wind", wind)], desc="DCWind", y=300)
     MEL.connect_material_property(w, "", MP.MP_WORLD_POSITION_OFFSET)
     return m

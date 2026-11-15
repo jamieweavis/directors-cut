@@ -57,7 +57,7 @@ protected:
 	void InitAssets();
 	UMaterialInstanceDynamic* MakeMID(const TCHAR* ParentPath, FName Key);
 	void Ground(FName Key, int32 Pattern, const FLinearColor& A, const FLinearColor& B, const FLinearColor& C, float Rough, float Axis = 0.f, float Center = 0.f, float Width = 500.f);
-	void Foliage(FName Key, const FLinearColor& A, const FLinearColor& B, const FLinearColor& C, float CMix, float Wind, float AOMin = 0.35f);
+	void Foliage(FName Key, const FLinearColor& A, const FLinearColor& B, const FLinearColor& C, float CMix, float Wind, float AOMin = 0.35f, float UpN = 0.f);
 	void Proc(FName Key, int32 Pattern, const FLinearColor& A, const FLinearColor& B, float Rough, float Scale = 1.f, float Dirt = 0.4f, float Axis = 0.f);
 	void Glow(FName Key, const FLinearColor& Color, float Strength, float Flicker = 0.f);
 	UMaterialInterface* M(FName Key) const;
@@ -67,6 +67,7 @@ protected:
 	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> GroundMIDs;    // FarColor follows the haze
 	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> NightGlowMIDs; // Strength fades in at dusk
 	TArray<float> NightGlowBase;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> ToonMID;  // ink outline + cel band post pass (null when off)
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> WaterMID;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> FireflyMID;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> FireMID;
