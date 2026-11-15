@@ -102,6 +102,7 @@ protected:
 	TWeakObjectPtr<ADCWorldDirector> Director;
 	int32 CriminalId = INDEX_NONE;
 	bool bFemale = false;          // female crew wear CrewBodiesFemale, driven by the hidden Quinn mannequin
+	int32 BodyIndex = INDEX_NONE;  // FDCCriminal::Body; none = pick by id
 	EDCCriminalType Type = EDCCriminalType::Muscle;
 	FString ShortName;
 	int32 Level = 1;

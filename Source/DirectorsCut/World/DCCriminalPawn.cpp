@@ -79,6 +79,7 @@ void ADCCriminalPawn::InitFromCriminal(const FDCCriminal& C, ADCWorldDirector* I
 	CriminalId = C.Id;
 	Type = C.Type;
 	bFemale = C.bFemale;
+	BodyIndex = C.Body;
 	Rng.Initialize(0x5EED + C.Id * 977);
 	SetupVisuals();
 	bInitialized = true;
@@ -157,10 +158,10 @@ void ADCCriminalPawn::SetupVisuals()
 		M->SetVisibility(false, /*bPropagateToChildren*/ false);
 		M->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 
-		// Crew pick a body by id; skip any that didn't import.
+		// Crew wear the body the sim gave them (by id for old saves); skip any that didn't import.
 		USkeletalMesh* BodyMesh = nullptr;
 		UMaterialInterface* Skin = nullptr;
-		int32 First = FMath::Abs(CriminalId) % NumBodies;
+		int32 First = (BodyIndex >= 0 && BodyIndex < NumBodies && !bForce) ? BodyIndex : FMath::Abs(CriminalId) % NumBodies;
 		if (bForce && HasBody(Bodies, NumBodies) != INDEX_NONE) { First = HasBody(Bodies, NumBodies); }
 		for (int32 k = 0; k < NumBodies && !BodyMesh; ++k)
 		{

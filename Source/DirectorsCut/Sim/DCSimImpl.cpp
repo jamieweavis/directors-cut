@@ -1,6 +1,7 @@
 // Director's Cut — simulation internals: effects, generation, success formula, mission resolution, timers (Agent A).
 #include "Sim/DCSimImpl.h"
 #include "DirectorsCut.h"
+#include "Core/DCAssetPaths.h"
 #include "Kismet/GameplayStatics.h"
 
 namespace
@@ -202,6 +203,25 @@ FDCCriminal FDCSimImpl::MakeCriminal(S& Sim, EDCCriminalType Type, EDCQuality Qu
 	C.Nickname = PickUnused(D.Nicknames.FindChecked(Type), UsedNick);
 	C.Seed = R.RandRange(0, MAX_int32 - 1);
 	C.bFemale = D.FemaleFirstNames.Contains(C.FirstName) || (!D.MaleFirstNames.Contains(C.FirstName) && (C.Seed & 1));
+	// A random body nobody in the roster or recruit pool is wearing (least-worn if every one is taken). Chosen
+	// from the seed, so it costs no extra RNG draws.
+	{
+		const int32 NumBodies = C.bFemale ? UE_ARRAY_COUNT(DCPaths::CrewBodiesFemale) : UE_ARRAY_COUNT(DCPaths::CrewBodies);
+		TArray<int32> Worn;
+		Worn.SetNumZeroed(NumBodies);
+		for (const TArray<FDCCriminal>* List : { &Sim.Roster, &Sim.Recruits })
+		{
+			for (const FDCCriminal& O : *List)
+			{
+				const int32 OB = O.Body != INDEX_NONE ? O.Body : FMath::Abs(O.Id) % NumBodies;
+				if (O.bFemale == C.bFemale && Worn.IsValidIndex(OB)) { ++Worn[OB]; }
+			}
+		}
+		const int32 Least = FMath::Min(Worn);
+		TArray<int32> Free;
+		for (int32 b = 0; b < NumBodies; ++b) { if (Worn[b] == Least) { Free.Add(b); } }
+		C.Body = Free[(C.Seed >> 1) % Free.Num()];
+	}
 	C.Level = FMath::Clamp(Level, 1, B.MaxLevel);
 	C.XP = 0;
 	C.XPToNext = XPToNext(Sim, C.Level);

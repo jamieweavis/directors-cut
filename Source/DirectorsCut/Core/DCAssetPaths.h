@@ -36,7 +36,7 @@ namespace DCPaths
 	inline const TCHAR* AnimWalkFwd   = TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Walk/MF_Unarmed_Walk_Fwd.MF_Unarmed_Walk_Fwd");
 	// Crew body (Tools/crew_import.py from Art/Crew). Posed from the hidden mannequin by UDCCrewBodyComponent.
 	//   M_DC_CrewSkin: textured. Params: BaseTex, NormalTex, Tint(vec), Roughness, AccentColor(vec), RimStrength
-	//   Each body has an MI_Crew_<Name> of it with its own textures. Crew pick a body by id (CrewBodies[Id % Num]);
+	//   Each body has an MI_Crew_<Name> of it with its own textures. The sim gives each crew member a body (FDCCriminal::Body);
 	//   female crew pick from CrewBodiesFemale, which are built for (and driven by) the hidden Quinn mannequin.
 	struct FCrewBody { const TCHAR* Mesh; const TCHAR* Skin; };
 	inline const FCrewBody CrewBodies[] = {
