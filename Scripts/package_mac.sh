@@ -69,6 +69,15 @@ APP="$OUT_DIR/Mac/$(basename "$STAGED_APP")"
 echo "==> Copying staged app to $APP"
 ditto "$STAGED_APP" "$APP"
 
+# NNERuntimeORT stages two byte-identical ~50 MB copies of onnxruntime. The module
+# loads libonnxruntime.1.24.dylib by path; point the unversioned name at it.
+ORT_DIR="$(find "$APP" -type d -path '*Onnxruntime/Mac' -print -quit)"
+if [[ -n "$ORT_DIR" && -f "$ORT_DIR/libonnxruntime.1.24.dylib" && -f "$ORT_DIR/libonnxruntime.dylib" && ! -L "$ORT_DIR/libonnxruntime.dylib" ]] \
+   && cmp -s "$ORT_DIR/libonnxruntime.dylib" "$ORT_DIR/libonnxruntime.1.24.dylib"; then
+  echo "==> Deduplicating onnxruntime dylib"
+  ln -sf libonnxruntime.1.24.dylib "$ORT_DIR/libonnxruntime.dylib"
+fi
+
 # Sanity check: every @rpath dylib the executable needs must be inside the bundle.
 EXE="$APP/Contents/MacOS/$(basename "$APP" .app)"
 for lib in $(otool -L "$EXE" | awk '/@rpath\// && !/weak/ {sub("@rpath/","",$1); print $1}'); do
