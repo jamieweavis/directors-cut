@@ -253,6 +253,7 @@ private:
 	// ── v3: focus / fps ──
 	bool bAppWasActive = true;
 	double TitleT0 = -10.0;               // title fade-in start (kept across rebuilds)
+	double PerkDraftT0 = -10.0;           // perk card fade-in start (kept across rebuilds)
 	float PendingUIScale = -1.f;          // UI scale while its slider is dragged (applied on release)
 	bool bClearBoardArmed = false;
 	float FpsSmoothed = 60.f;

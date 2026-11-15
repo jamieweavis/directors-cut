@@ -365,7 +365,7 @@ TSharedRef<SWidget> SDCRoot::BuildPerkDraft()
 {
 	UDCRunSubsystem* R = Run();
 	const TArray<FDCPerk> Offer = R ? R->GetPerkOffer() : TArray<FDCPerk>();
-	const double T0 = Now();
+	const double T0 = PerkDraftT0; // set on open, so background rebuilds don't replay the card intro
 	TSharedRef<SHorizontalBox> Cards = SNew(SHorizontalBox);
 	for (int32 i = 0; i < Offer.Num(); ++i)
 	{
