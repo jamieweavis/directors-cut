@@ -42,6 +42,7 @@ void ADCWorldDirector::Initialize(ADCPlayerController* InPC)
 	PC = InPC;
 	GatherWorld();
 	bWorldTest = FParse::Param(FCommandLine::Get(), TEXT("DCWorldTest"));
+	bCarTest = FParse::Param(FCommandLine::Get(), TEXT("DCCarTest"));
 	TestShotDir = FPaths::ProjectSavedDir() / TEXT("DCShots");
 	FParse::Value(FCommandLine::Get(), TEXT("DCShotDir="), TestShotDir);
 
@@ -279,8 +280,9 @@ void ADCWorldDirector::BuildNav()
 	{
 		const ADCVehicle* C = S.Car.Get();
 		if (!C || !C->IsParked()) { continue; }
-		const FBox2D B = C->GetFootprint();
-		Nav.BlockBox(B.GetCenter(), B.GetExtent(), 0.f, 10.f);
+		FVector2D Ctr, Half; float Yaw;
+		C->GetFootprintOriented(Ctr, Half, Yaw); // bays are slanted: an axis-aligned box would close the gaps between cars
+		Nav.BlockBox(Ctr, Half, Yaw, 8.f);
 	}
 	for (const FVector2D& P : YardFestoonPoles()) { Nav.BlockDisc(P, 10.f + FDCNavGrid::Radius); }
 	{
@@ -811,6 +813,7 @@ void ADCWorldDirector::ClearCars()
 
 void ADCWorldDirector::SetPhase(FCarSlot& S, ECarPhase Phase)
 {
+	S.bWantsOut = false;
 	S.Phase = Phase;
 	S.PhaseTime = 0.f;
 	S.Timer = 0.f;
@@ -820,7 +823,7 @@ void ADCWorldDirector::SyncCars(bool bInstant)
 {
 	const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
 	if (!Run || !Run->HasActiveRun()) { return; }
-	const int32 Want = FMath::Clamp(Run->GetMaxActiveMissions(), 1, DCSite::MaxParkingSlots);
+	const int32 Want = TestSlotsOverride > 0 ? TestSlotsOverride : FMath::Clamp(Run->GetMaxActiveMissions(), 1, DCSite::MaxParkingSlots);
 	while (Slots.Num() < Want)
 	{
 		const int32 I = Slots.Num();
@@ -831,9 +834,10 @@ void ADCWorldDirector::SyncCars(bool bInstant)
 			if (bInstant) { C->ParkAt(DCSite::ParkingSlot(I)); SetPhase(S, ECarPhase::Parked); }
 			else
 			{
-				C->DriveIn(I);
+				// Off-screen until it can drive in without meeting anyone (TickCars: Arriving).
+				C->SetGone();
 				SetPhase(S, ECarPhase::Arriving);
-				UE_LOG(LogDC, Log, TEXT("WorldDirector: new car for slot %d drives in"), I);
+				UE_LOG(LogDC, Log, TEXT("WorldDirector: new car for slot %d on its way"), I);
 			}
 		}
 	}
@@ -935,6 +939,7 @@ void ADCWorldDirector::TickCars(float Dt)
 {
 	const UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
 	if (!Run || !Run->HasActiveRun()) { return; }
+	CarClock += Dt;
 	for (int32 SI = 0; SI < Slots.Num(); ++SI)
 	{
 		FCarSlot& S = Slots[SI];
@@ -953,7 +958,8 @@ void ADCWorldDirector::TickCars(float Dt)
 		switch (S.Phase)
 		{
 		case ECarPhase::Arriving:
-			if (Car->IsParked()) { SetPhase(S, ECarPhase::Parked); }
+			if (Car->IsGone()) { TryStartCar(SI, true); }
+			else if (Car->IsParked()) { SetPhase(S, ECarPhase::Parked); }
 			break;
 
 		case ECarPhase::Boarding:
@@ -976,6 +982,7 @@ void ADCWorldDirector::TickCars(float Dt)
 					}
 				}
 				Car->SetDoorsOpen(false);
+				Car->SetEngineRunning(false);
 				S.MissionId = INDEX_NONE;
 				S.Crew.Reset();
 				SetPhase(S, ECarPhase::Parked);
@@ -999,10 +1006,12 @@ void ADCWorldDirector::TickCars(float Dt)
 			{
 				if (!bAll) { for (int32 Id : S.Crew) { if (ADCCriminalPawn* P = FindPawn(Id)) { P->SetAway(); } } }
 				S.Timer += Dt;
-				if (S.Timer > 0.35f) { Car->SetDoorsOpen(false); }
-				if (S.Timer > 1.0f)
+				if (S.Timer > 0.35f) { Car->SetDoorsOpen(false); Car->SetEngineRunning(true); }
+				// Pull out once the doors are shut, unless another car is on the move nearby: then wait, engine
+				// running, until our whole drive keeps clear of it (and a beat after the last car set off).
+				S.bWantsOut = S.Timer > 1.1f;
+				if (S.bWantsOut && TryStartCar(SI, false))
 				{
-					Car->DriveAway(SI);
 					SetPhase(S, ECarPhase::Departing);
 					UE_LOG(LogDC, Log, TEXT("WorldDirector: slot %d drives off (mission %d)"), SI, S.MissionId);
 				}
@@ -1019,9 +1028,8 @@ void ADCWorldDirector::TickCars(float Dt)
 			// Leave so the car parks about when the job finishes. The car runs at game speed (CustomTimeDilation),
 			// so its own clock needs the run time left over the dev time scale only.
 			const double RealLeft = bRunning ? Run->GetMissionTimeRemaining(S.MissionId) / FMath::Max(0.01f, Run->GetTimeScale()) : 0.0;
-			if (!bRunning || RealLeft <= ADCVehicle::EstimateDriveInSeconds())
+			if ((!bRunning || RealLeft <= Car->ArriveSeconds(SI)) && TryStartCar(SI, true))
 			{
-				Car->DriveIn(SI);
 				SetPhase(S, ECarPhase::Returning);
 				UE_LOG(LogDC, Log, TEXT("WorldDirector: slot %d heading home (mission %d, %.1fs left)"), SI, S.MissionId, RealLeft);
 			}
@@ -1082,6 +1090,173 @@ void ADCWorldDirector::TickCars(float Dt)
 	}
 	// Retire extra idle slots if the cap ever shrinks.
 	SyncCars(false);
+	if (bCarTest) { MonitorCars(); }
+}
+
+namespace
+{
+	/** Do two rectangles (centre, unit forward, half length, half width) overlap? Separating-axis test. */
+	bool BoxesOverlap(const FVector2D& C1, const FVector2D& F1, float L1, float W1, const FVector2D& C2, const FVector2D& F2, float L2, float W2)
+	{
+		const FVector2D D = C2 - C1;
+		if (D.SizeSquared() > FMath::Square(FMath::Sqrt(L1 * L1 + W1 * W1) + FMath::Sqrt(L2 * L2 + W2 * W2))) { return false; }
+		const FVector2D R1(-F1.Y, F1.X), R2(-F2.Y, F2.X);
+		for (const FVector2D& Ax : { F1, R1, F2, R2 })
+		{
+			const float P1 = L1 * FMath::Abs(FVector2D::DotProduct(F1, Ax)) + W1 * FMath::Abs(FVector2D::DotProduct(R1, Ax));
+			const float P2 = L2 * FMath::Abs(FVector2D::DotProduct(F2, Ax)) + W2 * FMath::Abs(FVector2D::DotProduct(R2, Ax));
+			if (FMath::Abs(FVector2D::DotProduct(D, Ax)) > P1 + P2) { return false; }
+		}
+		return true;
+	}
+}
+
+bool ADCWorldDirector::WouldClash(const FDCCarPlan& Plan, const ADCVehicle* Self) const
+{
+	// Every drive is a fixed timeline, so step through ours alongside every car already moving and look for any
+	// moment the two bodies (plus a little elbow room) would touch.
+	constexpr float Margin = 16.f, Dt = 0.1f;
+	TArray<const ADCVehicle*> Moving;
+	for (const FCarSlot& O : Slots)
+	{
+		const ADCVehicle* C = O.Car.Get();
+		if (C && C != Self && C->IsDriving()) { Moving.Add(C); }
+	}
+	if (Moving.Num() == 0) { return false; }
+	const float End = Plan.HideAtTime > 0.f ? Plan.HideAtTime : Plan.Duration();
+	const float L1 = Plan.Length * 0.5f + Margin, W1 = Plan.Width * 0.5f + Margin;
+	for (float T = 0.f; T <= End; T += Dt)
+	{
+		FVector2D C1, F1;
+		Plan.PoseAt(T, C1, F1);
+		for (const ADCVehicle* O : Moving)
+		{
+			FVector2D C2, F2;
+			if (!O->PredictPose(T, C2, F2)) { continue; }
+			if (BoxesOverlap(C1, F1, L1, W1, C2, F2, O->GetLength() * 0.5f + Margin, O->GetWidth() * 0.5f + Margin)) { return true; }
+		}
+	}
+	return false;
+}
+
+bool ADCWorldDirector::TryStartCar(int32 SlotIndex, bool bArrive)
+{
+	if (!Slots.IsValidIndex(SlotIndex)) { return false; }
+	ADCVehicle* Car = Slots[SlotIndex].Car.Get();
+	if (!Car) { return false; }
+	// Stagger: never two cars setting off at once, even where their routes don't meet.
+	if (CarClock - LastCarStart < MinCarStartGap) { return false; }
+	// A loaded car waiting to pull out goes first: arrivals wait off-screen (unseen) rather than keep it parked
+	// while a stream of cars comes in past it.
+	if (bArrive)
+	{
+		for (int32 i = 0; i < Slots.Num(); ++i) { if (i != SlotIndex && Slots[i].bWantsOut) { return false; } }
+		if (CarTestDepart.Num()) { return false; }
+	}
+	const FDCCarPlan Plan = Car->PlanDrive(SlotIndex, bArrive);
+	if (!Plan.IsValid()) { return false; }
+	if (WouldClash(Plan, Car)) { return false; }
+	Car->StartDrive(Plan);
+	LastCarStart = CarClock;
+	return true;
+}
+
+namespace
+{
+	/** Separating-axis gap between two rectangles (cm; negative = overlapping). A lower bound on their distance. */
+	float BoxGap(const FVector2D& C1, const FVector2D& F1, float L1, float W1, const FVector2D& C2, const FVector2D& F2, float L2, float W2)
+	{
+		const FVector2D D = C2 - C1, R1(-F1.Y, F1.X), R2(-F2.Y, F2.X);
+		float Gap = -1e9f;
+		for (const FVector2D& Ax : { F1, R1, F2, R2 })
+		{
+			const float P1 = L1 * FMath::Abs(FVector2D::DotProduct(F1, Ax)) + W1 * FMath::Abs(FVector2D::DotProduct(R1, Ax));
+			const float P2 = L2 * FMath::Abs(FVector2D::DotProduct(F2, Ax)) + W2 * FMath::Abs(FVector2D::DotProduct(R2, Ax));
+			Gap = FMath::Max(Gap, FMath::Abs(FVector2D::DotProduct(D, Ax)) - (P1 + P2));
+		}
+		return Gap;
+	}
+}
+
+void ADCWorldDirector::MonitorCars()
+{
+	for (int32 i = 0; i < Slots.Num(); ++i)
+	{
+		const ADCVehicle* A = Slots[i].Car.Get();
+		if (!A || !A->IsDriving()) { continue; }
+		const FVector2D CA(A->GetActorLocation()), FA(A->GetActorForwardVector());
+		for (int32 j = 0; j < Slots.Num(); ++j)
+		{
+			const ADCVehicle* B = Slots[j].Car.Get();
+			if (j == i || !B || B->IsGone() || (B->IsDriving() && j < i)) { continue; }
+			const float Gap = BoxGap(CA, FA, A->GetLength() * 0.5f, A->GetWidth() * 0.5f, FVector2D(B->GetActorLocation()), FVector2D(B->GetActorForwardVector()), B->GetLength() * 0.5f, B->GetWidth() * 0.5f);
+			float& Min = B->IsDriving() ? CarMinGapMoving : CarMinGapParked;
+			if (Gap < Min) { Min = Gap; }
+			if (Gap < 5.f)
+			{
+				++CarTouches;
+				if (CarTouches < 40) { UE_LOG(LogDC, Warning, TEXT("[CarTest] slot %d %s slot %d: gap %.0f cm at %s"), i, B->IsDriving() ? TEXT("near moving") : TEXT("near parked"), j, Gap, *A->GetActorLocation().ToCompactString()); }
+			}
+		}
+	}
+}
+
+void ADCWorldDirector::TickCarTest(float Dt)
+{
+	if (const UDCUISubsystem* UI = UDCUISubsystem::Get(this); UI && UI->IsLoading()) { return; }
+	UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
+	ADCCameraRig* Rig = PC.IsValid() ? PC->GetCameraRig() : nullptr;
+	if (!Run || !Rig || !Run->HasActiveRun()) { return; }
+	CarTestTime += Dt;
+	// Every car waiting to leave keeps asking; TryStartCar staggers them and holds back any that would meet traffic.
+	for (int32 k = CarTestDepart.Num() - 1; k >= 0; --k)
+	{
+		const int32 SI = CarTestDepart[k];
+		if (Slots.IsValidIndex(SI) && TryStartCar(SI, false))
+		{
+			UE_LOG(LogDC, Display, TEXT("[CarTest] t=%.1f slot %d departs"), CarTestTime, SI);
+			SetPhase(Slots[SI], ECarPhase::Departing);
+			CarTestDepart.RemoveAt(k);
+		}
+	}
+	if (CarTestStep >= 2 && CarTestTime >= CarTestNext && CarTestShot < 60)
+	{
+		TestShot(FString::Printf(TEXT("ct_%02d"), CarTestShot++));
+		CarTestNext = CarTestTime + 2.0;
+	}
+	switch (CarTestStep)
+	{
+	case 0:
+		if (CarTestTime < 2.0) { break; }
+		TestSlotsOverride = DCSite::MaxParkingSlots;
+		SyncCars(true);
+		Rig->FocusOn(FVector(-150.f, -1750.f, 0.f), 0.08f);
+		CarTestStep = 1; CarTestNext = CarTestTime + 2.5;
+		break;
+	case 1:
+		if (CarTestTime < CarTestNext) { break; }
+		// Everyone leaves at once (as if eight crews all got in together), in a shuffled order.
+		for (int32 i : { 2, 0, 5, 1, 7, 3, 6, 4 }) { if (Slots.IsValidIndex(i) && Slots[i].Phase == ECarPhase::Parked) { CarTestDepart.Add(i); } }
+		UE_LOG(LogDC, Display, TEXT("[CarTest] t=%.1f all %d cars want to leave"), CarTestTime, CarTestDepart.Num());
+		CarTestStep = 2; CarTestNext = CarTestTime;
+		break;
+	case 2:
+	{
+		bool bAllHome = CarTestDepart.Num() == 0;
+		for (const FCarSlot& S : Slots) { if (S.Phase != ECarPhase::Parked) { bAllHome = false; } }
+		if (bAllHome || CarTestTime > 400.0)
+		{
+			UE_LOG(LogDC, Display, TEXT("[CarTest] t=%.1f done (all home %d): closest moving-moving %.0f cm, moving-parked %.0f cm, touches %d"), CarTestTime, bAllHome ? 1 : 0, CarMinGapMoving, CarMinGapParked, CarTouches);
+			TestShot(TEXT("ct_end"));
+			CarTestStep = 3; CarTestNext = CarTestTime + 1.5;
+		}
+		break;
+	}
+	case 3:
+		if (CarTestTime >= CarTestNext) { FPlatformMisc::RequestExit(false); CarTestStep = 4; }
+		break;
+	default: break;
+	}
 }
 
 void ADCWorldDirector::LogSlots(const TCHAR* Tag) const
@@ -1282,7 +1457,7 @@ void ADCWorldDirector::UpdateBounds()
 	}
 	if (!B.IsValid) { return; }
 	// Frame the house and the yard (so the cars are in shot); pan anywhere over the site.
-	const FBox2D Y = DCSite::YardRect();
+	const FBox2D Y = DCSite::ParkingFrameRect();
 	FBox Frame = B;
 	Frame += FVector(Y.Min.X, Y.Min.Y, 0.f);
 	Frame += FVector(Y.Max.X, Y.Max.Y, 0.f);
@@ -1381,6 +1556,7 @@ void ADCWorldDirector::Tick(float DeltaSeconds)
 	}
 	UpdateDebugView(DeltaSeconds);
 	if (bWorldTest) { TickWorldTest(DeltaSeconds); }
+	if (bCarTest) { TickCarTest(DeltaSeconds); }
 }
 
 // ─── Debug view ──────────────────────────────────────────────────────────────
@@ -1634,7 +1810,7 @@ void ADCWorldDirector::TickWorldTest(float Dt)
 	while (Run->HasPendingPerkOffer()) { const TArray<FDCPerk> O = Run->GetPerkOffer(); if (O.Num() == 0) { break; } Run->PickPerk(O[0].Id); }
 	auto Next = [this](double Wait) { StepAt = TestTime + Wait; ++TestStep; };
 	auto Focus = [&](EDCRoomType T, float Zoom) { if (ADCRoomModule* M = FindRoom(T)) { Rig->FocusOn(M->GetFocusPoint(), Zoom); } };
-	auto FocusYard = [&](float Zoom) { const FVector2D C = DCSite::YardRect().GetCenter(); Rig->FocusOn(FVector(C.X, C.Y - 150.f, 0.f), Zoom); };
+	auto FocusYard = [&](float Zoom) { const FVector2D C = DCSite::ParkingFrameRect().GetCenter(); Rig->FocusOn(FVector(C.X, C.Y, 0.f), Zoom); };
 	auto SkipTo = [Run](float Hour) { const float DeltaH = FMath::Fmod(Hour - Run->GetHourOfDay() + 24.f, 24.f); Run->AdvanceTime(DeltaH * 60.0 / FMath::Max(0.01f, Run->GetGameMinutesPerSecond())); };
 	auto Build = [Run](EDCRoomType T)
 	{
@@ -1743,8 +1919,8 @@ void ADCWorldDirector::TickWorldTest(float Dt)
 		break;
 	case 9: TestShot(TEXT("t_hire_walkin")); LogPawns(TEXT("hire")); Next(0.5); break;
 	// Garage: raises the mission cap, so a new car drives in along the lane and parks.
-	case 10: if (!Build(EDCRoomType::Garage)) { GiveCash(); Build(EDCRoomType::Garage); } FinishBuild(); FocusYard(0.3f); Next(4.0); break;
-	case 11: TestShot(TEXT("t_new_car_arriving")); LogSlots(TEXT("new_car")); Next(8.0); break;
+	case 10: if (!Build(EDCRoomType::Garage)) { GiveCash(); Build(EDCRoomType::Garage); } FinishBuild(); FocusYard(0.3f); Next(10.0); break;
+	case 11: TestShot(TEXT("t_new_car_arriving")); LogSlots(TEXT("new_car")); Next(17.0); break;
 	case 12: TestShot(TEXT("t_new_car_parked")); LogSlots(TEXT("new_car_parked")); Next(0.5); break;
 	// Missions: crews walk to the cars, get in, drive off.
 	case 13: StartAll(99); FocusYard(0.25f); LogSlots(TEXT("started")); Next(3.0); break;
@@ -1758,11 +1934,11 @@ void ADCWorldDirector::TickWorldTest(float Dt)
 			// Bring the shortest job to its last seconds: its car heads home and parks about when it ends.
 			const double S = Shortest();
 			if (S < 1e8 && S > 6.0) { Run->AdvanceTime(S - 6.0); }
-			Next(4.0);
+			Next(10.0);
 		}
 		break;
-	case 19: TestShot(TEXT("t_car_returning")); LogSlots(TEXT("returning")); Next(4.0); break;
-	case 20: TestShot(TEXT("t_car_parking")); LogSlots(TEXT("parking")); Next(3.0); break;
+	case 19: TestShot(TEXT("t_car_returning")); LogSlots(TEXT("returning")); Next(9.0); break;
+	case 20: TestShot(TEXT("t_car_parking")); LogSlots(TEXT("parking")); Next(6.0); break;
 	case 21: TestShot(TEXT("t_unloading")); LogSlots(TEXT("unloading")); LogPawns(TEXT("unloading")); Next(3.0); break;
 	case 22: TestShot(TEXT("t_walk_in")); LogPawns(TEXT("walk_in")); Run->AdvanceTime(1300.0); Next(16.0); break;
 	case 23: TestShot(TEXT("t_all_back")); LogSlots(TEXT("all_back")); LogPawns(TEXT("all_back")); Next(0.5); break;

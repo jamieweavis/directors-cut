@@ -15,30 +15,107 @@
 
 namespace
 {
-	constexpr float Cruise = 2300.f;     // cm/s on the lane
-	constexpr float YardSpeed = 650.f;   // cm/s cap near the house
-	constexpr float ReverseSpeed = 230.f;
-	constexpr float Accel = 520.f;       // cm/s^2
-	constexpr float Decel = 820.f;
-	constexpr float LatAccel = 520.f;
-	constexpr float MinCrawl = 45.f;     // profile floor so the car always creeps forward
-	constexpr float OffscreenX = 7000.f; // departures vanish past this, arrivals start here
+	// Speeds (cm/s) and accelerations (cm/s^2): gentle numbers, a farmyard car park rather than a race track.
+	constexpr float Cruise = 1700.f;      // on the lane
+	constexpr float YardSpeed = 520.f;    // straights in the yard and on the driveway (~19 km/h)
+	constexpr float LatAccel = 330.f;     // sideways comfort limit through corners
+	constexpr float AccelYard = 230.f, AccelLane = 420.f;
+	constexpr float DecelYard = 270.f, DecelLane = 520.f;
+	constexpr float StopDecel = 140.f;    // the last couple of metres into the bay
+	constexpr float Step = 10.f;          // route sample spacing (cm)
+	constexpr float MaxLock = 40.f;       // front wheel steer limit for the visuals (deg)
 
 	template <typename T>
 	T* LoadQuiet(const TCHAR* Path) { return LoadObject<T>(nullptr, Path, nullptr, LOAD_NoWarn | LOAD_Quiet); }
 
-	/** Centripetal Catmull-Rom between P1 and P2. */
-	FVector CatmullRom(const FVector& P0, const FVector& P1, const FVector& P2, const FVector& P3, float T)
+	/** Straight legs between the corners, each interior corner rounded with a circular arc of radius R[i] (shrunk where
+	 *  two neighbouring arcs would overlap). Tangent-continuous, so the heading never jumps. */
+	void FilletPath(const TArray<FVector2D>& C, const TArray<float>& R, TArray<FVector2D>& Out)
 	{
-		auto Knot = [](float Ti, const FVector& A, const FVector& B) { return Ti + FMath::Max(1.f, FMath::Sqrt(FVector::Dist(A, B))); };
-		const float T0 = 0.f, T1 = Knot(T0, P0, P1), T2 = Knot(T1, P1, P2), T3 = Knot(T2, P2, P3);
-		const float U = FMath::Lerp(T1, T2, T);
-		const FVector A1 = (T1 - U) / (T1 - T0) * P0 + (U - T0) / (T1 - T0) * P1;
-		const FVector A2 = (T2 - U) / (T2 - T1) * P1 + (U - T1) / (T2 - T1) * P2;
-		const FVector A3 = (T3 - U) / (T3 - T2) * P2 + (U - T2) / (T3 - T2) * P3;
-		const FVector B1 = (T2 - U) / (T2 - T0) * A1 + (U - T0) / (T2 - T0) * A2;
-		const FVector B2 = (T3 - U) / (T3 - T1) * A2 + (U - T1) / (T3 - T1) * A3;
-		return (T2 - U) / (T2 - T1) * B1 + (U - T1) / (T2 - T1) * B2;
+		Out.Reset();
+		const int32 N = C.Num();
+		if (N < 2) { return; }
+		TArray<float> TL, Theta;
+		TL.Init(0.f, N);
+		Theta.Init(0.f, N);
+		for (int32 i = 1; i < N - 1; ++i)
+		{
+			const FVector2D A = (C[i] - C[i - 1]).GetSafeNormal(), B = (C[i + 1] - C[i]).GetSafeNormal();
+			Theta[i] = FMath::Acos(FMath::Clamp(FVector2D::DotProduct(A, B), -1.f, 1.f));
+			TL[i] = R[i] * FMath::Tan(Theta[i] * 0.5f);
+		}
+		for (int32 i = 0; i + 1 < N; ++i)
+		{
+			const float L = FVector2D::Distance(C[i], C[i + 1]), Sum = TL[i] + TL[i + 1];
+			if (Sum > L && Sum > 0.f) { const float K = L / Sum; TL[i] *= K; TL[i + 1] *= K; }
+		}
+		auto Line = [&Out](const FVector2D& B)
+		{
+			const FVector2D A = Out.Last();
+			const float L = FVector2D::Distance(A, B);
+			if (L < 0.5f) { return; }
+			const int32 M = FMath::Max(1, FMath::CeilToInt(L / Step));
+			for (int32 k = 1; k <= M; ++k) { Out.Add(FMath::Lerp(A, B, (float)k / M)); }
+		};
+		Out.Add(C[0]);
+		for (int32 i = 1; i < N - 1; ++i)
+		{
+			const FVector2D A = (C[i] - C[i - 1]).GetSafeNormal(), B = (C[i + 1] - C[i]).GetSafeNormal();
+			const FVector2D P0 = C[i] - A * TL[i];
+			Line(P0);
+			if (Theta[i] < 1e-3f || TL[i] < 0.5f) { continue; }
+			const float Rad = TL[i] / FMath::Tan(Theta[i] * 0.5f);
+			const float Cross = A.X * B.Y - A.Y * B.X;
+			const FVector2D Nrm = Cross > 0.f ? FVector2D(-A.Y, A.X) : FVector2D(A.Y, -A.X);
+			const FVector2D Ctr = P0 + Nrm * Rad;
+			const float A0 = FMath::Atan2(P0.Y - Ctr.Y, P0.X - Ctr.X), Sgn = Cross > 0.f ? 1.f : -1.f;
+			const int32 M = FMath::Max(2, FMath::CeilToInt(Rad * Theta[i] / Step));
+			for (int32 k = 1; k <= M; ++k)
+			{
+				const float Ang = A0 + Sgn * Theta[i] * k / M;
+				Out.Add(Ctr + FVector2D(FMath::Cos(Ang), FMath::Sin(Ang)) * Rad);
+			}
+		}
+		Line(C.Last());
+	}
+
+	/** Even spacing along the polyline. */
+	void Resample(const TArray<FVector2D>& In, TArray<FVector2D>& Out)
+	{
+		Out.Reset();
+		if (In.Num() < 2) { Out = In; return; }
+		Out.Add(In[0]);
+		float Carry = 0.f;
+		for (int32 i = 1; i < In.Num(); ++i)
+		{
+			const FVector2D A = In[i - 1], B = In[i];
+			const float L = FVector2D::Distance(A, B);
+			float At = Step - Carry;
+			while (At <= L) { Out.Add(FMath::Lerp(A, B, At / L)); At += Step; }
+			Carry = L - (At - Step);
+		}
+		if (FVector2D::Distance(Out.Last(), In.Last()) > 1.f) { Out.Add(In.Last()); } else { Out.Last() = In.Last(); }
+	}
+
+	/** Moving average with the window tapering to nothing at the ends: the arcs ease in and out (no step in the
+	 *  steering) while the ends, and every straight, stay exactly where they were. */
+	template <typename T>
+	void SmoothEnds(TArray<T>& V, int32 W, int32 Passes)
+	{
+		const int32 N = V.Num();
+		TArray<T> Q;
+		for (int32 p = 0; p < Passes; ++p)
+		{
+			Q = V;
+			for (int32 i = 1; i < N - 1; ++i)
+			{
+				const int32 Ww = FMath::Min3(W, i, N - 1 - i);
+				T Sum = V[i] * 0.f;
+				for (int32 j = i - Ww; j <= i + Ww; ++j) { Sum += V[j]; }
+				Q[i] = Sum / (float)(2 * Ww + 1);
+			}
+			V = Q;
+		}
 	}
 
 	/** Generated car meshes, shared between cars (kept alive by the components that use them). */
@@ -260,6 +337,15 @@ void ADCVehicle::BuildBody(int32 Seed)
 		Box(BodyPivot, FVector(HL + 0.5f, s * (HW - 27.f), LampZ), FVector(4.f, 30.f, 12.f), 5.f, HeadMID, 1.5f, false);
 		Box(BodyPivot, FVector(-HL - 0.5f, s * (HW - 22.f), LampZ + (bPickup ? 0.f : 4.f)), FVector(4.f, 24.f, 14.f), 5.f, TailMID, 1.5f, false);
 	}
+	// Indicators: small amber lenses at the outer corners, front and back, one material per side so each side blinks.
+	IndMID.Reset();
+	for (int32 s = -1; s <= 1; s += 2)
+	{
+		UMaterialInstanceDynamic* M = MakeMID(DCPaths::MatEmissive, FLinearColor(1.f, 0.42f, 0.04f), 0.25f, 0.f);
+		IndMID.Add(M);
+		Box(BodyPivot, FVector(HL + 0.3f, s * (HW - 6.5f), LampZ - 1.f), FVector(4.f, 10.f, 9.f), 3.5f, M, 1.5f, false);
+		Box(BodyPivot, FVector(-HL - 0.3f, s * (HW - 6.5f), LampZ + (bPickup ? -1.f : 3.f)), FVector(4.f, 10.f, 10.f), 3.5f, M, 1.5f, false);
+	}
 	// Number plates.
 	UMaterialInstanceDynamic* MPlate = MakeMID(DCPaths::MatSurface, FLinearColor(0.6f, 0.58f, 0.45f), 0.5f, 0.f);
 	Part(BodyPivot, Cube, FVector(HL + 2.3f, 0, Floor + 12.f), FVector(2.f, 44.f, 10.f), MPlate, FRotator::ZeroRotator, false);
@@ -382,12 +468,140 @@ FBox2D ADCVehicle::GetFootprint() const
 	return B;
 }
 
+void ADCVehicle::GetFootprintOriented(FVector2D& OutCentre, FVector2D& OutHalf, float& OutYawRad) const
+{
+	OutCentre = FVector2D(GetActorLocation());
+	OutHalf = FVector2D(Length * 0.5f, Width * 0.5f);
+	OutYawRad = FMath::DegreesToRadians(GetActorRotation().Yaw);
+}
+
+// ─── Planned drives ──────────────────────────────────────────────────────────
+
+FDCCarPlan::FSample FDCCarPlan::At(float T) const
+{
+	if (!IsValid()) { return FSample(); }
+	if (T <= 0.f) { return Samples[0]; }
+	if (T >= Samples.Last().Time) { return Samples.Last(); }
+	int32 Lo = 0, Hi = Samples.Num() - 1;
+	while (Hi - Lo > 1) { const int32 M = (Lo + Hi) / 2; if (Samples[M].Time <= T) { Lo = M; } else { Hi = M; } }
+	const FSample& A = Samples[Lo];
+	const FSample& B = Samples[Hi];
+	const float K = FMath::Clamp((T - A.Time) / FMath::Max(1e-4f, B.Time - A.Time), 0.f, 1.f);
+	FSample O;
+	O.P = FMath::Lerp(A.P, B.P, K);
+	O.T = FMath::Lerp(A.T, B.T, K).GetSafeNormal();
+	if (O.T.IsNearlyZero()) { O.T = B.T; }
+	O.S = FMath::Lerp(A.S, B.S, K);
+	O.Curv = FMath::Lerp(A.Curv, B.Curv, K);
+	O.V = FMath::Lerp(A.V, B.V, K);
+	O.A = FMath::Lerp(A.A, B.A, K);
+	O.Time = T;
+	O.Signal = K < 0.5f ? A.Signal : B.Signal;
+	return O;
+}
+
+void FDCCarPlan::PoseAt(float T, FVector2D& OutCentre, FVector2D& OutFwd) const
+{
+	const FSample S = At(T);
+	OutFwd = S.T;
+	OutCentre = S.P + S.T * (WheelBase * 0.5f);
+}
+
+FDCCarPlan ADCVehicle::PlanDrive(int32 SlotIndex, bool bArrive) const
+{
+	FDCCarPlan Out;
+	Out.WheelBase = WheelBase; Out.Length = Length; Out.Width = Width;
+	Out.Slot = SlotIndex;
+	Out.Bay = DCSite::SlotBay(SlotIndex);
+	Out.bArrive = bArrive;
+
+	TArray<FVector2D> Corners, Pts, Even;
+	TArray<float> Radii;
+	DCSite::CarRoute(Out.Bay, bArrive, WheelBase, Corners, Radii);
+	FilletPath(Corners, Radii, Pts);
+	Resample(Pts, Even);
+	SmoothEnds(Even, 6, 3);
+	const int32 N = Even.Num();
+	if (N < 8) { return Out; }
+
+	TArray<FDCCarPlan::FSample>& S = Out.Samples;
+	S.SetNum(N);
+	for (int32 i = 0; i < N; ++i)
+	{
+		S[i].P = Even[i];
+		S[i].S = i ? S[i - 1].S + FVector2D::Distance(Even[i], Even[i - 1]) : 0.f;
+	}
+	// Heading: central difference (the ends hold the first/last leg's direction exactly).
+	for (int32 i = 0; i < N; ++i)
+	{
+		const FVector2D D = Even[FMath::Min(N - 1, i + 2)] - Even[FMath::Max(0, i - 2)];
+		S[i].T = D.GetSafeNormal();
+	}
+	// Curvature from the turn over +-3 samples, then eased a little so the steering winds on and off smoothly.
+	TArray<float> K; K.Init(0.f, N);
+	for (int32 i = 3; i < N - 3; ++i)
+	{
+		const FVector2D A = (Even[i] - Even[i - 3]).GetSafeNormal(), B = (Even[i + 3] - Even[i]).GetSafeNormal();
+		const float Ds = FMath::Max(1.f, (S[i + 3].S - S[i - 3].S) * 0.5f);
+		K[i] = FMath::Atan2(A.X * B.Y - A.Y * B.X, FVector2D::DotProduct(A, B)) / Ds;
+	}
+	SmoothEnds(K, 4, 2);
+	for (int32 i = 0; i < N; ++i) { S[i].Curv = K[i]; }
+
+	// Speed: cap per sample (yard / lane, and what the corner allows), then accelerate / brake into those caps.
+	auto InYard = [](const FVector2D& P) { return P.Y > DCSite::FenceY - 250.f; };
+	TArray<float> V; V.SetNum(N);
+	for (int32 i = 0; i < N; ++i)
+	{
+		float Cap = InYard(S[i].P) ? YardSpeed : Cruise;
+		if (FMath::Abs(K[i]) > 1e-5f) { Cap = FMath::Min(Cap, FMath::Sqrt(LatAccel / FMath::Abs(K[i]))); }
+		V[i] = Cap;
+	}
+	V[0] = bArrive ? Cruise : 0.f;
+	V[N - 1] = bArrive ? 0.f : Cruise;
+	const float Len = S[N - 1].S;
+	for (int32 i = 1; i < N; ++i)
+	{
+		const float Ds = S[i].S - S[i - 1].S, A = InYard(S[i].P) ? AccelYard : AccelLane;
+		V[i] = FMath::Min(V[i], FMath::Sqrt(FMath::Square(V[i - 1]) + 2.f * A * Ds));
+	}
+	for (int32 i = N - 2; i >= 0; --i)
+	{
+		const float Ds = S[i + 1].S - S[i].S;
+		const float D = (bArrive && Len - S[i].S < 260.f) ? StopDecel : InYard(S[i].P) ? DecelYard : DecelLane;
+		V[i] = FMath::Min(V[i], FMath::Sqrt(FMath::Square(V[i + 1]) + 2.f * D * Ds));
+	}
+	// Round off the corners of the speed profile (no jolt where braking starts or a corner opens up).
+	TArray<float> Env = V;
+	SmoothEnds(V, 8, 2);
+	for (int32 i = 0; i < N; ++i) { V[i] = FMath::Min(V[i], Env[i]); S[i].V = V[i]; }
+	for (int32 i = 0; i < N; ++i)
+	{
+		const int32 I0 = FMath::Max(0, i - 1), I1 = FMath::Min(N - 1, i + 1);
+		const float Ds = FMath::Max(1.f, S[I1].S - S[I0].S);
+		S[i].A = (FMath::Square(V[I1]) - FMath::Square(V[I0])) / (2.f * Ds);
+		if (i) { S[i].Time = S[i - 1].Time + (S[i].S - S[i - 1].S) / FMath::Max(8.f, 0.5f * (V[i] + V[i - 1])); }
+	}
+	// Indicators: on from about 6 m before a real turn until it's done (only near the site, not out on the lane).
+	constexpr int32 Look = 60;
+	for (int32 i = 0; i < N; ++i)
+	{
+		if (S[i].P.X < DCSite::ArriveFromX + 2500.f || S[i].P.X > DCSite::LeaveToX - 2500.f) { continue; }
+		const int32 J = FMath::Min(N - 1, i + Look);
+		const float Turn = FMath::FindDeltaAngleDegrees(FMath::RadiansToDegrees(FMath::Atan2(S[i].T.Y, S[i].T.X)), FMath::RadiansToDegrees(FMath::Atan2(S[J].T.Y, S[J].T.X)));
+		if (FMath::Abs(Turn) > 30.f) { S[i].Signal = Turn > 0.f ? 1 : -1; }
+		else if (FMath::Abs(K[i]) > 1.f / 900.f) { S[i].Signal = K[i] > 0.f ? 1 : -1; }
+	}
+	if (!bArrive) { Out.HideAtTime = S[N - 1].Time; }
+	return Out;
+}
+
 void ADCVehicle::ParkAt(const FTransform& Slot)
 {
-	Route.Reset();
+	Plan = FDCCarPlan();
 	Speed = PrevSpeed = 0.f;
 	Steer = 0.f;
-	Brake = 0.f;
+	Signal = 0;
 	FVector L = Slot.GetLocation();
 	L.Z = TraceGround(L);
 	GroundZ = L.Z;
@@ -398,8 +612,10 @@ void ADCVehicle::ParkAt(const FTransform& Slot)
 
 void ADCVehicle::SetGone()
 {
-	Route.Reset();
+	Plan = FDCCarPlan();
 	Speed = PrevSpeed = 0.f;
+	Signal = 0;
+	bEngine = false;
 	DoorTarget[0] = DoorTarget[1] = DoorAlpha[0] = DoorAlpha[1] = 0.f;
 	for (USceneComponent* H : DoorHinge) { if (H) { H->SetRelativeRotation(FRotator::ZeroRotator); } }
 	SetActorHiddenInGame(true);
@@ -414,85 +630,60 @@ void ADCVehicle::SetDoorsOpen(bool bOpen, int32 Side)
 	if (Side >= 0) { DoorTarget[1] = bOpen ? 1.f : 0.f; }
 }
 
-void ADCVehicle::DriveAway(int32 SlotIndex)
+void ADCVehicle::StartDrive(const FDCCarPlan& InPlan)
 {
-	TArray<FVector> Pts;
-	DCSite::DepartRoute(SlotIndex, Pts);
-	// Start from where we actually are (in case we were nudged).
-	if (Pts.Num()) { Pts[0] = FVector(GetActorLocation().X, GetActorLocation().Y, 0.f); }
-	BuildRoute({ Pts }, { false }, 0.f, Cruise);
-	bAxles = false;
-	BayPos = FVector2D(GetActorLocation()); bBayAtStart = true; bBayAtEnd = false;
-	CheckGateClearance(SlotIndex, false);
-	HideAtS = -1.f;
-	for (const FSample& S : Route) { if (S.P.X > OffscreenX) { HideAtS = S.S; break; } }
-	TargetSlot = INDEX_NONE;
+	if (!InPlan.IsValid()) { return; }
+	Plan = InPlan;
+	DriveTime = 0.f;
+	TargetSlot = Plan.bArrive ? Plan.Slot : INDEX_NONE;
+	CheckGateClearance(Plan, Plan.Slot);
+	FVector2D C, F;
+	Plan.PoseAt(0.f, C, F);
+	const FVector L(C.X, C.Y, 0.f);
+	if (Plan.bArrive) { GroundZ = TraceGround(L); }
+	SetActorLocationAndRotation(FVector(C.X, C.Y, GroundZ), FRotator(0.f, FMath::RadiansToDegrees(FMath::Atan2(F.Y, F.X)), 0.f));
+	Speed = PrevSpeed = Plan.Samples[0].V;
 	SetDoorsOpen(false);
 	SetActorHiddenInGame(false);
 	CarState = EDCCarState::Driving;
-	StuckTime = 0.f;
-	DriveTime = 0.f;
+	bEngine = false;
+	UE_LOG(LogDC, Log, TEXT("[Vehicle] slot %d bay %d %s: %.0f m, %.1f s"), Plan.Slot, Plan.Bay, Plan.bArrive ? TEXT("drives in") : TEXT("drives off"), Plan.Samples.Last().S / 100.f, Plan.Duration());
 }
 
-void ADCVehicle::DriveIn(int32 SlotIndex)
+bool ADCVehicle::PredictPose(float Ahead, FVector2D& OutCentre, FVector2D& OutFwd) const
 {
-	TArray<FVector> Dep;
-	DCSite::DepartRoute(SlotIndex, Dep);
-	const FVector P = DCSite::ParkingSlot(SlotIndex).GetLocation();
-	// Forward leg: the departure route reversed, from just off-screen to the top of the driveway, then past the bay.
-	TArray<FVector> Fwd;
-	Fwd.Add(FVector(OffscreenX, DCSite::LaneY + 110.f, 0.f));
-	for (int32 i = Dep.Num() - 2; i >= 2; --i) { Fwd.Add(Dep[i]); }
-	const float Dir = (P.X >= DCSite::DriveX) ? 1.f : -1.f;
-	const float PullY = Dep.IsValidIndex(1) ? Dep[1].Y : P.Y - 280.f;   // the lane in front of the bays
-	const float LineY = Dep.IsValidIndex(2) ? Dep[2].Y : PullY - 140.f; // top of the driveway
-	Fwd.Add(FVector(FMath::Lerp(DCSite::DriveX, P.X, 0.5f) + Dir * 60.f, FMath::Lerp(LineY, PullY, 0.6f), 0.f));
-	const FVector Pull(P.X + Dir * 330.f, PullY - 20.f, 0.f);
-	Fwd.Add(Pull);
-	// Reverse leg: back into the bay so the car ends nose-out (facing the lane), like the parked ones.
-	TArray<FVector> Rev;
-	Rev.Add(Pull);
-	// Back out straight along the line we arrived on first, so the nose doesn't have to swing at the stop.
-	if (Fwd.Num() >= 2) { Rev.Add(Pull + (Pull - Fwd[Fwd.Num() - 2]).GetSafeNormal2D() * -70.f); }
-	Rev.Add(FVector(P.X + Dir * 90.f, PullY + 40.f, 0.f));
-	Rev.Add(FVector(P.X + Dir * 8.f, FMath::Lerp(PullY, P.Y, 0.55f), 0.f));
-	Rev.Add(FVector(P.X, P.Y, 0.f));
-	BuildRoute({ Fwd, Rev }, { false, true }, Cruise, 0.f);
-	bAxles = false;
-	BayPos = FVector2D(P); bBayAtStart = false; bBayAtEnd = true;
-	CheckGateClearance(SlotIndex, true);
-	HideAtS = -1.f;
-	TargetSlot = SlotIndex;
-	const FVector Start = Route.Num() ? Route[0].P : FVector(OffscreenX, DCSite::LaneY, 0.f);
-	FVector Tan; SampleAt(0.f, &Tan);
-	SetActorLocationAndRotation(FVector(Start.X, Start.Y, TraceGround(Start)), FRotator(0.f, Tan.Rotation().Yaw, 0.f));
-	GroundZ = GetActorLocation().Z;
-	SetDoorsOpen(false);
-	SetActorHiddenInGame(false);
-	CarState = EDCCarState::Driving;
-	StuckTime = 0.f;
-	DriveTime = 0.f;
+	if (CarState != EDCCarState::Driving || !Plan.IsValid()) { return false; }
+	const float T = DriveTime + Ahead;
+	if (T >= Plan.Duration()) { return false; }
+	Plan.PoseAt(T, OutCentre, OutFwd);
+	return true;
 }
 
-void ADCVehicle::CheckGateClearance(int32 SlotIndex, bool bArriving) const
+float ADCVehicle::ArriveSeconds(int32 SlotIndex) const
+{
+	if (const float* Found = ArriveSecondsCache.Find(SlotIndex)) { return *Found; }
+	const float T = PlanDrive(SlotIndex, true).Duration();
+	ArriveSecondsCache.Add(SlotIndex, T);
+	return T;
+}
+
+void ADCVehicle::CheckGateClearance(const FDCCarPlan& P, int32 SlotIndex) const
 {
 	static TSet<int32> Checked;
-	const int32 Key = SlotIndex * 2 + (bArriving ? 1 : 0);
-	if (Checked.Contains(Key) || Route.Num() < 2) { return; }
+	const int32 Key = SlotIndex * 2 + (P.bArrive ? 1 : 0) + (int32)Style * 64;
+	if (Checked.Contains(Key) || !P.IsValid()) { return; }
 	Checked.Add(Key);
 	TArray<FVector4f> Obs;
 	DCSite::GateObstacles(Obs);
 	float Best = 1e9f;
 	FVector2D BestAt = FVector2D::ZeroVector;
-	for (int32 i = 0; i + 1 < Route.Num(); ++i)
+	for (const FDCCarPlan::FSample& Smp : P.Samples)
 	{
-		const FVector2D P(Route[i].P.X, Route[i].P.Y);
-		if (FMath::Abs(P.Y - DCSite::FenceY) > 900.f || FMath::Abs(P.X - DCSite::DriveX) > 1500.f) { continue; }
-		const FVector2D D = FVector2D(Route[i + 1].P.X - P.X, Route[i + 1].P.Y - P.Y).GetSafeNormal();
-		if (D.IsNearlyZero()) { continue; }
+		if (FMath::Abs(Smp.P.Y - DCSite::FenceY) > 900.f || FMath::Abs(Smp.P.X - DCSite::DriveX) > 1500.f) { continue; }
+		const FVector2D D = Smp.T, C = Smp.P + Smp.T * (P.WheelBase * 0.5f);
 		for (const FVector4f& O : Obs)
 		{
-			const FVector2D L = FVector2D(O.X, O.Y) - P;
+			const FVector2D L = FVector2D(O.X, O.Y) - C;
 			const float X = FVector2D::DotProduct(L, D), Y = -D.Y * L.X + D.X * L.Y;
 			const float Dx = FMath::Max(FMath::Abs(X) - Length * 0.5f, 0.f), Dy = FMath::Max(FMath::Abs(Y) - Width * 0.5f, 0.f);
 			const float Dist = FMath::Sqrt(Dx * Dx + Dy * Dy) - O.Z;
@@ -501,123 +692,12 @@ void ADCVehicle::CheckGateClearance(int32 SlotIndex, bool bArriving) const
 	}
 	if (Best < 25.f)
 	{
-		UE_LOG(LogDC, Warning, TEXT("[Vehicle] slot %d %s: only %.0f cm from the gateway at (%.0f, %.0f)"), SlotIndex, bArriving ? TEXT("in") : TEXT("out"), Best, BestAt.X, BestAt.Y);
+		UE_LOG(LogDC, Warning, TEXT("[Vehicle] slot %d %s: only %.0f cm from the gateway at (%.0f, %.0f)"), SlotIndex, P.bArrive ? TEXT("in") : TEXT("out"), Best, BestAt.X, BestAt.Y);
 	}
 	else
 	{
-		UE_LOG(LogDC, Display, TEXT("[Vehicle] slot %d %s: gateway clearance %.0f cm"), SlotIndex, bArriving ? TEXT("in") : TEXT("out"), Best);
+		UE_LOG(LogDC, Display, TEXT("[Vehicle] slot %d %s: gateway clearance %.0f cm"), SlotIndex, P.bArrive ? TEXT("in") : TEXT("out"), Best);
 	}
-}
-
-void ADCVehicle::BuildRoute(const TArray<TArray<FVector>>& Segments, const TArray<bool>& Reverse, float StartSpeed, float EndSpeed)
-{
-	Route.Reset();
-	RouteS = 0.f;
-	Speed = PrevSpeed = 0.f;
-	TArray<int32> GearBreaks; // sample indices where the gear changes (full stop)
-	for (int32 Seg = 0; Seg < Segments.Num(); ++Seg)
-	{
-		const TArray<FVector>& Pts = Segments[Seg];
-		if (Pts.Num() < 2) { continue; }
-		const bool bRev = Reverse.IsValidIndex(Seg) && Reverse[Seg];
-		const int32 N = Pts.Num();
-		if (Route.Num()) { GearBreaks.Add(Route.Num() - 1); }
-		for (int32 i = 0; i < N - 1; ++i)
-		{
-			const FVector P1 = Pts[i], P2 = Pts[i + 1];
-			const FVector P0 = i > 0 ? Pts[i - 1] : P1 - (P2 - P1);
-			const FVector P3 = i + 2 < N ? Pts[i + 2] : P2 + (P2 - P1);
-			const int32 Steps = FMath::Clamp(FMath::CeilToInt(FVector::Dist(P1, P2) / 20.f), 2, 2000);
-			for (int32 k = (i == 0 && Route.Num() == 0) ? 0 : 1; k <= Steps; ++k)
-			{
-				if (k == 0 && Route.Num()) { continue; }
-				FSample S;
-				S.P = CatmullRom(P0, P1, P2, P3, (float)k / Steps);
-				S.P.Z = 0.f;
-				S.bReverse = bRev;
-				Route.Add(S);
-			}
-		}
-	}
-	const int32 N = Route.Num();
-	if (N < 2) { Route.Reset(); return; }
-	for (int32 i = 1; i < N; ++i) { Route[i].S = Route[i - 1].S + FVector::Dist2D(Route[i].P, Route[i - 1].P); }
-	// Curvature + speed caps.
-	for (int32 i = 0; i < N; ++i)
-	{
-		float K = 0.f;
-		if (i > 0 && i < N - 1)
-		{
-			const FVector A = (Route[i].P - Route[i - 1].P).GetSafeNormal2D();
-			const FVector B = (Route[i + 1].P - Route[i].P).GetSafeNormal2D();
-			const float Ds = FMath::Max(1.f, (Route[i + 1].S - Route[i - 1].S) * 0.5f);
-			K = FMath::Atan2(A.X * B.Y - A.Y * B.X, FVector::DotProduct(A, B)) / Ds;
-		}
-		Route[i].Curv = K;
-		float V = Route[i].bReverse ? ReverseSpeed : Cruise;
-		// Slow in the yard / on the driveway.
-		if (Route[i].P.Y > DCSite::LaneY + 300.f) { V = FMath::Min(V, YardSpeed); }
-		if (FMath::Abs(K) > 1e-5f) { V = FMath::Min(V, FMath::Sqrt(LatAccel / FMath::Abs(K))); }
-		Route[i].VMax = V;
-	}
-	// Smooth curvature caps a little (spline noise).
-	Route[0].VMax = StartSpeed;
-	Route[N - 1].VMax = EndSpeed;
-	for (int32 G : GearBreaks) { Route[G].VMax = 0.f; }
-	for (int32 i = 1; i < N; ++i)
-	{
-		const float Ds = Route[i].S - Route[i - 1].S;
-		Route[i].VMax = FMath::Min(Route[i].VMax, FMath::Sqrt(FMath::Square(Route[i - 1].VMax) + 2.f * Accel * Ds));
-	}
-	for (int32 i = N - 2; i >= 0; --i)
-	{
-		const float Ds = Route[i + 1].S - Route[i].S;
-		Route[i].VMax = FMath::Min(Route[i].VMax, FMath::Sqrt(FMath::Square(Route[i + 1].VMax) + 2.f * Decel * Ds));
-	}
-}
-
-ADCVehicle::FSample ADCVehicle::SampleAt(float S, FVector* OutTangent) const
-{
-	if (Route.Num() == 0) { if (OutTangent) { *OutTangent = GetActorForwardVector(); } return FSample(); }
-	int32 Lo = 0, Hi = Route.Num() - 1;
-	if (S <= 0.f) { Hi = 1; }
-	else if (S >= Route.Last().S) { Lo = Route.Num() - 2; }
-	else
-	{
-		while (Hi - Lo > 1) { const int32 M = (Lo + Hi) / 2; if (Route[M].S <= S) { Lo = M; } else { Hi = M; } }
-	}
-	const FSample& A = Route[Lo];
-	const FSample& B = Route[Hi];
-	const float T = FMath::Clamp((S - A.S) / FMath::Max(0.01f, B.S - A.S), 0.f, 1.f);
-	FSample Out;
-	Out.P = FMath::Lerp(A.P, B.P, T);
-	Out.S = S;
-	Out.VMax = FMath::Lerp(A.VMax, B.VMax, T);
-	Out.Curv = FMath::Lerp(A.Curv, B.Curv, T);
-	Out.bReverse = T < 0.5f ? A.bReverse : B.bReverse;
-	if (OutTangent)
-	{
-		// Central-difference tangent at each end of the span, blended across it: a tangent held constant per span
-		// stepped the heading every 20 cm in tight turns.
-		// Neighbours never cross a gear change: the legs either side run in opposite directions, and mixing them
-		// flipped the nose round at the stop before reversing.
-		auto TanAt = [this](int32 I)
-		{
-			int32 I0 = FMath::Max(0, I - 1), I1 = FMath::Min(Route.Num() - 1, I + 1);
-			if (Route[I0].bReverse != Route[I].bReverse) { I0 = I; }
-			if (Route[I1].bReverse != Route[I].bReverse) { I1 = I; }
-			if (I0 == I1) { I0 = FMath::Max(0, I - 1); I1 = I; }
-			return (Route[I1].P - Route[I0].P).GetSafeNormal2D();
-		};
-		const FVector TA = TanAt(Lo), TB = TanAt(Hi);
-		if (A.bReverse != B.bReverse) { *OutTangent = T < 0.5f ? TA : TB; } // matches Out.bReverse, so nose = Tan * Dir stays put
-		else
-		{
-			const FVector Blend = FMath::Lerp(TA, TB, T);
-			*OutTangent = Blend.IsNearlyZero() ? TB : Blend.GetSafeNormal2D();
-		}
-	}
-	return Out;
 }
 
 float ADCVehicle::TraceGround(const FVector& P) const
@@ -656,6 +736,18 @@ void ADCVehicle::UpdateLights(float Dt, bool bDriving)
 	}
 }
 
+void ADCVehicle::UpdateIndicators(float Dt)
+{
+	BlinkT = Signal != 0 ? BlinkT + Dt : 0.f; // each signal starts with the lamp on
+	const bool bOn = Signal != 0 && FMath::Fmod(BlinkT, 0.72f) < 0.4f;
+	for (int32 i = 0; i < IndMID.Num(); ++i)
+	{
+		if (!IndMID[i]) { continue; }
+		const bool bThis = bOn && ((i == 0 && Signal < 0) || (i == 1 && Signal > 0));
+		IndMID[i]->SetScalarParameterValue(TEXT("Strength"), bThis ? 26.f : 0.25f);
+	}
+}
+
 void ADCVehicle::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -670,123 +762,57 @@ void ADCVehicle::Tick(float DeltaSeconds)
 		if (DoorHinge[i]) { DoorHinge[i]->SetRelativeRotation(FRotator(0.f, (i == 0 ? 1.f : -1.f) * 62.f * E, 0.f)); }
 	}
 
-	const bool bDriving = CarState == EDCCarState::Driving && Route.Num() > 1;
+	const bool bDriving = CarState == EDCCarState::Driving && Plan.IsValid();
 	float AccelNow = 0.f, Lateral = 0.f;
 	if (bDriving)
 	{
+		// Play the plan back on its own timeline: position, heading, speed and acceleration all come from the
+		// precomputed profile, so the motion is smooth at any frame rate and exactly what the director predicted.
 		DriveTime += Dt;
-		const FSample Cur = SampleAt(RouteS, nullptr);
-		// Speed follows the precomputed profile (with a crawl floor so the car never stalls short of a stop).
-		float Target = FMath::Max(Cur.VMax, MinCrawl);
-		// Look ahead for an imminent gear change / end: brake into it.
-		Speed = FMath::FInterpConstantTo(Speed, Target, Dt, FMath::Max(Accel, Decel) * 1.2f);
-		float NewS = RouteS + Speed * Dt;
-		// Full stop at gear changes: snap to the break point, wait a beat.
-		bool bStopped = false;
-		for (int32 i = 1; i < Route.Num(); ++i)
-		{
-			if (Route[i].bReverse != Route[i - 1].bReverse && RouteS < Route[i - 1].S - 0.5f && NewS >= Route[i - 1].S)
-			{
-				NewS = Route[i - 1].S + 0.6f;
-				Speed = 0.f;
-				bStopped = true;
-				break;
-			}
-		}
-		RouteS = FMath::Min(NewS, Route.Last().S);
-		AccelNow = (Speed - PrevSpeed) / FMath::Max(Dt, 1e-3f);
+		const float Dur = Plan.Duration();
+		const FDCCarPlan::FSample S = Plan.At(FMath::Min(DriveTime, Dur));
+		Speed = S.V;
+		AccelNow = S.A;
 		PrevSpeed = Speed;
-
-		FVector Tan;
-		const FSample S = SampleAt(RouteS, &Tan);
-		const float Dir = S.bReverse ? -1.f : 1.f;
-		const float A = AxleHalf();
-		if (!bAxles)
-		{
-			const FVector2D C(GetActorLocation()), N(GetActorForwardVector().GetSafeNormal2D());
-			FrontAx = C + N * A; RearAx = C - N * A;
-			bPrevReverse = S.bReverse; LeadOffset = FVector2D::ZeroVector; bAxles = true;
-		}
-		// Leading axle: A further along the route, but never past the next gear change / the end (extrapolate there).
-		float GearS = Route.Last().S;
-		for (int32 i = 1; i < Route.Num(); ++i)
-		{
-			if (Route[i].bReverse != Route[i - 1].bReverse && Route[i - 1].S > RouteS) { GearS = Route[i - 1].S; break; }
-		}
-		FVector2D Lead;
-		if (RouteS + A <= GearS) { Lead = FVector2D(SampleAt(RouteS + A, nullptr).P); }
-		else
-		{
-			FVector TG; const FSample G = SampleAt(FMath::Max(GearS - 2.f, 0.f), &TG);
-			Lead = FVector2D(G.P) + FVector2D(TG.GetSafeNormal2D()) * (RouteS + A - GearS + 2.f);
-		}
-		if (S.bReverse != bPrevReverse)
-		{
-			// The other axle now leads: start from where it actually is and ease onto the route.
-			LeadOffset = (S.bReverse ? RearAx : FrontAx) - Lead;
-			bPrevReverse = S.bReverse;
-		}
-		LeadOffset = FMath::Vector2DInterpTo(LeadOffset, FVector2D::ZeroVector, Dt, 3.f);
-		Lead += LeadOffset;
-		FVector2D& LeadAx = S.bReverse ? RearAx : FrontAx;
-		FVector2D& TrailAx = S.bReverse ? FrontAx : RearAx;
-		LeadAx = Lead;
-		const FVector2D Back = TrailAx - LeadAx;
-		TrailAx = LeadAx + (Back.SizeSquared() > 1.f ? Back.GetSafeNormal() : -FVector2D(Tan.GetSafeNormal2D()) * Dir) * (2.f * A);
-
-		FVector2D Centre = (FrontAx + RearAx) * 0.5f;
-		const FVector2D Nose = FrontAx - RearAx;
-		float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Nose.Y, Nose.X));
-		// Around the parking bay the yard manoeuvres (pull out, the whole reverse in) follow the tuned route pose
-		// exactly: bays are only ~30 cm apart and the reverse leg is too tight for a dragged front axle.
-		// Departing: route pose within 3 m of the bay, axle model beyond 6 m. Arriving: blend in on the forward
-		// approach (7 m -> 4.5 m from the bay) so the reverse leg starts already on the route.
-		float W = 0.f;
-		const FVector2D Here(S.P);
-		if (bBayAtStart) { W = FMath::Max(W, 1.f - FMath::SmoothStep(300.f, 600.f, (float)FVector2D::Distance(Here, BayPos))); }
-		if (bBayAtEnd) { W = FMath::Max(W, S.bReverse ? 1.f : 1.f - FMath::SmoothStep(450.f, 700.f, (float)FVector2D::Distance(Here, BayPos))); }
-		if (W > 0.f)
-		{
-			Centre = FMath::Lerp(Centre, Here, W);
-			Yaw += FMath::FindDeltaAngleDegrees(Yaw, (Tan * Dir).Rotation().Yaw) * W;
-		}
-		{
-			// Ease toward the target heading (no hard cap that clips into visible steps), at most 240 deg/s.
-			const float CurYaw = GetActorRotation().Yaw;
-			const float Delta = FMath::FindDeltaAngleDegrees(CurYaw, Yaw);
-			Yaw = CurYaw + FMath::Clamp(Delta * FMath::Min(1.f, Dt * 14.f), -240.f * Dt, 240.f * Dt);
-		}
+		// The plan traces the rear axle; the body sits half a wheelbase ahead of it, pointing along the path.
+		const FVector2D Centre = S.P + S.T * (WheelBase * 0.5f);
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(S.T.Y, S.T.X));
 		FVector L(Centre.X, Centre.Y, 0.f);
-		const float Gz = TraceGround(L);
-		GroundZ = FMath::FInterpTo(GroundZ, Gz, Dt, 10.f);
+		GroundZ = FMath::FInterpTo(GroundZ, TraceGround(L), Dt, 10.f);
 		L.Z = GroundZ;
-		static const bool bYawLog = FParse::Param(FCommandLine::Get(), TEXT("DCCarYawLog"));
-		if (bYawLog) { UE_LOG(LogTemp, Log, TEXT("[DCYaw] %.1f %d %.3f"), RouteS, S.bReverse ? 1 : 0, FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, Yaw)); }
 		SetActorLocationAndRotation(L, FRotator(0.f, Yaw, 0.f));
 		Lateral = Speed * Speed * S.Curv;
-		const float SteerTarget = FMath::Clamp(FMath::RadiansToDegrees(FMath::Atan(WheelBase * S.Curv)), -34.f, 34.f) * Dir;
-		Steer = FMath::FInterpTo(Steer, SteerTarget, Dt, 6.f);
-		SpinAngle = FMath::Fmod(SpinAngle - Dir * Speed * Dt / WheelR * (180.f / UE_PI), 360.f);
-		Brake = FMath::FInterpTo(Brake, (AccelNow < -120.f || (Speed < 60.f && S.S > 1.f)) ? 1.f : 0.f, Dt, 10.f);
-		if (bStopped) { Brake = 1.f; }
+		// Bicycle model: the front wheels point where the path bends (positive curvature = turning towards +Y = right).
+		const float SteerTarget = FMath::Clamp(FMath::RadiansToDegrees(FMath::Atan(WheelBase * S.Curv)), -MaxLock, MaxLock);
+		Steer = FMath::FInterpTo(Steer, SteerTarget, Dt, 9.f);
+		SpinAngle = FMath::Fmod(SpinAngle - Speed * Dt / WheelR * (180.f / UE_PI), 360.f);
+		const bool bStopping = Plan.bArrive && Dur - DriveTime < 0.9f;
+		Brake = FMath::FInterpTo(Brake, (AccelNow < -70.f || bStopping) ? 1.f : 0.f, Dt, 8.f);
+		Signal = S.Signal;
 
-		if (HideAtS > 0.f && RouteS >= HideAtS) { UE_LOG(LogTemp, Log, TEXT("DCVehicle: off-screen after %.1fs"), DriveTime); SetGone(); return; }
-		if (RouteS >= Route.Last().S - 0.5f)
+		if (DriveTime >= Dur)
 		{
-			if (TargetSlot != INDEX_NONE)
+			if (Plan.bArrive && TargetSlot != INDEX_NONE)
 			{
-				UE_LOG(LogTemp, Log, TEXT("DCVehicle: parked in slot %d after %.1fs"), TargetSlot, DriveTime);
+				UE_LOG(LogDC, Log, TEXT("[Vehicle] parked in slot %d after %.1fs"), TargetSlot, DriveTime);
 				ParkAt(DCSite::ParkingSlot(TargetSlot));
+				Brake = 1.f;
 				TargetSlot = INDEX_NONE;
 			}
-			else { SetGone(); return; }
+			else
+			{
+				UE_LOG(LogDC, Log, TEXT("[Vehicle] off-screen after %.1fs"), DriveTime);
+				SetGone();
+				return;
+			}
 		}
 	}
 	else
 	{
 		Speed = 0.f;
-		Steer = FMath::FInterpTo(Steer, 0.f, Dt, 3.f);
-		Brake = FMath::FInterpTo(Brake, 0.f, Dt, 2.f);
+		Signal = 0;
+		Steer = FMath::FInterpTo(Steer, 0.f, Dt, 2.5f);
+		Brake = FMath::FInterpTo(Brake, bEngine ? 0.35f : 0.f, Dt, 1.5f);
 	}
 
 	for (int32 i = 0; i < WheelSteer.Num(); ++i)
@@ -794,13 +820,14 @@ void ADCVehicle::Tick(float DeltaSeconds)
 		if (WheelSteer[i]) { WheelSteer[i]->SetRelativeRotation(FRotator(0.f, i < 2 ? Steer : 0.f, 0.f)); }
 		if (WheelSpin.IsValidIndex(i) && WheelSpin[i]) { WheelSpin[i]->SetRelativeRotation(FRotator(SpinAngle, 0.f, 0.f)); }
 	}
-	// Body: dive under braking, squat accelerating, lean out of corners, engine shimmy.
-	const float Dir = (Route.Num() && SampleAt(RouteS, nullptr).bReverse) ? -1.f : 1.f;
-	Pitch = FMath::FInterpTo(Pitch, FMath::Clamp(AccelNow * Dir * 0.0022f, -1.8f, 1.8f), Dt, 5.f);
-	Roll = FMath::FInterpTo(Roll, FMath::Clamp(-Lateral * 0.0012f * Dir, -2.2f, 2.2f), Dt, 5.f);
+	// Body: dives under braking, squats pulling away, leans out of corners, and shimmies with the engine.
+	Pitch = FMath::FInterpTo(Pitch, FMath::Clamp(AccelNow * 0.0042f, -1.6f, 1.6f), Dt, 4.f);
+	Roll = FMath::FInterpTo(Roll, FMath::Clamp(-Lateral * 0.0016f, -2.f, 2.f), Dt, 4.f);
 	BobT += Dt;
-	const float Shimmy = DCSettings::ReduceMotion() ? 0.f : bDriving ? (0.35f + FMath::Min(Speed, 1200.f) / 1200.f * 0.6f) : 0.12f;
+	const bool bRunning = bDriving || bEngine;
+	const float Shimmy = DCSettings::ReduceMotion() ? 0.f : bDriving ? (0.3f + FMath::Min(Speed, 1200.f) / 1200.f * 0.6f) : bEngine ? 0.3f : 0.1f;
 	BodyPivot->SetRelativeLocationAndRotation(FVector(0.f, 0.f, FMath::Sin(BobT * 23.f) * Shimmy + FMath::Sin(BobT * 3.1f) * Shimmy * 0.8f),
 		FRotator(Pitch, 0.f, Roll + FMath::Sin(BobT * 17.f) * 0.08f * Shimmy));
-	UpdateLights(Dt, bDriving);
+	UpdateIndicators(Dt);
+	UpdateLights(Dt, bRunning);
 }

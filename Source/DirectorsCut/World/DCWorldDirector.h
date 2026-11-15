@@ -9,7 +9,8 @@
 // in front of a station / piece of furniture, inside usable rooms they can reach.
 //
 // Cars: one per mission slot (UDCRunSubsystem::GetMaxActiveMissions, max DCSite::MaxParkingSlots), parked in the yard.
-// A started mission takes the lowest free parked car: crew walk out to it, get in, it drives off along the lane; it
+// A started mission takes the lowest free parked car: crew walk out to it, get in, it pulls forwards out of its bay and
+// drives off along the lane (held back first if it would meet another moving car — see TryStartCar); it
 // comes back so it parks about when the mission ends, and the survivors get out and walk back inside.
 #pragma once
 
@@ -26,6 +27,7 @@ class ADCCriminalSpawnZone;
 class ADCGarageDoor;
 class ADCStation;
 class ADCVehicle;
+struct FDCCarPlan;
 
 UCLASS()
 class DIRECTORSCUT_API ADCWorldDirector : public AActor
@@ -176,9 +178,29 @@ protected:
 		int32 NextRider = 0;
 		float PhaseTime = 0.f;
 		float Timer = 0.f;
+		bool bWantsOut = false;   // crew aboard, waiting for a gap to pull out (arrivals hold off-screen meanwhile)
 	};
 	TArray<FCarSlot> Slots;
 	TMap<int32, TArray<int32>> Walkers; // missions without a car: crew left on foot
+	/** Car clock (game-speed seconds) and when the last car set off: starts are staggered by at least
+	 *  MinCarStartGap, and only made once the whole planned drive is predicted to keep clear of every moving car. */
+	float CarClock = 0.f;
+	float LastCarStart = -100.f;
+	static constexpr float MinCarStartGap = 1.6f;
+	bool TryStartCar(int32 SlotIndex, bool bArrive);
+	// Dev: -DCCarTest fills all eight bays, sends every car out at once and lets them all come straight back, with a
+	// monitor logging the closest any two cars get (TickCarTest / MonitorCars).
+	bool bCarTest = false;
+	int32 TestSlotsOverride = 0;
+	int32 CarTestStep = 0;
+	double CarTestTime = 0.0, CarTestNext = 0.0;
+	int32 CarTestShot = 0;
+	TArray<int32> CarTestDepart;
+	float CarMinGapMoving = 1e9f, CarMinGapParked = 1e9f;
+	int32 CarTouches = 0;
+	void TickCarTest(float Dt);
+	void MonitorCars();
+	bool WouldClash(const FDCCarPlan& Plan, const ADCVehicle* Self) const;
 	void SyncCars(bool bInstant);
 	void ClearCars();
 	ADCVehicle* SpawnCar(int32 Slot);

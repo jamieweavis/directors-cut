@@ -10,9 +10,10 @@
 // touches an existing room: left (-X), right (+X) or behind (+Y), never in front of the front row. Grid corners are
 // jittered so walls run slightly off-square and the building outline is irregular.
 //
-// Outside: a gravel yard in front of the house where one car per available mission slot is parked; a dirt
-// driveway joins a country lane that runs along X and leaves the screen at both ends. Crew walk from the house to
-// a car, get in, and it drives off along the lane; on return the car comes back the same way and parks.
+// Outside: a gravel yard in front of the house where one car per available mission slot is parked in a row of angled
+// bays; a one-way loop and a two-lane dirt driveway (at the +X end) join a country lane that runs along X and leaves
+// the screen at both ends. Crew walk from the house to a car, get in, it pulls forwards out of the bay and drives off
+// along the lane towards +X; on return it arrives from -X, drives round the loop and parks nose first.
 // All units cm, world space. Ground (and every floor top) is Z = 0.
 #pragma once
 
@@ -158,8 +159,9 @@ namespace DCSite
 	/** Where the fully expanded building can reach (the whole build grid). */
 	inline FBox2D CompoundRect() { return Grid::Bounds(); }
 
-	/** Gravel yard where cars park (Landscape draws it; nothing tall inside it). */
-	inline FBox2D YardRect() { return FBox2D(FVector2D(-950, -2050), FVector2D(900, -1200)); }
+	/** Gravel yard where cars park and circulate (Landscape draws it; nothing tall inside it). It covers the whole
+	 *  one-way loop: lower lane, U-turn at the -X end, the bay row and the out lane (see the car park below). */
+	inline FBox2D YardRect() { return FBox2D(FVector2D(-2450, -2310), FVector2D(2110, -1060)); }
 
 	/** The Office's front door: a doorway cut into its collapsed front (-Y) wall, centred on that edge. House builds
 	 *  the frame, World sends crew out through it, Landscape lays the footpath from it to the yard. */
@@ -179,11 +181,10 @@ namespace DCSite
 		Out[2] = FVector2D(D.X - 185.f, YardRect().Max.Y + 30.f);
 	}
 
-	/** Festoon poles along the house side of the yard (just outside it, so nothing tall stands where cars drive). */
+	/** Festoon poles between the house and the yard (just outside it, so nothing tall stands where cars drive). */
 	inline TArray<FVector2D> YardFestoonPoles()
 	{
-		const FBox2D Y = YardRect();
-		return { FVector2D(Y.Min.X - 60.f, Y.Max.Y + 40.f), FVector2D(FMath::Lerp(Y.Min.X, Y.Max.X, 0.5f), Y.Max.Y + 40.f), FVector2D(Y.Max.X + 60.f, Y.Max.Y + 40.f) };
+		return { FVector2D(-1250.f, -945.f), FVector2D(150.f, -945.f), FVector2D(1350.f, -945.f) };
 	}
 
 	/** Keep-clear zone around the compound, down to the yard: Landscape places no trees/fences/rocks inside it
@@ -194,29 +195,62 @@ namespace DCSite
 		return FBox2D(FVector2D(C.Min.X - 300.f, FMath::Min(YardRect().Max.Y, C.Min.Y - 150.f)), C.Max + FVector2D(300.f, 300.f));
 	}
 
+	// ── Car park ────────────────────────────────────────────────────────────────────────────────────────────────
+	// One row of angled bays in the yard, served by a ONE-WAY loop so cars only ever drive forwards:
+	//   IN:  lane (arriving from -X) -> the driveway's in lane (its -X side) -> left along the LOWER yard lane -> U-turn
+	//        at the -X end -> right along the REAR aisle (house side) -> nose first into the bay (slanted, nose towards
+	//        +X and the lane).
+	//   OUT: pull forwards straight through the bay -> right along the UPPER yard lane (in front of the noses) -> down
+	//        the driveway's out lane (its +X side) -> right onto the lane, off towards +X.
+	// In and out traffic never cross: the lower lane carries arrivals, the upper lane departures, and the driveway has a
+	// lane for each. All routes are traced by the car's REAR axle (DCVehicle turns the body about it like a real car).
+	// Checked offline for every bay and car style: >= 35 cm from parked cars and the gateway, <= 47 deg of steer.
 	constexpr int32 MaxParkingSlots = 8;
-	/** Parking slot i (0..7): car centre on the ground, nose facing -Y (towards the lane). Slot 0 is the first car. */
-	inline FTransform ParkingSlot(int32 I)
+	constexpr float BaySlant = 55.f;          // bay axis vs the aisles (deg)
+	constexpr float BayPitch = 280.f;         // centre spacing measured across the cars (old row: 225)
+	constexpr float BayRowY = -1600.f;        // bay centres
+	constexpr float Bay0X = -1200.f;          // centre of bay 0 (bays run towards +X)
+	constexpr float AisleFrontY = BayRowY - 370.f;    // upper yard lane: departures (-1970)
+	constexpr float AisleRearY = BayRowY + 420.f;     // rear aisle: arrivals turning in (-1180)
+	constexpr float InLaneY = AisleFrontY - 240.f;    // lower yard lane: arrivals (-2210), a car width + 64 cm below
+	constexpr float YardTurnR = 330.f;        // rear-axle radius of the yard corners (~40 deg of lock on a long car)
+	constexpr float LaneTurnR = 430.f;        // turning off / onto the lane
+	inline float BaySpacing() { return BayPitch / FMath::Sin(FMath::DegreesToRadians(BaySlant)); }
+	/** Bay b (0..7, -X to +X): car centre on the ground, nose slanted towards +X and the lane. */
+	inline FTransform ParkingBay(int32 B)
 	{
-		const int32 C = FMath::Clamp(I, 0, MaxParkingSlots - 1);
-		const float X = -770.f + 225.f * C;   // -770 .. 805
-		return FTransform(FRotator(0.f, -90.f, 0.f), FVector(X, -1600.f, GroundZ));
+		const int32 C = FMath::Clamp(B, 0, MaxParkingSlots - 1);
+		return FTransform(FRotator(0.f, -BaySlant, 0.f), FVector(Bay0X + BaySpacing() * C, BayRowY, GroundZ));
 	}
+	/** Mission slot -> bay: the first cars park nearest the front door (middle of the row), later ones further out. */
+	inline int32 SlotBay(int32 Slot)
+	{
+		static const int32 Order[MaxParkingSlots] = { 3, 4, 2, 5, 1, 6, 0, 7 };
+		return Order[FMath::Clamp(Slot, 0, MaxParkingSlots - 1)];
+	}
+	/** Parking slot i (0..7): the transform of its bay. */
+	inline FTransform ParkingSlot(int32 I) { return ParkingBay(SlotBay(I)); }
 
 	/** Country lane: straight along X at LaneY, from LaneX0 to LaneX1 (both well off-screen). Width LaneW. */
-	constexpr float LaneY = -2650.f;
+	constexpr float LaneY = -2950.f;
 	constexpr float LaneW = 520.f;
 	constexpr float LaneX0 = -14000.f;
 	constexpr float LaneX1 = 14000.f;
-	/** Dirt driveway from the yard to the lane, centred on X = DriveX, from yard edge (Y=-2050) to the lane. */
-	constexpr float DriveX = -100.f;
-	constexpr float DriveW = 380.f;
+	/** Cars drive on the house-side half of the lane; arrivals and departures both head +X, so they never meet. */
+	constexpr float LaneTravelY = LaneY + 110.f;
+	/** Dirt driveway from the yard to the lane at the +X end of the yard, centred on X = DriveX. Two lanes: in on its
+	 *  -X side, out on its +X side (DriveX -+ DriveLaneHalf). */
+	constexpr float DriveX = 1830.f;
+	constexpr float DriveW = 520.f;
+	constexpr float DriveLaneHalf = 165.f;
+	inline float DriveInX() { return DriveX - DriveLaneHalf; }
+	inline float DriveOutX() { return DriveX + DriveLaneHalf; }
 
 	/** Post-and-rail fence on the house side of the lane, with a gateway where the driveway crosses it. The five-bar
 	 *  gate hangs on the -X gate post and stands swung right back OUTWARDS (towards the lane verge, away from the
 	 *  yard and the turn onto the lane) so nothing a car drives over is anywhere near it. */
 	constexpr float FenceY = LaneY + 380.f;
-	constexpr float GateHalf = 320.f;      // gate posts at DriveX +- GateHalf
+	constexpr float GateHalf = 380.f;      // gate posts at DriveX +- GateHalf
 	constexpr float GateLeafLen = 330.f;
 	constexpr float GateOpenYaw = -158.f;  // leaf direction from the hinge (0 = closed, across the gateway towards +X)
 	inline FVector2D GateHinge() { return FVector2D(DriveX - GateHalf + 14.f, FenceY); }
@@ -239,31 +273,70 @@ namespace DCSite
 		Out.Add(FVector4f(MB.X, MB.Y, 30.f, 0.f));
 	}
 
-	/** Route a car drives when LEAVING from slot I: out of the slot, down the driveway, onto the lane (left-hand
-	 *  lane side, heading +X), and off-screen. Returning cars drive the exact reverse (arrive from +X). */
-	inline void DepartRoute(int32 I, TArray<FVector>& Out)
+	/** Off-screen ends of the lane: arrivals appear at ArriveFromX, departures vanish past LeaveToX. */
+	constexpr float ArriveFromX = -7000.f;
+	constexpr float LeaveToX = 7000.f;
+
+	/** Where a bay's axis crosses the line Y = AtY (the turn in from the rear aisle / out onto the front lane). */
+	inline FVector2D BayAxisAtY(int32 B, float AtY)
 	{
-		Out.Reset();
-		const FVector P = ParkingSlot(I).GetLocation();
-		Out.Add(P);
-		Out.Add(FVector(P.X, -1960.f, GroundZ));                 // pull forward out of the bay (clear of the neighbours' noses)
-		Out.Add(FVector(DriveX, FenceY + 250.f, GroundZ));       // line up with the driveway
-		Out.Add(FVector(DriveX, FenceY - 120.f, GroundZ));       // down the driveway, straight through the gateway
-		Out.Add(FVector(DriveX + 400.f, LaneY + 110.f, GroundZ));// turn onto the lane
-		Out.Add(FVector(LaneX1 - 1000.f, LaneY + 110.f, GroundZ));// and away
+		const FTransform T = ParkingBay(B);
+		const FVector F = T.GetRotation().GetForwardVector();
+		const float K = (AtY - T.GetLocation().Y) / F.Y;
+		return FVector2D(T.GetLocation().X + F.X * K, AtY);
+	}
+	/** Rear-axle route as corners + fillet radius per corner (0 at the ends); DCVehicle rounds each corner with an arc
+	 *  and eases the joins. Arriving: from off-screen into bay B, ending parked (centre on the bay). Departing: from
+	 *  parked in bay B, forwards through the bay and away. WheelBase places the rear axle (half of it behind the centre). */
+	inline void CarRoute(int32 B, bool bArrive, float WheelBase, TArray<FVector2D>& Corners, TArray<float>& Radii)
+	{
+		Corners.Reset(); Radii.Reset();
+		const FTransform T = ParkingBay(B);
+		const FVector F3 = T.GetRotation().GetForwardVector();
+		const FVector2D F(F3.X, F3.Y), C(T.GetLocation().X, T.GetLocation().Y);
+		const FVector2D Rear = C - F * (WheelBase * 0.5f);
+		const float TanHalf = FMath::Tan(FMath::DegreesToRadians(BaySlant * 0.5f));
+		auto Add = [&](const FVector2D& P, float R) { Corners.Add(P); Radii.Add(R); };
+		if (bArrive)
+		{
+			// U-turn at the -X end: a half circle from the lower lane up to the rear aisle, just clear of bay 0's turn in.
+			const float UR = (AisleRearY - InLaneY) * 0.5f;
+			const float UX = BayAxisAtY(0, AisleRearY).X - YardTurnR * TanHalf - UR - 40.f;
+			Add(FVector2D(ArriveFromX, LaneTravelY), 0.f);
+			Add(FVector2D(DriveInX(), LaneTravelY), LaneTurnR);
+			Add(FVector2D(DriveInX(), InLaneY), YardTurnR);
+			Add(FVector2D(UX, InLaneY), UR);
+			Add(FVector2D(UX, AisleRearY), UR);
+			Add(BayAxisAtY(B, AisleRearY), YardTurnR);
+			Add(Rear, 0.f);
+		}
+		else
+		{
+			Add(Rear, 0.f);
+			Add(BayAxisAtY(B, AisleFrontY), YardTurnR);
+			Add(FVector2D(DriveOutX(), AisleFrontY), YardTurnR);
+			Add(FVector2D(DriveOutX(), LaneTravelY), LaneTurnR);
+			Add(FVector2D(LeaveToX, LaneTravelY), 0.f);
+		}
 	}
 
-	/** Where crew walk to board a car in slot I (beside the car, house side). */
+	/** Where crew stand to board the car in slot I: beside its doors in the gap between the bays, alternating sides
+	 *  (even seats on the car's left, odd on its right), further back for the back seats. */
 	inline FVector BoardingPoint(int32 I, int32 Seat)
 	{
-		const FVector P = ParkingSlot(I).GetLocation();
-		const float Side = (Seat % 2 == 0) ? -1.f : 1.f; // alternate sides of the car
-		return FVector(P.X + Side * 120.f, P.Y + 60.f + 90.f * (Seat / 2), GroundZ);
+		const FTransform T = ParkingSlot(I);
+		const float Side = (Seat % 2 == 0) ? -1.f : 1.f;
+		return T.TransformPositionNoScale(FVector(30.f - 90.f * (Seat / 2), Side * 135.f, 0.f));
+	}
+	/** The car-park area worth keeping in shot (the bay row and its aisles). */
+	inline FBox2D ParkingFrameRect()
+	{
+		return FBox2D(FVector2D(ParkingBay(0).GetLocation().X - 400.f, InLaneY - 100.f), FVector2D(ParkingBay(MaxParkingSlots - 1).GetLocation().X + 400.f, AisleRearY + 100.f));
 	}
 
 	/** Walkable outdoor area pawns may use outside the building (yard + a margin around the compound). */
-	inline FBox2D OutdoorWalkRect() { const FBox2D C = CompoundRect(); return FBox2D(FVector2D(FMath::Min(-1250.f, C.Min.X - 400.f), -2100.f), C.Max + FVector2D(400.f, 400.f)); }
+	inline FBox2D OutdoorWalkRect() { const FBox2D C = CompoundRect(), Y = YardRect(); return FBox2D(FVector2D(FMath::Min(Y.Min.X, C.Min.X - 400.f), Y.Min.Y - 40.f), FVector2D(FMath::Max(Y.Max.X, C.Max.X + 400.f), C.Max.Y + 400.f)); }
 
 	/** Default camera bounds: compound + yard + a strip of lane, with room to see the landscape. */
-	inline FBox CameraBounds() { return FBox(FVector(-2900, -3400, 0), FVector(2900, 3200, 400)); }
+	inline FBox CameraBounds() { return FBox(FVector(-2900, -3700, 0), FVector(2900, 3200, 400)); }
 }

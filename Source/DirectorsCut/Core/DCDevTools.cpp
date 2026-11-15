@@ -203,8 +203,8 @@ void UDCDevTools::PrepareShot(const FShot& Shot)
 		if (Is(TEXT("wide"))) { if (ZoomOverride >= 0.f) { Rig->FocusOn(Rig->GetOverviewPivot(), ZoomOverride); } else { Rig->ResetFocus(); } }
 		else if (Is(TEXT("yard")))
 		{
-			// The parked cars, the driveway and the front of the house.
-			const FVector2D C = DCSite::YardRect().GetCenter();
+			// The parked cars and the front of the house.
+			const FVector2D C = DCSite::ParkingFrameRect().GetCenter();
 			Go(FVector(C.X, C.Y - 150.f, 0.f), 0.3f);
 		}
 		else if (Is(TEXT("house")))
