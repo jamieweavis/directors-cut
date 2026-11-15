@@ -632,7 +632,7 @@ TSharedRef<SWidget> SDCRoot::BuildEnd(bool bWon)
 	Tiles->AddSlot(0, 0)[StatTile(TEXT("calendar"), FString::FromInt(S.DaysSurvived), TEXT("Days"), Col)];
 	Tiles->AddSlot(1, 0)[StatTile(TEXT("trophy"), FString::Printf(TEXT("%d/%d"), S.MissionsSucceeded, S.MissionsAttempted), TEXT("Jobs"), Col)];
 	Tiles->AddSlot(2, 0)[StatTile(TEXT("banknote"), MoneyShort(S.TotalTake), TEXT("Total take"), Col)];
-	Tiles->AddSlot(3, 0)[StatTile(TEXT("hammer"), FString::FromInt(S.RoomsBuilt), TEXT("Wings"), Col)];
+	Tiles->AddSlot(3, 0)[StatTile(TEXT("hammer"), FString::FromInt(S.RoomsBuilt), TEXT("Buildings"), Col)];
 	Tiles->AddSlot(4, 0)[StatTile(TEXT("clock"), DC::Clock(S.PlayTime), TEXT("Play time"), Col)];
 
 	auto NameList = [](const TArray<FString>& Names, FName IconName, const FLinearColor& IC)
@@ -642,13 +642,14 @@ TSharedRef<SWidget> SDCRoot::BuildEnd(bool bWon)
 		if (Names.Num() == 0) { W->AddSlot()[Txt(TEXT("—"), Font(10.f), TextFaint)]; }
 		return W;
 	};
-	TSharedRef<SHorizontalBox> Perks = SNew(SHorizontalBox);
+	// Wraps onto new rows: a long run can collect more perks than fit across the card.
+	TSharedRef<SWrapBox> Perks = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(6.f, 6.f));
 	for (FName Id : S.Perks)
 	{
 		const FDCPerk* P = R ? R->FindPerk(Id) : nullptr;
 		TSharedRef<SWidget> W = IconTile(P ? P->Icon : FName(TEXT("sparkles")), 30.f, Accent);
 		W->SetToolTip(Tip(P ? P->DisplayName : Id.ToString(), P ? P->Description : FString(), P ? P->Icon : FName(TEXT("sparkles"))));
-		Perks->AddSlot().AutoWidth().Padding(0.f, 0.f, 6.f, 0.f)[W];
+		Perks->AddSlot()[W];
 	}
 
 	TSharedRef<SWidget> CardW = GlassPanel(
