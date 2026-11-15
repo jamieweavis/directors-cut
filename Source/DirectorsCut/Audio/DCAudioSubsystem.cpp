@@ -1,4 +1,4 @@
-// Director's Cut: UDCAudioSubsystem implementation (Agent H, v2). No music anywhere.
+// Director's Cut: UDCAudioSubsystem implementation (Agent H, v2).
 //
 //  - SFX by canonical name (DCSfx::*) via soft paths under /Game/DC/Audio, 2D, with per-sound gain, small pitch
 //    jitter, round-robin variants (Click, Hover) and per-name throttling. The WAVs are loudness-normalised by
@@ -8,7 +8,13 @@
 //    30-120 s (day: crow / cattle / tractor; night: owl / dog / train horn). Title: room tone + night low.
 //  - Scores the game automatically from UDCRunSubsystem delegates through a small timed queue, with burst
 //    throttling (e.g. many completions after a bot AdvanceTime jump play one sequence, not twenty).
-//  - Volume channels Master/SFX/Ambience applied live and persisted in GameUserSettings.ini.
+//  - Music: a lounge score of four 32-bar sets (DayA/DayB/NightA/NightB) x five looping stems. All stems of a set
+//    start in the same frame and stay locked; every 8-bar phrase the director re-mixes them (DCAudio::ComputeMusicLayers)
+//    from the clock (day/night, with hysteresis) and the run's progress (unlocked tier = chapter 1..4): early runs get
+//    keys, bass and a light groove with the odd melody; later chapters bring the second sets, both melodies and the
+//    Color layer. Set changes wait for a phrase boundary and crossfade; title <-> run changes crossfade at once.
+//    Paused: ducked and low-passed. Game over: fades out.
+//  - Volume channels Master/SFX/Ambience/Music applied live and persisted in GameUserSettings.ini.
 //  - Missing assets are logged once and stay silent. Everything is rebuilt when the game instance's world changes.
 #include "Core/DCAudioSubsystem.h"
 #include "Core/DCRunSubsystem.h"
@@ -29,11 +35,17 @@
 namespace
 {
 	const TCHAR* ConfigSection = TEXT("/Script/DirectorsCut.DCAudio");
-	const TCHAR* ChannelKeys[3] = { TEXT("MasterVolume"), TEXT("SFXVolume"), TEXT("AmbienceVolume") };
+	constexpr int32 NumVolumeChannels = 4;
+	const TCHAR* ChannelKeys[NumVolumeChannels] = { TEXT("MasterVolume"), TEXT("SFXVolume"), TEXT("AmbienceVolume"), TEXT("MusicVolume") };
 
 	constexpr float BedFadeTau = 1.2f;          // seconds; crossfade smoothing for bed gains
 	constexpr float OneShotGain = 0.8f;
 	constexpr float OneShotMin = 30.f, OneShotMax = 120.f;
+
+	constexpr double MusicPhraseLead = 0.6;   // seconds: phrase re-mixes start just before the downbeat
+	constexpr float MusicLayerTau = 0.9f;     // seconds: layer in/out smoothing
+	constexpr float MusicFadeOutTau = 1.2f;   // seconds: outgoing set
+	constexpr float MusicPausedLpfHz = 1400.f;
 
 	struct FSfxTuning
 	{
@@ -88,6 +100,25 @@ struct FDCAudioRuntime
 	bool bVolumesDirty = false;
 	double VolumesDirtySince = 0.0;
 	FDelegateHandle RunHandles[7];
+
+	// Music director
+	int32 MusicSet = -1;
+	bool bMusicTitle = false;
+	bool bMusicDay = true;
+	double MusicStart = 0.0;     // FPlatformTime::Seconds() when the set's stems started
+	double MusicLoopSec = 80.0;
+	int32 MusicPhrase = 0;       // phrase index (from the set's start) the current mix is for
+	int32 PassesOnSet = 0;       // completed 32-bar passes of the current set
+	DCAudio::FMusicPass Pass;
+	float LayerTarget[DCAudio::MusicStemCount] = {};
+	float LayerGain[DCAudio::MusicStemCount] = {};
+	float LayerApplied[DCAudio::MusicStemCount] = { -1.f, -1.f, -1.f, -1.f, -1.f };
+	float FadeBase[DCAudio::MusicStemCount] = {};
+	float FadeGain = 0.f;
+	float MusicLevel = 0.f;      // 0 when silenced (game over)
+	float MusicDuck = 1.f;       // paused
+	float LpfHz = 20000.f;
+	float LpfApplied = -1.f;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -182,6 +213,7 @@ bool UDCAudioSubsystem::TickAudio(float DeltaTime)
 	const bool bFresh = RT->BoundWorld.Get() != GetAudioWorld();
 	if (!EnsureComponents()) { return true; }
 	UpdateAmbience(DeltaTime, bFresh);
+	UpdateMusic(DeltaTime);
 	TickQueue();
 	TickAmbienceOneShots();
 	return true;
@@ -240,6 +272,7 @@ bool UDCAudioSubsystem::EnsureComponents()
 
 void UDCAudioSubsystem::TearDownComponents()
 {
+	StopMusic(false);
 	for (UAudioComponent* C : BedComps)
 	{
 		if (IsValid(C))
@@ -394,28 +427,217 @@ void UDCAudioSubsystem::TickAmbienceOneShots()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Music
+// ─────────────────────────────────────────────────────────────────────────────
+
+void UDCAudioSubsystem::UpdateMusic(float DeltaTime)
+{
+	const UDCRunSubsystem* Run = RT->Run.Get();
+	const EDCGamePhase Phase = Run ? Run->GetPhase() : EDCGamePhase::Title;
+	const bool bSilent = Phase == EDCGamePhase::GameOver;
+	const bool bTitle = !Run || Phase == EDCGamePhase::Title || (!Run->HasActiveRun() && Phase != EDCGamePhase::Won);
+	const float Hour = bTitle ? 0.f : Run->GetHourOfDay();
+	RT->bMusicDay = DCAudio::MusicIsDay(Hour, RT->bMusicDay);
+	const int32 Chapter = bTitle ? 1 : (Phase == EDCGamePhase::Won ? 4 : DCAudio::MusicChapter(Run->GetUnlockedTier()));
+
+	if (!bSilent)
+	{
+		if (RT->MusicSet < 0 || bTitle != RT->bMusicTitle)
+		{
+			// Nothing playing yet, or title <-> run: change straight away.
+			StartMusicSet(DCAudio::ChooseMusicSet(bTitle, RT->bMusicDay, Chapter, -1, 0, RT->Rand.FRand()), bTitle, Chapter);
+		}
+		else
+		{
+			const double PhraseSec = RT->MusicLoopSec / DCAudio::MusicPhrasesPerLoop;
+			const double Pos = FPlatformTime::Seconds() - RT->MusicStart;
+			const int32 Next = FMath::FloorToInt32((Pos + MusicPhraseLead) / PhraseSec);
+			if (Next > RT->MusicPhrase)
+			{
+				const bool bLoopTop = Next % DCAudio::MusicPhrasesPerLoop == 0;
+				const bool bWrongTime = !bTitle && DCAudio::IsDaySet(RT->MusicSet) != RT->bMusicDay;
+				if (bLoopTop) { ++RT->PassesOnSet; }
+				int32 Want = RT->MusicSet;
+				if (bLoopTop || bWrongTime)
+				{
+					Want = DCAudio::ChooseMusicSet(bTitle, RT->bMusicDay, Chapter, RT->MusicSet, RT->PassesOnSet, RT->Rand.FRand());
+				}
+				if (Want != RT->MusicSet)
+				{
+					StartMusicSet(Want, bTitle, Chapter);
+				}
+				else
+				{
+					RT->MusicPhrase = Next;
+					if (bLoopTop)
+					{
+						RT->Pass = DCAudio::PlanMusicPass(bTitle, Chapter, RT->Pass.Melody, false, RT->Rand.FRand(), RT->Rand.FRand(), RT->Rand.FRand());
+					}
+					PlanMusicPhrase(bTitle, Chapter);
+				}
+			}
+		}
+	}
+	else if (RT->MusicSet >= 0 && RT->MusicLevel < 0.005f)
+	{
+		StopMusic(false);
+	}
+	ApplyMusicVolumes(DeltaTime);
+}
+
+void UDCAudioSubsystem::StartMusicSet(int32 Set, bool bTitle, int32 Chapter)
+{
+	StopMusic(true);
+	RT->MusicSet = Set;
+	RT->bMusicTitle = bTitle;
+	RT->PassesOnSet = 0;
+	RT->MusicPhrase = 0;
+	RT->MusicLoopSec = DCAudio::MusicLoopSeconds(Set);
+	RT->LpfApplied = -1.f;
+	for (int32 i = 0; i < DCAudio::MusicStemCount; ++i) { RT->LayerGain[i] = 0.f; RT->LayerApplied[i] = -1.f; }
+
+	MusicComps.SetNum(DCAudio::MusicStemCount);
+	int32 Live = 0;
+	for (int32 i = 0; i < DCAudio::MusicStemCount; ++i)
+	{
+		USoundBase* S = LoadSound(DCAudio::MakePath(DCAudio::MusicAssetName(Set, i)));
+		UAudioComponent* C = S ? MakeComponent(S) : nullptr;
+		MusicComps[i] = C;
+		if (C)
+		{
+			C->bOverridePriority = true;
+			C->Priority = 3.f;
+			C->SetVolumeMultiplier(0.001f);
+			++Live;
+			if (i == DCAudio::StemCore && S->GetDuration() > 10.f && S->GetDuration() < 1000.f) { RT->MusicLoopSec = S->GetDuration(); }
+		}
+	}
+	// Start every stem in the same frame: same length + sample-accurate looping keeps them locked from here on.
+	for (UAudioComponent* C : MusicComps) { if (C) { C->Play(0.f); } }
+	RT->MusicStart = FPlatformTime::Seconds();
+
+	RT->Pass = DCAudio::PlanMusicPass(bTitle, Chapter, RT->Pass.Melody, true, RT->Rand.FRand(), RT->Rand.FRand(), RT->Rand.FRand());
+	PlanMusicPhrase(bTitle, Chapter);
+	UE_LOG(LogDC, Display, TEXT("DCAudio: music -> %s (%s, chapter %d, %.1fs loop, %d/%d stems)"), DCAudio::MusicSetName(Set),
+		bTitle ? TEXT("title") : (RT->bMusicDay ? TEXT("day") : TEXT("night")), Chapter, RT->MusicLoopSec, Live, (int32)DCAudio::MusicStemCount);
+}
+
+void UDCAudioSubsystem::PlanMusicPhrase(bool bTitle, int32 Chapter)
+{
+	const DCAudio::FMusicLayers L = DCAudio::ComputeMusicLayers(bTitle, Chapter, RT->Pass, RT->MusicPhrase, RT->PassesOnSet == 0);
+	for (int32 i = 0; i < DCAudio::MusicStemCount; ++i) { RT->LayerTarget[i] = L.Gain[i]; }
+	UE_LOG(LogDC, Verbose, TEXT("DCAudio: %s phrase %d: core %.2f groove %.2f melA %.2f melB %.2f color %.2f"), DCAudio::MusicSetName(RT->MusicSet),
+		RT->MusicPhrase % DCAudio::MusicPhrasesPerLoop, L.Gain[0], L.Gain[1], L.Gain[2], L.Gain[3], L.Gain[4]);
+}
+
+void UDCAudioSubsystem::StopMusic(bool bFadeOut)
+{
+	auto Kill = [](TArray<TObjectPtr<UAudioComponent>>& Comps)
+	{
+		for (UAudioComponent* C : Comps)
+		{
+			if (IsValid(C)) { C->Stop(); C->DestroyComponent(); }
+		}
+		Comps.Reset();
+	};
+	Kill(MusicFadeComps);
+	if (bFadeOut && RT.IsValid() && MusicComps.Num() > 0)
+	{
+		MusicFadeComps = MusicComps;
+		MusicComps.Reset();
+		for (int32 i = 0; i < DCAudio::MusicStemCount; ++i) { RT->FadeBase[i] = RT->LayerGain[i]; }
+		RT->FadeGain = 1.f;
+	}
+	else
+	{
+		Kill(MusicComps);
+	}
+	if (RT.IsValid())
+	{
+		if (!bFadeOut) { RT->FadeGain = 0.f; }
+		RT->MusicSet = -1;
+	}
+}
+
+void UDCAudioSubsystem::ApplyMusicVolumes(float DeltaTime)
+{
+	const UDCRunSubsystem* Run = RT->Run.Get();
+	const EDCGamePhase Phase = Run ? Run->GetPhase() : EDCGamePhase::Title;
+	const bool bPaused = Run && Run->HasActiveRun() && Run->IsPaused();
+	const float Dt = FMath::Max(DeltaTime, 0.f);
+	auto Ease = [Dt](float Tau) { return 1.f - FMath::Exp(-Dt / Tau); };
+
+	RT->MusicLevel += ((Phase == EDCGamePhase::GameOver ? 0.f : 1.f) - RT->MusicLevel) * Ease(1.0f);
+	RT->MusicDuck += ((bPaused ? 0.6f : 1.f) - RT->MusicDuck) * Ease(0.35f);
+	const float LpfTarget = bPaused ? MusicPausedLpfHz : 20000.f;
+	RT->LpfHz = FMath::Exp(FMath::Lerp(FMath::Loge(RT->LpfHz), FMath::Loge(LpfTarget), Ease(0.35f)));
+
+	const float Channel = Volumes[(int32)EDCVolumeChannel::Master] * Volumes[(int32)EDCVolumeChannel::Music] * RT->MusicLevel * RT->MusicDuck;
+	const float KLayer = Ease(MusicLayerTau);
+	for (int32 i = 0; i < DCAudio::MusicStemCount; ++i) { RT->LayerGain[i] += (RT->LayerTarget[i] - RT->LayerGain[i]) * KLayer; }
+	RT->FadeGain *= FMath::Exp(-Dt / MusicFadeOutTau);
+
+	const bool bLpfChanged = RT->LpfApplied < 0.f || FMath::Abs(RT->LpfHz - RT->LpfApplied) > RT->LpfApplied * 0.02f;
+	auto Filter = [this](UAudioComponent* C)
+	{
+		const bool bOn = RT->LpfHz < 18000.f;
+		C->SetLowPassFilterEnabled(bOn);
+		if (bOn) { C->SetLowPassFilterFrequency(RT->LpfHz); }
+	};
+	for (int32 i = 0; i < MusicComps.Num(); ++i)
+	{
+		UAudioComponent* C = MusicComps[i];
+		if (!C) { continue; }
+		// Floor at 0.001 rather than 0 so resting layers keep their place in the loop.
+		const float V = FMath::Max(RT->LayerGain[i] * Channel, 0.001f);
+		if (FMath::Abs(V - RT->LayerApplied[i]) > 0.0015f) { C->SetVolumeMultiplier(V); RT->LayerApplied[i] = V; }
+		if (bLpfChanged) { Filter(C); }
+	}
+	if (MusicFadeComps.Num() > 0)
+	{
+		if (RT->FadeGain < 0.01f)
+		{
+			for (UAudioComponent* C : MusicFadeComps) { if (IsValid(C)) { C->Stop(); C->DestroyComponent(); } }
+			MusicFadeComps.Reset();
+		}
+		else
+		{
+			for (int32 i = 0; i < MusicFadeComps.Num() && i < DCAudio::MusicStemCount; ++i)
+			{
+				if (UAudioComponent* C = MusicFadeComps[i])
+				{
+					C->SetVolumeMultiplier(FMath::Max(RT->FadeBase[i] * RT->FadeGain * Channel, 0.001f));
+					if (bLpfChanged) { Filter(C); }
+				}
+			}
+		}
+	}
+	if (bLpfChanged) { RT->LpfApplied = RT->LpfHz; }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Volumes
 // ─────────────────────────────────────────────────────────────────────────────
 
 void UDCAudioSubsystem::SetVolume(EDCVolumeChannel Channel, float Volume01)
 {
-	const int32 I = FMath::Clamp((int32)Channel, 0, 2);
+	const int32 I = FMath::Clamp((int32)Channel, 0, NumVolumeChannels - 1);
 	Volumes[I] = FMath::Clamp(Volume01, 0.f, 1.f);
 	if (RT.IsValid())
 	{
 		// Beds pick the new channel volume up on the next tick (UpdateAmbience applies it immediately).
 		RT->bVolumesDirty = true;
 		RT->VolumesDirtySince = RT->Now;
-		if (RT->BoundWorld.IsValid()) { UpdateAmbience(0.f, false); }
+		if (RT->BoundWorld.IsValid()) { UpdateAmbience(0.f, false); ApplyMusicVolumes(0.f); }
 	}
 }
 
-float UDCAudioSubsystem::GetVolume(EDCVolumeChannel Channel) const { return Volumes[FMath::Clamp((int32)Channel, 0, 2)]; }
+float UDCAudioSubsystem::GetVolume(EDCVolumeChannel Channel) const { return Volumes[FMath::Clamp((int32)Channel, 0, NumVolumeChannels - 1)]; }
 
 void UDCAudioSubsystem::LoadVolumes()
 {
 	if (!GConfig) { return; }
-	for (int32 i = 0; i < 3; ++i)
+	for (int32 i = 0; i < NumVolumeChannels; ++i)
 	{
 		float V = Volumes[i];
 		if (GConfig->GetFloat(ConfigSection, ChannelKeys[i], V, GGameUserSettingsIni)) { Volumes[i] = FMath::Clamp(V, 0.f, 1.f); }
@@ -426,7 +648,7 @@ void UDCAudioSubsystem::SaveVolumes()
 {
 	if (RT.IsValid()) { RT->bVolumesDirty = false; }
 	if (!GConfig) { return; }
-	for (int32 i = 0; i < 3; ++i) { GConfig->SetFloat(ConfigSection, ChannelKeys[i], Volumes[i], GGameUserSettingsIni); }
+	for (int32 i = 0; i < NumVolumeChannels; ++i) { GConfig->SetFloat(ConfigSection, ChannelKeys[i], Volumes[i], GGameUserSettingsIni); }
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
 

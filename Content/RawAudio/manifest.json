@@ -239,6 +239,146 @@
       "category": "AmbienceOneShot",
       "loop": false,
       "loudness": -34
+    },
+    {
+      "file": "MUS_DayA_Core.wav",
+      "asset": "/Game/DC/Audio/MUS_DayA_Core.MUS_DayA_Core",
+      "category": "Music",
+      "loop": true,
+      "loudness": -26.0
+    },
+    {
+      "file": "MUS_DayA_Groove.wav",
+      "asset": "/Game/DC/Audio/MUS_DayA_Groove.MUS_DayA_Groove",
+      "category": "Music",
+      "loop": true,
+      "loudness": -31.0
+    },
+    {
+      "file": "MUS_DayA_MelA.wav",
+      "asset": "/Game/DC/Audio/MUS_DayA_MelA.MUS_DayA_MelA",
+      "category": "Music",
+      "loop": true,
+      "loudness": -29.0
+    },
+    {
+      "file": "MUS_DayA_MelB.wav",
+      "asset": "/Game/DC/Audio/MUS_DayA_MelB.MUS_DayA_MelB",
+      "category": "Music",
+      "loop": true,
+      "loudness": -29.5
+    },
+    {
+      "file": "MUS_DayA_Color.wav",
+      "asset": "/Game/DC/Audio/MUS_DayA_Color.MUS_DayA_Color",
+      "category": "Music",
+      "loop": true,
+      "loudness": -31.5
+    },
+    {
+      "file": "MUS_DayB_Core.wav",
+      "asset": "/Game/DC/Audio/MUS_DayB_Core.MUS_DayB_Core",
+      "category": "Music",
+      "loop": true,
+      "loudness": -26.0
+    },
+    {
+      "file": "MUS_DayB_Groove.wav",
+      "asset": "/Game/DC/Audio/MUS_DayB_Groove.MUS_DayB_Groove",
+      "category": "Music",
+      "loop": true,
+      "loudness": -31.0
+    },
+    {
+      "file": "MUS_DayB_MelA.wav",
+      "asset": "/Game/DC/Audio/MUS_DayB_MelA.MUS_DayB_MelA",
+      "category": "Music",
+      "loop": true,
+      "loudness": -29.0
+    },
+    {
+      "file": "MUS_DayB_MelB.wav",
+      "asset": "/Game/DC/Audio/MUS_DayB_MelB.MUS_DayB_MelB",
+      "category": "Music",
+      "loop": true,
+      "loudness": -29.5
+    },
+    {
+      "file": "MUS_DayB_Color.wav",
+      "asset": "/Game/DC/Audio/MUS_DayB_Color.MUS_DayB_Color",
+      "category": "Music",
+      "loop": true,
+      "loudness": -31.5
+    },
+    {
+      "file": "MUS_NightA_Core.wav",
+      "asset": "/Game/DC/Audio/MUS_NightA_Core.MUS_NightA_Core",
+      "category": "Music",
+      "loop": true,
+      "loudness": -26.0
+    },
+    {
+      "file": "MUS_NightA_Groove.wav",
+      "asset": "/Game/DC/Audio/MUS_NightA_Groove.MUS_NightA_Groove",
+      "category": "Music",
+      "loop": true,
+      "loudness": -31.0
+    },
+    {
+      "file": "MUS_NightA_MelA.wav",
+      "asset": "/Game/DC/Audio/MUS_NightA_MelA.MUS_NightA_MelA",
+      "category": "Music",
+      "loop": true,
+      "loudness": -29.0
+    },
+    {
+      "file": "MUS_NightA_MelB.wav",
+      "asset": "/Game/DC/Audio/MUS_NightA_MelB.MUS_NightA_MelB",
+      "category": "Music",
+      "loop": true,
+      "loudness": -29.5
+    },
+    {
+      "file": "MUS_NightA_Color.wav",
+      "asset": "/Game/DC/Audio/MUS_NightA_Color.MUS_NightA_Color",
+      "category": "Music",
+      "loop": true,
+      "loudness": -31.5
+    },
+    {
+      "file": "MUS_NightB_Core.wav",
+      "asset": "/Game/DC/Audio/MUS_NightB_Core.MUS_NightB_Core",
+      "category": "Music",
+      "loop": true,
+      "loudness": -26.0
+    },
+    {
+      "file": "MUS_NightB_Groove.wav",
+      "asset": "/Game/DC/Audio/MUS_NightB_Groove.MUS_NightB_Groove",
+      "category": "Music",
+      "loop": true,
+      "loudness": -31.0
+    },
+    {
+      "file": "MUS_NightB_MelA.wav",
+      "asset": "/Game/DC/Audio/MUS_NightB_MelA.MUS_NightB_MelA",
+      "category": "Music",
+      "loop": true,
+      "loudness": -29.0
+    },
+    {
+      "file": "MUS_NightB_MelB.wav",
+      "asset": "/Game/DC/Audio/MUS_NightB_MelB.MUS_NightB_MelB",
+      "category": "Music",
+      "loop": true,
+      "loudness": -29.5
+    },
+    {
+      "file": "MUS_NightB_Color.wav",
+      "asset": "/Game/DC/Audio/MUS_NightB_Color.MUS_NightB_Color",
+      "category": "Music",
+      "loop": true,
+      "loudness": -31.5
     }
   ]
 }

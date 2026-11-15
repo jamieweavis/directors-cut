@@ -516,7 +516,7 @@ TSharedRef<SWidget> SDCRoot::BuildOptions()
 				{
 					if (OptTab == 0)
 					{
-						if (UDCAudioSubsystem* Au = UDCAudioSubsystem::Get(GetContext())) { Au->SetVolume(EDCVolumeChannel::Master, 1.f); Au->SetVolume(EDCVolumeChannel::SFX, 1.f); Au->SetVolume(EDCVolumeChannel::Ambience, 0.8f); }
+						if (UDCAudioSubsystem* Au = UDCAudioSubsystem::Get(GetContext())) { Au->SetVolume(EDCVolumeChannel::Master, 1.f); Au->SetVolume(EDCVolumeChannel::SFX, 1.f); Au->SetVolume(EDCVolumeChannel::Ambience, 0.8f); Au->SetVolume(EDCVolumeChannel::Music, 0.6f); }
 						DCSettings::SetBool(TEXT("MuteAll"), false); DCSettings::SetBool(TEXT("MuteWhenUnfocused"), true);
 					}
 					else if (OptTab == 2)
@@ -578,6 +578,7 @@ TSharedRef<SWidget> SDCRoot::OptAudio()
 		+ SVerticalBox::Slot().AutoHeight()[Section(TEXT("Volume"))]
 		+ SVerticalBox::Slot().AutoHeight()[Vol(TEXT("volume-2"), TEXT("Master"), TEXT(""), EDCVolumeChannel::Master)]
 		+ SVerticalBox::Slot().AutoHeight()[Vol(TEXT("mouse-pointer-click"), TEXT("Effects"), TEXT("Interface, jobs, cash, builds"), EDCVolumeChannel::SFX)]
+		+ SVerticalBox::Slot().AutoHeight()[Vol(TEXT("music"), TEXT("Music"), TEXT("Lounge score that shifts with the hour and your rise"), EDCVolumeChannel::Music)]
 		+ SVerticalBox::Slot().AutoHeight()[Vol(TEXT("building-2"), TEXT("Ambience"), TEXT("The house, the fields, the weather"), EDCVolumeChannel::Ambience)]
 		+ SVerticalBox::Slot().AutoHeight()[Section(TEXT("Muting"))]
 		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("volume-x"), TEXT("Mute all"), TEXT("Silence everything without losing your levels"), Toggle(TEXT("MuteAll"), false))]

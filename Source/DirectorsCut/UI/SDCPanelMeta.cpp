@@ -587,6 +587,7 @@ TSharedRef<SWidget> SDCRoot::BuildPause()
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 22.f, 0.f, 12.f)[Label(TEXT("Audio"))]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 6.f)[VolRow(TEXT("volume-2"), TEXT("Master"), EDCVolumeChannel::Master)]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 6.f)[VolRow(TEXT("mouse-pointer-click"), TEXT("Effects"), EDCVolumeChannel::SFX)]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 6.f)[VolRow(TEXT("music"), TEXT("Music"), EDCVolumeChannel::Music)]
 			+ SVerticalBox::Slot().AutoHeight()[VolRow(TEXT("building-2"), TEXT("Ambience"), EDCVolumeChannel::Ambience)]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 22.f, 0.f, 16.f)[HLine()]
 			+ SVerticalBox::Slot().AutoHeight()

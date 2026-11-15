@@ -9,7 +9,8 @@
 #include "Core/DCTypes.h"
 #include "DCAudioSubsystem.generated.h"
 
-// Canonical SFX names. Anyone may call UDCAudioSubsystem::Play(DCSfx::Click). v2: no music anywhere in the game.
+// Canonical SFX names. Anyone may call UDCAudioSubsystem::Play(DCSfx::Click). The lounge score runs by itself
+// (UDCAudioSubsystem::UpdateMusic): layered stems that follow the clock and the run's progress.
 namespace DCSfx
 {
 	inline const FName Click           = TEXT("Click");           // crisp UI click
@@ -57,11 +58,15 @@ private:
 	// ═══ Agent H owns everything below this line ═══
 	friend struct FDCAudioTestAccess; // automation tests (Audio/DCAudioTests.cpp)
 
-	float Volumes[3] = { 1.f, 1.f, 0.8f };
+	float Volumes[4] = { 1.f, 1.f, 0.8f, 0.6f };
 
 	UPROPERTY(Transient) TMap<FName, TObjectPtr<class USoundBase>> SoundCache;
 	/** Looping ambience beds (DCAudio::EBed order), living in the game instance's current world. */
 	UPROPERTY(Transient) TArray<TObjectPtr<class UAudioComponent>> BedComps;
+	/** The playing music set's stems (DCAudio::EMusicStem order), all started in the same frame so they stay locked. */
+	UPROPERTY(Transient) TArray<TObjectPtr<class UAudioComponent>> MusicComps;
+	/** The previous set's stems while they fade out under the new one. */
+	UPROPERTY(Transient) TArray<TObjectPtr<class UAudioComponent>> MusicFadeComps;
 
 	/** Non-UObject runtime state (ticker, timers, event queue); defined in Audio/DCAudioSubsystem.cpp. */
 	TSharedPtr<struct FDCAudioRuntime> RT;
@@ -72,6 +77,11 @@ private:
 	void TearDownComponents();
 	void UpdateAmbience(float DeltaTime, bool bSnap);
 	void TickAmbienceOneShots();
+	void UpdateMusic(float DeltaTime);
+	void StartMusicSet(int32 Set, bool bTitle, int32 Chapter);
+	void PlanMusicPhrase(bool bTitle, int32 Chapter);
+	void ApplyMusicVolumes(float DeltaTime);
+	void StopMusic(bool bFadeOut);
 	void TickQueue();
 	/** Queues an SFX after Delay real seconds; dropped if the same SFX is already queued close by (burst throttle). */
 	void Schedule(FName SfxName, float Delay, float VolumeMultiplier = 1.f);

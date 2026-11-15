@@ -155,7 +155,8 @@ enum class EDCVolumeChannel : uint8
 {
 	Master,
 	SFX,
-	Ambience
+	Ambience,
+	Music
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
