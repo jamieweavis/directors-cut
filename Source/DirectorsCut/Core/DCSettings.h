@@ -50,6 +50,7 @@ namespace DCSettings
 
 	// Display
 	inline bool ShowFPS()             { return GetBool(TEXT("ShowFPS"), false); }        // small fps readout on the HUD
+	inline bool CelShading()          { return GetBool(TEXT("ToonOutlines"), true); }    // ink outlines + stepped lighting post pass
 
 	// Gameplay / camera (read by World: ADCCameraRig / ADCPlayerController)
 	inline bool EdgeScroll()          { return GetBool(TEXT("EdgeScroll"), false); }     // pan when the mouse touches the screen edge

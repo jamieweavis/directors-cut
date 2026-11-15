@@ -67,7 +67,8 @@ protected:
 	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> GroundMIDs;    // FarColor follows the haze
 	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> NightGlowMIDs; // Strength fades in at dusk
 	TArray<float> NightGlowBase;
-	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> ToonMID;  // ink outline + cel band post pass (null when off)
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> ToonMID;  // ink outline + cel band post pass
+	bool bToonOn = false;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> WaterMID;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> FireflyMID;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> FireMID;

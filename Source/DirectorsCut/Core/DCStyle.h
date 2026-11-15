@@ -21,12 +21,12 @@ namespace DCStyle
 		return b;
 	}
 
-	/** Ink outlines + cel banding. Player setting "ToonOutlines" (default on); -DCToon= overrides. */
+	/** Ink outlines + cel banding. Player setting (Options > Graphics > Cel shading, default on); -DCToon= overrides. */
 	inline bool ToonEnabled()
 	{
 		int32 V = -1;
 		if (FParse::Value(FCommandLine::Get(), TEXT("DCToon="), V)) { return V != 0; }
-		return DCSettings::GetBool(TEXT("ToonOutlines"), true);
+		return DCSettings::CelShading();
 	}
 
 	inline FLinearColor Tone(const FLinearColor& In)

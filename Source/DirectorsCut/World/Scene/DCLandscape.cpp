@@ -439,27 +439,26 @@ void ADCLandscape::BuildLightingAndPost()
 	S.bOverride_IndirectLightingIntensity = true; S.IndirectLightingIntensity = 1.1f;
 
 	// Ink outlines + cel-banded lighting (one cheap post pass; see Tools/style_materials.py and Core/DCStyle.h).
-	if (DCStyle::ToonEnabled())
+	// Always registered; the blend weight follows the player's setting (Tick), and a zero weight skips the pass.
+	if (UMaterialInterface* Toon = LoadObject<UMaterialInterface>(nullptr, DCStyle::ToonMaterialPath))
 	{
-		if (UMaterialInterface* Toon = LoadObject<UMaterialInterface>(nullptr, DCStyle::ToonMaterialPath))
+		ToonMID = UMaterialInstanceDynamic::Create(Toon, this);
+		auto Param = [this](const TCHAR* Flag, const TCHAR* Name)
 		{
-			ToonMID = UMaterialInstanceDynamic::Create(Toon, this);
-			auto Param = [this](const TCHAR* Flag, const TCHAR* Name)
-			{
-				float V = 0.f;
-				if (FParse::Value(FCommandLine::Get(), Flag, V)) { ToonMID->SetScalarParameterValue(Name, V); }
-			};
-			Param(TEXT("DCToonOutline="), TEXT("Outline"));
-			Param(TEXT("DCToonThick="), TEXT("Thickness"));
-			Param(TEXT("DCToonBand="), TEXT("Band"));
-			Param(TEXT("DCToonStep="), TEXT("BandStep"));
-			Param(TEXT("DCToonSoft="), TEXT("BandSoft"));
-			Param(TEXT("DCToonDepth="), TEXT("DepthEdge"));
-			Param(TEXT("DCToonNormal="), TEXT("NormalEdge"));
-			S.AddBlendable(ToonMID, 1.f);
-		}
-		else { UE_LOG(LogDC, Warning, TEXT("[Landscape] M_DC_Toon missing: run Tools/style_materials.py")); }
+			float V = 0.f;
+			if (FParse::Value(FCommandLine::Get(), Flag, V)) { ToonMID->SetScalarParameterValue(Name, V); }
+		};
+		Param(TEXT("DCToonOutline="), TEXT("Outline"));
+		Param(TEXT("DCToonThick="), TEXT("Thickness"));
+		Param(TEXT("DCToonBand="), TEXT("Band"));
+		Param(TEXT("DCToonStep="), TEXT("BandStep"));
+		Param(TEXT("DCToonSoft="), TEXT("BandSoft"));
+		Param(TEXT("DCToonDepth="), TEXT("DepthEdge"));
+		Param(TEXT("DCToonNormal="), TEXT("NormalEdge"));
+		bToonOn = DCStyle::ToonEnabled();
+		S.AddBlendable(ToonMID, bToonOn ? 1.f : 0.f);
 	}
+	else { UE_LOG(LogDC, Warning, TEXT("[Landscape] M_DC_Toon missing: run Tools/style_materials.py")); }
 
 	// Height fog: a thin distance haze + a ground-hugging mist layer (both driven per hour by ADCDayNight).
 	AExponentialHeightFog* Fog = GetWorld()->SpawnActor<AExponentialHeightFog>(FVector(0.f, 0.f, -3.f), FRotator::ZeroRotator);
@@ -503,6 +502,12 @@ void ADCLandscape::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	Time += DeltaSeconds;
 	PerfAccum += DeltaSeconds; ++PerfFrames;
+	// cel shading toggle (options screen) applies live
+	if (ToonMID && Post && DCStyle::ToonEnabled() != bToonOn)
+	{
+		bToonOn = !bToonOn;
+		for (FWeightedBlendable& WB : Post->Settings.WeightedBlendables.Array) { if (WB.Object == ToonMID) { WB.Weight = bToonOn ? 1.f : 0.f; } }
+	}
 	if (PerfAccum > 2.0) { PerfAccum = DeltaSeconds; PerfFrames = 1; }
 
 	const float Target = DayNight ? DayNight->GetLampAlpha() : 0.f;

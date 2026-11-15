@@ -583,6 +583,8 @@ TSharedRef<SWidget> SDCRoot::OptGraphics()
 				[G](int32 i) { G->ResScale = ResScales[i]; }), 360.f)]
 		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("activity"), TEXT("Show FPS"), TEXT("Small counter in the corner (applies now)"),
 			SwitchRight([]() { return DCSettings::ShowFPS(); }, [](bool b) { DCSettings::SetBool(TEXT("ShowFPS"), b); DCUI::RefreshPrefs(); }))]
+		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("palette"), TEXT("Cel shading"), TEXT("Ink outlines and stepped lighting (applies now)"),
+			SwitchRight([]() { return DCSettings::CelShading(); }, [](bool b) { DCSettings::SetBool(TEXT("ToonOutlines"), b); }))]
 		+ SVerticalBox::Slot().AutoHeight()[Section(TEXT("Quality"))]
 		+ SVerticalBox::Slot().AutoHeight()[Row(TEXT("layers"), TEXT("Overall quality"), TEXT("Sets everything below; tweak any line to go custom"),
 			SNew(SVerticalBox)
