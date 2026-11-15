@@ -44,11 +44,27 @@ START=$(date +%s)
   -noP4 -utf8output -unattended \
   -platform=Mac \
   -clientconfig="$CONFIG" \
-  -build -cook -stage -pak -iostore -compressed -prereqs \
-  -archive -archivedirectory="$OUT_DIR"
+  -build -cook -stage -pak -iostore -compressed -prereqs
 
-APP="$(find "$OUT_DIR/Mac" -maxdepth 1 -name '*.app' | head -1)"
-[[ -n "$APP" ]] || { echo "No .app found in $OUT_DIR/Mac"; exit 1; }
+# Don't use UAT's -archive on Mac: it copies the bare Binaries/Mac .app (no
+# Contents/UE, no dylibs), which dies at launch with "libtbb.12.dylib not
+# loaded". The complete, self-contained bundle is the staged one.
+STAGED_APP="$(find "$PROJECT_DIR/Saved/StagedBuilds/Mac" -maxdepth 1 -name '*.app' | head -1)"
+[[ -n "$STAGED_APP" && -d "$STAGED_APP/Contents/UE" ]] || { echo "No complete staged .app in Saved/StagedBuilds/Mac"; exit 1; }
+
+rm -rf "$OUT_DIR/Mac"
+mkdir -p "$OUT_DIR/Mac"
+APP="$OUT_DIR/Mac/$(basename "$STAGED_APP")"
+echo "==> Copying staged app to $APP"
+ditto "$STAGED_APP" "$APP"
+
+# Sanity check: every @rpath dylib the executable needs must be inside the bundle.
+EXE="$APP/Contents/MacOS/$(basename "$APP" .app)"
+for lib in $(otool -L "$EXE" | awk '/@rpath\// && !/weak/ {sub("@rpath/","",$1); print $1}'); do
+  if [[ -z "$(find "$APP" -name "$lib" -print -quit)" ]]; then
+    echo "ERROR: $lib is not bundled; the app will crash at launch."; exit 1
+  fi
+done
 
 echo "==> Zipping $(basename "$APP")"
 rm -f "$ZIP"
