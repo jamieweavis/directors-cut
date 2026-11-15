@@ -1,12 +1,12 @@
-// Director's Cut — always-visible crew list (HUD, bottom-left): one compact row per crew member.
+// Director's Cut — always-visible crew list (HUD, bottom-left): a floating header over one card per crew member.
 #include "UI/SDCRootInternal.h"
 #include "DirectorsCut.h"
 
 namespace
 {
 	// Width is capped so the list always clears the bottom-centre dock at 1280 px and up.
-	constexpr float HudCrewWidth = 286.f;
-	constexpr float HudCrewMaxListHeight = 290.f;
+	constexpr float HudCrewWidth = 360.f;
+	constexpr float HudCrewMaxListHeight = 440.f;
 
 	FLinearColor HudLoyaltyColor(int32 L) { return L >= 60 ? Good : (L >= 30 ? Warn : Bad); }
 }
@@ -60,8 +60,8 @@ void SDCRoot::RebuildHudCrew()
 
 	if (Roster.Num() == 0)
 	{
-		TSharedRef<SWidget> Hint = Pill(IconText(TEXT("user-plus"), TEXT("No crew — hire from Recruits"), Font(9.5f), TextFaint, TextDim, 11.f, 6.f),
-			A(GlassSoft, 0.75f), FMargin(10.f, 5.f), Line);
+		TSharedRef<SWidget> Hint = Pill(IconText(TEXT("user-plus"), TEXT("No crew — hire from Recruits"), Font(11.f), TextFaint, TextDim, 13.f, 7.f),
+			A(GlassSoft, 0.75f), FMargin(14.f, 8.f), Line);
 		HudCrewBox->AddSlot().AutoHeight().HAlign(HAlign_Left)
 		[
 			Button(Hint, [this]() { Open(EDCPanel::Recruits); }, EBtn::Ghost, true, Tip(TEXT("Recruits"), TEXT("Hire your first crew member"), TEXT("user-plus")), FMargin(0.f))
@@ -73,45 +73,37 @@ void SDCRoot::RebuildHudCrew()
 	for (const FDCCriminal& C : Roster) { if (C.IsAvailable()) { ++Ready; } }
 
 	TSharedRef<SWidget> Header = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Icon(TEXT("users"), 11.f, TextDim)]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.f, 0.f, 0.f, 0.f)[Txt(TEXT("CREW"), Caps(8.f), TextDim)]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.f, 0.f, 0.f, 0.f)
-		[Txt(FString::Printf(TEXT("%d/%d"), Roster.Num(), R->GetRosterCap()), Mono(9.f), TextFaint)]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Icon(TEXT("users"), 13.f, TextDim)]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0.f, 0.f, 0.f)[Txt(TEXT("CREW"), Caps(9.5f), TextDim)]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0.f, 0.f, 0.f)
+		[Txt(FString::Printf(TEXT("%d/%d"), Roster.Num(), R->GetRosterCap()), Mono(11.f), TextFaint)]
 		+ SHorizontalBox::Slot().FillWidth(1.f)[SNullWidget::NullWidget]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 		[
 			SNew(SBox).ToolTip(Tip(TEXT("Ready"), TEXT("Crew free to take a job right now"), TEXT("circle-check"), Good))
-			[IconText(TEXT("circle-check"), FString::FromInt(Ready), Mono(9.f), Good, Text, 10.f, 4.f)]
+			[IconText(TEXT("circle-check"), FString::FromInt(Ready), Mono(11.f), Good, Text, 12.f, 5.f)]
 		]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.f, 0.f, 0.f, 0.f)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(14.f, 0.f, 0.f, 0.f)
 		[
 			SNew(SBox).ToolTip(Tip(TEXT("Daily upkeep"), TEXT("Crew wages and building upkeep, paid at 06:00"), TEXT("wallet"), Accent))
-			[IconText(TEXT("wallet"), FString::Printf(TEXT("%s/day"), *MoneyShort(R->GetUpkeepDue())), Mono(9.f), TextDim, TextDim, 10.f, 4.f)]
+			[IconText(TEXT("wallet"), FString::Printf(TEXT("%s/day"), *MoneyShort(R->GetUpkeepDue())), Mono(11.f), TextDim, TextDim, 12.f, 5.f)]
 		];
 
 	TSharedRef<SVerticalBox> Rows = SNew(SVerticalBox);
-	for (const FDCCriminal& C : Roster) { Rows->AddSlot().AutoHeight().Padding(0.f, 1.f)[HudCrewRow(C)]; }
+	for (const FDCCriminal& C : Roster) { Rows->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 6.f)[HudCrewRow(C)]; }
 
 	// Keep the scroll position across rebuilds (the scroll box is new each time).
 	TSharedRef<SScrollBox> ScrollBox = SNew(SScrollBox)
 		.ScrollBarStyle(&ScrollBarStyle())
 		.ScrollBarThickness(FVector2D(4.f, 4.f))
-		.ScrollBarPadding(FMargin(3.f, 0.f, 0.f, 0.f))
+		.ScrollBarPadding(FMargin(6.f, 0.f, 0.f, 0.f))
 		.OnUserScrolled_Lambda([this](float Offset) { HudCrewScroll = Offset; })
 		+ SScrollBox::Slot()[Rows];
 	ScrollBox->SetScrollOffset(HudCrewScroll);
 
-	HudCrewBox->AddSlot().AutoHeight()
-	[
-		SNew(SBorder)
-		.BorderImage(Box(GlassSoft, 14.f, Line, 1.f))
-		.Padding(FMargin(6.f, 7.f, 6.f, 6.f))
-		[
-			SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight().Padding(6.f, 0.f, 6.f, 5.f)[Header]
-			+ SVerticalBox::Slot().AutoHeight()[SNew(SBox).MaxDesiredHeight(HudCrewMaxListHeight)[ScrollBox]]
-		]
-	];
+	// No container: the header floats over the cards, and each crew member is its own card.
+	HudCrewBox->AddSlot().AutoHeight().Padding(4.f, 0.f, 4.f, 10.f)[Pill(Header, A(GlassSoft, 0.85f), FMargin(12.f, 7.f), Line)];
+	HudCrewBox->AddSlot().AutoHeight()[SNew(SBox).MaxDesiredHeight(HudCrewMaxListHeight)[ScrollBox]];
 }
 
 TSharedRef<SWidget> SDCRoot::HudCrewRow(const FDCCriminal& C)
@@ -147,19 +139,19 @@ TSharedRef<SWidget> SDCRoot::HudCrewRow(const FDCCriminal& C)
 	for (FName Id : C.Abilities)
 	{
 		const FDCAbility* Ab = R ? R->FindAbility(Id) : nullptr;
-		Abilities->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(3.f, 0.f, 0.f, 0.f)[Icon(Ab ? Ab->Icon : FName(TEXT("zap")), 9.f, A(DC::TypeColor(C.Type), 0.85f))];
+		Abilities->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(5.f, 0.f, 0.f, 0.f)[Icon(Ab ? Ab->Icon : FName(TEXT("zap")), 11.f, A(DC::TypeColor(C.Type), 0.85f))];
 	}
 
 	TSharedRef<SWidget> Content = SNew(SHorizontalBox)
 		// Avatar with a status dot
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 12.f, 0.f)
 		[
 			SNew(SOverlay)
-			+ SOverlay::Slot()[Avatar(C, 28.f, !C.IsAvailable())]
+			+ SOverlay::Slot()[Avatar(C, 40.f, !C.IsAvailable())]
 			+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Bottom).Padding(FMargin(0.f, 0.f, -2.f, -2.f))
 			[
-				SNew(SBox).WidthOverride(9.f).HeightOverride(9.f)
-				[SNew(SBorder).BorderImage(Box(SC, -1.f, Hex(0x0B0D10), 1.5f)).Padding(0.f)]
+				SNew(SBox).WidthOverride(12.f).HeightOverride(12.f)
+				[SNew(SBorder).BorderImage(Box(SC, -1.f, Hex(0x0B0D10), 2.f)).Padding(0.f)]
 			]
 		]
 		// Name + live status
@@ -170,38 +162,38 @@ TSharedRef<SWidget> SDCRoot::HudCrewRow(const FDCCriminal& C)
 			[
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
-				[SNew(STextBlock).Text(FText::FromString(C.GetShortName())).Font(Font(10.5f, EW::SemiBold)).ColorAndOpacity(Text).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
+				[SNew(STextBlock).Text(FText::FromString(C.GetShortName())).Font(Font(13.f, EW::SemiBold)).ColorAndOpacity(Text).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Abilities]
 			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f, 0.f, 0.f)
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 4.f, 0.f)[Icon(StatusIcon(C), 9.f, SC)]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 5.f, 0.f)[Icon(StatusIcon(C), 11.f, SC)]
 				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
-				[SNew(STextBlock).Text_Lambda(StatusText).Font(Font(9.f)).ColorAndOpacity(SC).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
+				[SNew(STextBlock).Text_Lambda(StatusText).Font(Font(11.f)).ColorAndOpacity(SC).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
 			]
 		]
 		// Level
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.f, 0.f, 0.f, 0.f)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(12.f, 0.f, 0.f, 0.f)
 		[
-			SNew(SBox).WidthOverride(30.f).HAlign(HAlign_Center)
+			SNew(SBox).WidthOverride(38.f).HAlign(HAlign_Center)
 			.ToolTip(Tip(TEXT("Level"), bBoosted ? FString::Printf(TEXT("Level %d · effective %.1f with gear and perks"), C.Level, Eff) : FString::Printf(TEXT("Level %d"), C.Level), TEXT("chevrons-up"), Info))
 			[
 				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[Txt(TEXT("LV"), Caps(6.5f), TextFaint)]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[Txt(TEXT("LV"), Caps(8.f), TextFaint)]
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
-				[Txt(bBoosted ? FString::Printf(TEXT("%.1f"), Eff) : FString::FromInt(C.Level), Mono(10.f), bBoosted ? Accent : Text)]
+				[Txt(bBoosted ? FString::Printf(TEXT("%.1f"), Eff) : FString::FromInt(C.Level), Mono(13.f), bBoosted ? Accent : Text)]
 			]
 		]
 		// Loyalty: heart + number over a small bar
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.f, 0.f, 2.f, 0.f)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.f, 0.f, 2.f, 0.f)
 		[
-			SNew(SBox).WidthOverride(38.f)
+			SNew(SBox).WidthOverride(48.f)
 			.ToolTip(Tip(TEXT("Loyalty"), FString::Printf(TEXT("%d / 100. Loyal crew accept a bigger cut. Below 10 they walk."), C.Loyalty), TEXT("heart"), LC))
 			[
 				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[IconText(TEXT("heart"), FString::FromInt(C.Loyalty), Mono(10.f), LC, Text, 10.f, 3.f)]
-				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 3.f, 0.f, 0.f)[Bar(FMath::Clamp(C.Loyalty / 100.f, 0.f, 1.f), FSlateColor(LC), 3.f)]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[IconText(TEXT("heart"), FString::FromInt(C.Loyalty), Mono(13.f), LC, Text, 12.f, 4.f)]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 5.f, 0.f, 0.f)[Bar(FMath::Clamp(C.Loyalty / 100.f, 0.f, 1.f), FSlateColor(LC), 4.f)]
 			]
 		];
 
@@ -214,5 +206,5 @@ TSharedRef<SWidget> SDCRoot::HudCrewRow(const FDCCriminal& C)
 		CrewSel = CId;
 		DismissArmed = INDEX_NONE;
 		Open(EDCPanel::Crew);
-	}, EBtn::Ghost, true, TipWidget(TipBody), FMargin(6.f, 5.f));
+	}, EBtn::Card, true, TipWidget(TipBody), FMargin(14.f, 12.f));
 }
