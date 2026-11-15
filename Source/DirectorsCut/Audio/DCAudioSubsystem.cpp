@@ -36,7 +36,11 @@ namespace
 {
 	const TCHAR* ConfigSection = TEXT("/Script/DirectorsCut.DCAudio");
 	constexpr int32 NumVolumeChannels = 4;
-	const TCHAR* ChannelKeys[NumVolumeChannels] = { TEXT("MasterVolume"), TEXT("SFXVolume"), TEXT("AmbienceVolume"), TEXT("MusicVolume") };
+	const TCHAR* ChannelKeys[NumVolumeChannels] = { TEXT("MasterVolume"), TEXT("SFXVolume"), TEXT("AmbienceLevel"), TEXT("MusicVolume") };
+
+	// The Ambience slider spans a quieter range: full slider = 25% of the raw bed gain, so the 80% default
+	// lands where the old 20% was. The config key changed with the range so saved old-scale values reset.
+	constexpr float AmbienceRangeScale = 0.25f;
 
 	constexpr float BedFadeTau = 1.2f;          // seconds; crossfade smoothing for bed gains
 	constexpr float OneShotGain = 0.8f;
@@ -383,7 +387,7 @@ void UDCAudioSubsystem::UpdateAmbience(float DeltaTime, bool bSnap)
 	const DCAudio::FAmbienceMix Mix = DCAudio::ComputeAmbienceMix(bActive, Hour, Rain, bActive && Run->IsPaused());
 
 	const float K = bSnap ? 1.f : 1.f - FMath::Exp(-DeltaTime / BedFadeTau);
-	const float Channel = Volumes[(int32)EDCVolumeChannel::Master] * Volumes[(int32)EDCVolumeChannel::Ambience];
+	const float Channel = Volumes[(int32)EDCVolumeChannel::Master] * Volumes[(int32)EDCVolumeChannel::Ambience] * AmbienceRangeScale;
 	for (int32 i = 0; i < DCAudio::BedCount && i < BedComps.Num(); ++i)
 	{
 		RT->BedGain[i] += (Mix.Bed[i] - RT->BedGain[i]) * K;
@@ -418,7 +422,7 @@ void UDCAudioSubsystem::TickAmbienceOneShots()
 	RT->LastOneShot = Pick;
 
 	const float Vol = OneShotGain * (bActive ? 1.f : 0.6f) * RT->Rand.FRandRange(0.7f, 1.f)
-		* Volumes[(int32)EDCVolumeChannel::Master] * Volumes[(int32)EDCVolumeChannel::Ambience];
+		* Volumes[(int32)EDCVolumeChannel::Master] * Volumes[(int32)EDCVolumeChannel::Ambience] * AmbienceRangeScale;
 	if (Vol <= 0.001f) { return; }
 	if (USoundBase* S = LoadSound(DCAudio::MakePath(Pick)))
 	{
