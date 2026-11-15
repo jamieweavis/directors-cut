@@ -20,6 +20,9 @@
 #   M_DC_Ground    : opaque lit procedural terrain (world-aligned). ColorA/B/C, FarColor (vec); Pattern, Scale, Roughness,
 #                    Axis, Center, Width, FarStart, FarEnd. Pattern: 0 meadow 1 mown lawn 2 gravel 3 dirt track (ruts,
 #                    grass centre strip; Axis 0 = along X, Center/Width across) 4 ploughed rows 5 mud/soil
+#                    Paint 1 = blend the site's bare ground into this surface with soft ragged edges: SiteYard (min xy,
+#                    max xy), SiteTrack (lane Y, lane half-width, drive X, drive half-width), Seg0..6 (footpath a.xy, b.xy),
+#                    GravA/GravB, DirtA/DirtB (vec)
 #   M_DC_Foliage   : two-sided lit foliage, per-instance hue (ColorA..ColorB), UpN (1 = lit as flat ground), macro tint ColorC (CMix), vertex colour
 #                    R = height/AO, G = wind weight. Wind WPO. Params ColorA, ColorB, ColorC, CMix, Wind, Roughness, AOMin
 #   M_DC_Water     : opaque glossy water with animated ripples + night glow. Color, Deep, GlowColor, Glow, Ripple
@@ -611,6 +614,80 @@ if (pat == 1) { // mown lawn: stripes + clover patches
   col = lerp(col, C, smoothstep(0.5, 0.78, mid) * 0.55);
   col *= 0.86 + 0.28 * fine;
 }
+if (Paint > 0.5) { // site paint: yard, lane, driveway and footpaths blended into the grass (no hard-edged skins)
+  float2 pp = P.xy;
+  // --- signed distances (cm, negative inside); cheap, no noise yet
+  float2 yc = (SiteYard.xy + SiteYard.zw) * 0.5; float2 yh = (SiteYard.zw - SiteYard.xy) * 0.5;
+  float rad = 170.0;
+  float2 qy = abs(pp - yc) - (yh - rad);
+  float dYard = length(max(qy, 0.0)) + min(max(qy.x, qy.y), 0.0) - rad;
+  float laneA = pp.y - SiteTrack.x; float laneH = SiteTrack.y;
+  float drvA = pp.x - SiteTrack.z; float drvH = SiteTrack.w;
+  float dLane = abs(laneA) - laneH;
+  float dDrv = max(abs(drvA) - drvH, max(SiteTrack.x - pp.y, pp.y - yc.y));
+  float kk = 170.0; // fillet where the driveway meets the lane
+  float hh = saturate(0.5 + 0.5 * (dDrv - dLane) / kk);
+  float dTrack = lerp(dDrv, dLane, hh) - kk * hh * (1.0 - hh);
+  float kq = 150.0; // and flares into the yard
+  float hq = saturate(0.5 + 0.5 * (dYard - dTrack) / kq);
+  float dWide = lerp(dYard, dTrack, hq) - kq * hq * (1.0 - hq);
+  float dPath = 1.0e6;
+  float4 sg[7] = { Seg0, Seg1, Seg2, Seg3, Seg4, Seg5, Seg6 };
+  float2 pm = pp + (float2(d.n(float3(pp * 0.005, 11.0)), d.n(float3(pp * 0.005, 17.0))) - 0.5) * 130.0; // footpaths meander
+  for (int si = 0; si < 7; si++) {
+    float2 ab = sg[si].zw - sg[si].xy; float2 ap = pm - sg[si].xy;
+    float tt = saturate(dot(ap, ab) / max(dot(ab, ab), 1.0));
+    dPath = min(dPath, length(ap - ab * tt));
+  }
+  dPath -= 52.0;
+  float dAll = min(dWide, dPath);
+  if (dAll < 260.0) {
+    float w1 = d.fbm(float3(pp * 0.0045, 5.0)) - 0.47;
+    float clump = d.n(float3(pp * 0.04, 8.0)) - 0.5;
+    float grit = fine - 0.5;
+    float wobY = w1 * 300.0;                      // yard outline wanders about half a metre
+    float wobT = w1 * 170.0;                      // tracks stay straighter
+    float rag = clump * 70.0 + grit * 22.0;       // ragged, clumpy last few cm
+    // dry, trodden grass fringe round all bare ground
+    float fringe = 1.0 - smoothstep(0.0, 130.0, min(dWide + wobT, dPath + wobT * 0.5) + clump * 60.0);
+    float3 grassc = col;
+    col = lerp(col, col * float3(1.22, 1.10, 0.70), fringe * 0.45);
+    // --- track dirt with ruts and a grass centre strip
+    float rw = (d.n(float3(pp * 0.01, 3.0)) - 0.5) * 0.16;
+    float uL = abs(laneA) / laneH; float uD = abs(drvA) / drvH;
+    float inDrv = 1.0 - smoothstep(-60.0, 20.0, dDrv);
+    float rut = max(exp(-pow((uL - 0.55 + rw) / 0.15, 2.0)), exp(-pow((uD - 0.55 + rw) / 0.17, 2.0)) * inDrv * smoothstep(-60.0, 120.0, dYard));
+    float stripL = (1.0 - smoothstep(0.09, 0.22, uL + rw * 0.6 + grit * 0.08)) * smoothstep(drvH + 40.0, drvH + 330.0, abs(drvA));
+    float stripD = (1.0 - smoothstep(0.10, 0.26, uD + rw * 0.6 + grit * 0.10)) * inDrv * smoothstep(40.0, 300.0, dLane) * smoothstep(60.0, 300.0, dYard);
+    float strip = saturate(max(stripL, stripD));
+    float3 dirt = lerp(DirtA.rgb, DirtB.rgb, saturate(rut * 0.75 + (mid - 0.5) * 0.7)) * (0.9 + 0.2 * d.n(float3(pp * 0.22, 4.0)));
+    dirt = lerp(dirt, DirtA.rgb * 1.45, smoothstep(0.74, 0.82, d.n(float3(pp * 0.5, 6.0))) * 0.45); // scattered stones
+    dirt = lerp(dirt, grassc * float3(1.12, 1.05, 0.8), strip);
+    // --- gravel: soft pebble mottling, bare-earth patches, a few weeds, thinning out towards the rim
+    float peb = smoothstep(0.38, 0.66, d.n(float3(pp * 0.16, 1.0)) * 0.6 + d.n(float3(pp * 0.45, 5.0)) * 0.4);
+    float3 grav = lerp(GravB.rgb, GravA.rgb, 0.35 + 0.65 * peb);
+    grav = lerp(grav, DirtA.rgb * 0.85, smoothstep(0.50, 0.74, d.fbm(float3(pp * 0.006, 2.0))) * 0.55);
+    grav = lerp(grav, grassc * 0.9, smoothstep(0.70, 0.80, d.fbm(float3(pp * 0.02, 9.0))) * 0.6);
+    float dY2 = dYard + wobY;
+    float thin = smoothstep(-190.0, -50.0, dY2 + clump * 80.0);
+    grav = lerp(grav, DirtA.rgb * 0.9, thin * 0.6);
+    float gravM = 1.0 - smoothstep(-30.0, 30.0, dY2 + 45.0 + rag);
+    // --- footpaths: narrow trodden earth, soft edged
+    float dP2 = dPath + wobT * 0.45 + clump * 26.0 + grit * 14.0;
+    float pathM = (1.0 - smoothstep(-34.0, 22.0, dP2)) * 0.94;
+    float3 pathc = lerp(DirtA.rgb * 1.08, DirtB.rgb * 1.25, saturate(mid * 1.3 - 0.25)) * (0.9 + 0.2 * fine);
+    // --- compose: grass -> bare earth (ragged) -> gravel on top
+    float hq2 = saturate(0.5 + 0.5 * (dY2 - (dTrack + wobT)) / kq);
+    float dW2 = lerp(dY2, dTrack + wobT, hq2) - kq * hq2 * (1.0 - hq2);
+    float earthM = 1.0 - smoothstep(-24.0, 24.0, dW2 + rag);
+    float3 earth = lerp(dirt, grav, gravM);
+    float er = lerp(0.86 - rut * 0.08, 0.82, gravM);
+    if (pathM > earthM) { earth = lerp(pathc, earth, saturate(earthM / max(pathM, 0.001))); }
+    float allM = max(earthM, pathM);
+    col = lerp(col, earth, allM);
+    rough = lerp(rough, lerp(er, 0.9, strip * (1.0 - gravM)), allM);
+  }
+}
 float dist = length(P.xy);
 col = lerp(col, FarColor.rgb, smoothstep(FarStart, FarEnd, dist));
 return float4(saturate(col), saturate(rough));
@@ -629,6 +706,19 @@ def ground():
                    ("FarStart", 14000.0), ("FarEnd", 26000.0)):
         ins.append((nm, sparam(m, "Roughness" if nm == "Rough" else nm, dv, -1200, y)))
         y += 80
+    # site paint (Paint 1 on the meadow + lawn): yard rect, lane/driveway, footpath segments, gravel + dirt colours
+    ins.append(("Paint", sparam(m, "Paint", 0.0, -1600, -500)))
+    y = -400
+    for nm, dv in (("SiteYard", (-1e6, -1e6, -1e6 + 1, -1e6 + 1)), ("SiteTrack", (-1e6, 1, -1e6, 1))) + tuple(
+            (f"Seg{i}", (1e6, 1e6, 1e6, 1e6)) for i in range(7)) + (
+            ("GravA", (0.30, 0.27, 0.22, 1)), ("GravB", (0.12, 0.105, 0.085, 1)),
+            ("DirtA", (0.22, 0.16, 0.10, 1)), ("DirtB", (0.10, 0.07, 0.045, 1))):
+        v = vparam(m, nm, dv, -1900, y)
+        ap = expr(m, unreal.MaterialExpressionAppendVector, -1600, y)  # RGB + A -> float4
+        if not (MEL.connect_material_expressions(v, "", ap, "A") and MEL.connect_material_expressions(v, "A", ap, "B")):
+            unreal.log_warning(f"[DC] ground: failed to wire float4 for {nm}")
+        ins.append((nm, ap))
+        y += 90
     c = custom(m, GROUND_CODE, ins, out_type=unreal.CustomMaterialOutputType.CMOT_FLOAT4, desc="DCGround")
     MEL.connect_material_property(mask(m, c, True, True, True, False, -200, -200), "", MP.MP_BASE_COLOR)
     MEL.connect_material_property(mask(m, c, False, False, False, True, -200, 0), "", MP.MP_ROUGHNESS)

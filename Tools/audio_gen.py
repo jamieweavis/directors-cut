@@ -981,25 +981,8 @@ def cricket(n, seed, carrier, rate, pan):
     return stereo(c * slow, pan)
 
 
-def frog(n, seed, f0, rate, pan):
-    """One far-off frog: short rattling croaks at `rate` per second, calling in bouts."""
-    rr = R(seed)
-    t = tt(n)
-    gate = np.zeros(n)
-    tp = rr.uniform(0, 1.5)
-    while tp < n / SR - 0.3:
-        a = ns(tp)
-        gate[a:a + ns(rr.uniform(0.09, 0.16))] = 1.0
-        tp += 1.0 / rate * rr.uniform(0.8, 1.3)
-    gate = lp(gate, 60)
-    rattle = np.maximum(0, np.sin(TAU * rr.uniform(48, 62) * t)) ** 2
-    c = np.sin(TAU * f0 * t) * 0.7 + np.sin(TAU * f0 * 2.02 * t) * 0.3
-    bouts = np.clip(np.sin(TAU * t / rr.uniform(14, 26) + rr.uniform(0, TAU)), 0, 1) ** 1.5
-    return stereo(c * rattle * gate * bouts, pan)
-
-
 def amb_rural_night():
-    """Countryside at night: a soft breeze, a field of crickets, frogs by the water, insects. 48 s loop."""
+    """Countryside at night: a soft breeze, a field of crickets, insects. 48 s loop."""
     L = ns(48.0)
     XF = ns(3.0)
     n = L + XF
@@ -1009,13 +992,9 @@ def amb_rural_night():
     for i, (f, r, p, g) in enumerate([(4350, 2.6, -0.6, 1.0), (4620, 2.2, 0.5, 0.8), (4100, 3.0, 0.15, 0.6),
                                       (4800, 2.4, -0.2, 0.45), (4480, 2.8, 0.8, 0.4), (4230, 2.1, -0.85, 0.35)]):
         cr += cricket(n, 9520 + i, f, r, p) * g
-    fr = np.zeros((2, n))
-    for i, (f, r, p, g) in enumerate([(820, 1.5, 0.6, 1.0), (1040, 1.9, 0.3, 0.6), (690, 1.2, 0.75, 0.7)]):
-        fr += frog(n, 9550 + i, f, r, p) * g
     insects = np.vstack([bp(white(n, 9530 + c), 5000, 9000) for c in range(2)]) * 0.004
     insects *= 1 + 0.3 * np.sin(TAU * t / 6.0)
     out += outdoors(cr, 0.4, 1.2, 9540, 0.8)[:, :n] * 0.007 + insects
-    out += outdoors(lp(fr, 2500), 0.8, 2.0, 9560, 0.4)[:, :n] * 0.004
     y = xfade_loop(out, L, XF)
     return loopf(y, lambda z: hp(lp(z, 9000), 25))
 
@@ -1192,7 +1171,7 @@ SOUNDS = {
     "SFX_CarArrive": (sfx_car_arrive, "Event", False, -27, "car approaches, brakes, idles, engine off"),
     "AMB_Interior": (amb_interior, "Ambience", True, -36, "warehouse room tone: HVAC air, fridge hum"),
     "AMB_RuralDay": (amb_rural_day, "Ambience", True, -32, "open countryside by day: wind in grass and trees, songbirds, a dove"),
-    "AMB_RuralNight": (amb_rural_night, "Ambience", True, -34, "countryside at night: soft breeze, crickets, far frogs"),
+    "AMB_RuralNight": (amb_rural_night, "Ambience", True, -34, "countryside at night: soft breeze, crickets"),
     "AMB_Rain": (amb_rain, "Ambience", True, -31, "rain on the roof and windows"),
     "AMB_Owl": (amb_owl, "AmbienceOneShot", False, -35, "owl hooting in the trees (night)"),
     "AMB_DogBark": (amb_dog_bark, "AmbienceOneShot", False, -34, "farm dog barking across the fields (night)"),

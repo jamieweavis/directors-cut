@@ -4,7 +4,7 @@
 // Layout contract: Core/DCSiteLayout.h. Content placement lives in DCLandscapeBuild.cpp, meshes in DCLandscapeMeshes.
 //
 // Ground: one big collidable slab whose top is Z = -3 (blocks WorldStatic + Visibility); every other ground layer
-// (lawn, gravel yard, lane, paths, pond) is a no-collision skin a few mm above it.
+// (lawn, fields) is a no-collision skin a few mm above it; the yard, lane and paths are painted by the ground material.
 //
 // Dev flags: -DCLandShots=7,12,18.5,20.5,23[:wide|far]  one screenshot per hour (landscape review camera), then quit
 //            -DCLandShotDir=<abs dir>   -DCNoLand  (skip the vegetation/props; lighting only)
@@ -69,9 +69,6 @@ protected:
 	TArray<float> NightGlowBase;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> ToonMID;  // ink outline + cel band post pass
 	bool bToonOn = false;
-	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> WaterMID;
-	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> FireflyMID;
-	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> FireMID;
 
 	/** Instanced batch keyed by mesh + material (one ISM each). */
 	UInstancedStaticMeshComponent* Batch(FName MeshKey, FName MatKey, bool bShadow, bool bCollide = false);
@@ -94,9 +91,6 @@ protected:
 	void Tree(const FVector& Base, float Height, int32 Kind, uint32 Seed);
 	void Sag(const FVector& A, const FVector& B, float Droop, int32 Segs, FName MatKey, float Thick, TArray<FVector>* OutPoints = nullptr);
 	bool Blocked(const FVector2D& P, float Margin, bool bAllowLawn) const;
-	FVector2D PondC = FVector2D(-2950.f, 1750.f);
-	FVector2D PondR = FVector2D(620.f, 430.f);
-	FVector2D FireC = FVector2D(-2250.f, -500.f);
 	FVector2D LawnC = FVector2D(-150.f, 150.f);
 	FVector2D LawnR = FVector2D(2500.f, 2550.f);
 
@@ -104,8 +98,6 @@ protected:
 	struct FNightLight { TWeakObjectPtr<ULightComponent> Light; float Base = 0.f; float Seed = 0.f; float Flicker = 0.f; };
 	TArray<FNightLight> NightLights;
 	UPointLightComponent* NightPoint(const FVector& P, const FLinearColor& Col, float Candelas, float Radius, bool bShadow = false, float Flicker = 0.f);
-	struct FFirefly { TWeakObjectPtr<UPointLightComponent> Light; FVector Home; float Seed = 0.f; };
-	TArray<FFirefly> Fireflies;
 	UPROPERTY() TObjectPtr<USceneComponent> WindRotor;
 	float NightK = 0.f;
 	double Time = 0.0;

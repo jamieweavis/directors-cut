@@ -31,10 +31,8 @@ namespace
 {
 	const TCHAR* GroundPath  = TEXT("/Game/DC/Materials/M_DC_Ground.M_DC_Ground");
 	const TCHAR* FoliagePath = TEXT("/Game/DC/Materials/M_DC_Foliage.M_DC_Foliage");
-	const TCHAR* WaterPath   = TEXT("/Game/DC/Materials/M_DC_Water.M_DC_Water");
 	const TCHAR* ProcPath    = TEXT("/Game/DC/Materials/M_DC_Proc.M_DC_Proc");
 	const TCHAR* NeonPath    = TEXT("/Game/DC/Materials/M_DC_Neon.M_DC_Neon");
-	const TCHAR* DustPath    = TEXT("/Game/DC/Materials/M_DC_Dust.M_DC_Dust");
 }
 
 ADCLandscape::ADCLandscape()
@@ -63,8 +61,6 @@ void ADCLandscape::BuildLandscape()
 		const FBox2D Clear = DCSite::BuildingClearRect();
 		LawnC = Clear.GetCenter();
 		LawnR = Clear.GetExtent() + FVector2D(600.f, 520.f);
-		FireC = FVector2D(Clear.Min.X - 450.f, FMath::Lerp(DCSite::YardRect().Max.Y, Clear.Max.Y, 0.32f));
-		PondC = FVector2D(Clear.Min.X - 1350.f, Clear.Max.Y - 150.f);
 	}
 	BuildLightingAndPost();
 	InitAssets();
@@ -82,7 +78,7 @@ void ADCLandscape::BuildLandscape()
 	int32 Inst = 0;
 	for (const auto& KV : Batches) { if (KV.Value) { Inst += KV.Value->GetInstanceCount(); } }
 	UE_LOG(LogDC, Display, TEXT("[Landscape] built: %d batches, %d instances, %d night lights, %.1f ms"),
-		Batches.Num(), Inst, NightLights.Num() + Fireflies.Num(), (FPlatformTime::Seconds() - T0) * 1000.0);
+		Batches.Num(), Inst, NightLights.Num(), (FPlatformTime::Seconds() - T0) * 1000.0);
 
 	// review shots
 	FString Shots;
@@ -187,7 +183,6 @@ void ADCLandscape::InitAssets()
 	MeshLib.Add("Tuft0", DCLandMesh::GrassTuft(this, 9, 0.35f, 11));
 	MeshLib.Add("Tuft1", DCLandMesh::GrassTuft(this, 12, 0.55f, 23));
 	MeshLib.Add("Tuft2", DCLandMesh::GrassTuft(this, 6, 0.2f, 37));
-	MeshLib.Add("Reed", DCLandMesh::GrassTuft(this, 10, 0.12f, 51));
 	MeshLib.Add("Flowers0", DCLandMesh::FlowerHeads(this, 3));
 	MeshLib.Add("Flowers1", DCLandMesh::FlowerHeads(this, 8));
 	MeshLib.Add("Clump0", DCLandMesh::Blob(this, 2, 0.16f, false, 5, 1.f));
@@ -206,19 +201,14 @@ void ADCLandscape::InitAssets()
 	Ground("Meadow", 0, GrassA, GrassB, GrassC, 0.92f);
 	// the grass round the house: plain, natural meadow ground (no mowing stripes), a touch greener than the field
 	Ground("Lawn", 0, C(0.05f, 0.12f, 0.03f), C(0.12f, 0.145f, 0.05f), C(0.035f, 0.085f, 0.025f), 0.92f);
-	Ground("Gravel", 2, C(0.30f, 0.27f, 0.22f), C(0.12f, 0.105f, 0.085f), C(0.16f, 0.12f, 0.08f), 0.85f);
-	Ground("Lane", 3, C(0.22f, 0.16f, 0.10f), C(0.10f, 0.07f, 0.045f), GrassA, 0.85f, 0.f, DCSite::LaneY, DCSite::LaneW + 240.f);
-	Ground("Drive", 3, C(0.22f, 0.16f, 0.10f), C(0.10f, 0.07f, 0.045f), GrassA, 0.85f, 1.f, DCSite::DriveX, DCSite::DriveW + 160.f);
+	// (the gravel yard, lane, driveway and footpaths are painted into Meadow + Lawn: see BuildTerrain)
 	Ground("Soil", 4, C(0.14f, 0.09f, 0.05f), C(0.06f, 0.038f, 0.022f), C(0.1f, 0.07f, 0.04f), 0.95f, 0.f, 0.f);
 	Ground("Stubble", 4, C(0.42f, 0.33f, 0.14f), C(0.25f, 0.19f, 0.08f), C(0.3f, 0.25f, 0.1f), 0.9f, 1.f, 0.f);
-	Ground("Path", 5, C(0.20f, 0.15f, 0.09f), C(0.11f, 0.08f, 0.05f), C(0.1f, 0.1f, 0.05f), 0.9f);
-	Ground("Mud", 5, C(0.07f, 0.06f, 0.035f), C(0.035f, 0.03f, 0.02f), C(0.05f, 0.05f, 0.03f), 0.5f);
 	Ground("HillMat", 0, C(0.05f, 0.11f, 0.035f), C(0.13f, 0.14f, 0.06f), C(0.035f, 0.075f, 0.03f), 0.95f);
 
 	// ---- foliage (M_DC_Foliage)
 	Foliage("Grass", C(0.06f, 0.14f, 0.03f), C(0.17f, 0.19f, 0.06f), C(0.26f, 0.22f, 0.09f), 0.55f, 5.f, 0.85f, 1.f);
 	Foliage("GrassLush", C(0.045f, 0.13f, 0.03f), C(0.09f, 0.18f, 0.04f), C(0.16f, 0.2f, 0.06f), 0.3f, 4.f, 0.85f, 1.f);
-	Foliage("Reeds", C(0.13f, 0.17f, 0.05f), C(0.30f, 0.26f, 0.10f), C(0.35f, 0.3f, 0.12f), 0.4f, 7.f, 0.35f, 0.7f);
 	Foliage("Crop", C(0.08f, 0.18f, 0.03f), C(0.14f, 0.21f, 0.05f), C(0.2f, 0.25f, 0.05f), 0.2f, 3.f, 0.55f, 1.f);
 	Foliage("PetalWhite", C(0.85f, 0.85f, 0.80f), C(0.95f, 0.92f, 0.75f), C(0.9f, 0.9f, 0.8f), 0.f, 4.f, 1.f);
 	Foliage("PetalYellow", C(0.85f, 0.62f, 0.04f), C(0.95f, 0.80f, 0.10f), C(0.9f, 0.7f, 0.1f), 0.f, 4.f, 1.f);
@@ -230,13 +220,11 @@ void ADCLandscape::InitAssets()
 	Foliage("LeafRust", C(0.30f, 0.08f, 0.03f), C(0.40f, 0.15f, 0.04f), C(0.45f, 0.25f, 0.05f), 0.3f, 2.f, 0.35f);
 	Foliage("Pine", C(0.02f, 0.07f, 0.04f), C(0.04f, 0.10f, 0.05f), C(0.04f, 0.08f, 0.04f), 0.f, 1.f, 0.25f);
 	Foliage("Hedge", C(0.035f, 0.10f, 0.025f), C(0.07f, 0.15f, 0.035f), C(0.12f, 0.14f, 0.04f), 0.3f, 1.f, 0.3f);
-	Foliage("Lily", C(0.06f, 0.16f, 0.04f), C(0.10f, 0.20f, 0.05f), C(0.1f, 0.2f, 0.05f), 0.f, 0.f, 1.f);
 
 	// ---- hard surfaces (M_DC_Proc)
 	Proc("Bark", 1, C(0.10f, 0.075f, 0.055f), C(0.04f, 0.03f, 0.025f), 0.9f, 1.f, 0.5f, 1.f);
 	Proc("Timber", 1, C(0.24f, 0.20f, 0.15f), C(0.12f, 0.10f, 0.08f), 0.85f, 1.f, 0.6f, 0.f);
 	Proc("TimberV", 1, C(0.24f, 0.20f, 0.15f), C(0.12f, 0.10f, 0.08f), 0.85f, 1.f, 0.6f, 1.f);
-	Proc("LogWood", 1, C(0.18f, 0.11f, 0.06f), C(0.08f, 0.05f, 0.03f), 0.85f, 1.f, 0.4f, 1.f);
 	Proc("Stone", 3, C(0.34f, 0.33f, 0.30f), C(0.16f, 0.155f, 0.14f), 0.9f, 1.f, 0.8f);
 	Proc("StoneDark", 3, C(0.20f, 0.19f, 0.18f), C(0.09f, 0.09f, 0.085f), 0.9f, 1.f, 0.8f);
 	Proc("Hay", 12, C(0.52f, 0.40f, 0.15f), C(0.3f, 0.22f, 0.08f), 0.95f, 1.f, 0.3f);
@@ -246,31 +234,13 @@ void ADCLandscape::InitAssets()
 	Proc("PaintWhite", 7, C(0.55f, 0.55f, 0.52f), C(0.3f, 0.3f, 0.28f), 0.5f, 1.f, 0.4f);
 	Proc("PaintGreen", 7, C(0.04f, 0.13f, 0.06f), C(0.03f, 0.06f, 0.03f), 0.5f, 1.f, 0.3f);
 	Proc("Wire", 0, C(0.02f, 0.02f, 0.02f), C(0.03f, 0.03f, 0.03f), 0.5f, 1.f, 0.f);
-	Proc("Ash", 3, C(0.08f, 0.075f, 0.07f), C(0.02f, 0.02f, 0.02f), 0.95f, 2.f, 0.5f);
 	Proc("Window", 0, C(0.02f, 0.025f, 0.03f), C(0.02f, 0.025f, 0.03f), 0.2f);
 
 	// ---- night glow (M_DC_Neon, strength fades in at dusk)
 	Glow("BulbAmber", C(1.f, 0.45f, 0.12f), 9.f, 0.04f);
 	Glow("Lantern", C(1.f, 0.55f, 0.2f), 14.f, 0.06f);
 	Glow("FarmWindow", C(1.f, 0.6f, 0.28f), 12.f);
-	Glow("Ember", C(1.f, 0.2f, 0.02f), 10.f, 0.6f);
-	Glow("Flame", C(1.f, 0.32f, 0.04f), 14.f, 0.35f);
-	FireMID = Cast<UMaterialInstanceDynamic>(M("Flame"));
 
-	WaterMID = MakeMID(WaterPath, "Water");
-	if (WaterMID)
-	{
-		WaterMID->SetVectorParameterValue("Color", C(0.012f, 0.03f, 0.03f));
-		WaterMID->SetVectorParameterValue("GlowColor", C(0.04f, 0.55f, 0.5f));
-		WaterMID->SetScalarParameterValue("Ripple", 0.8f);
-	}
-	FireflyMID = MakeMID(DustPath, "Firefly");
-	if (FireflyMID)
-	{
-		FireflyMID->SetVectorParameterValue("Color", C(0.75f, 1.f, 0.25f));
-		FireflyMID->SetScalarParameterValue("Strength", 0.f);
-		FireflyMID->SetScalarParameterValue("Drift", 45.f);
-	}
 }
 
 // =====================================================================================================================
@@ -494,7 +464,7 @@ void ADCLandscape::BuildLightingAndPost()
 }
 
 // =====================================================================================================================
-// Runtime: night lights, fireflies, wind rotor, haze colour, review shots
+// Runtime: night lights, wind rotor, haze colour, review shots
 // =====================================================================================================================
 
 void ADCLandscape::Tick(float DeltaSeconds)
@@ -531,21 +501,6 @@ void ADCLandscape::Tick(float DeltaSeconds)
 	{
 		if (NightGlowMIDs[i]) { NightGlowMIDs[i]->SetScalarParameterValue("Strength", NightGlowBase[i] * (0.02f + 0.98f * NightK)); }
 	}
-	if (WaterMID) { WaterMID->SetScalarParameterValue("Glow", 0.18f * NightK); }
-	if (FireflyMID) { FireflyMID->SetScalarParameterValue("Strength", 40.f * NightK); }
-	for (const FFirefly& F : Fireflies)
-	{
-		UPointLightComponent* L = F.Light.Get();
-		if (!L) { continue; }
-		const float s = F.Seed;
-		const FVector Off(FMath::Sin(T * 0.23f + s) * 260.f + FMath::Sin(T * 0.61f + s * 2.f) * 90.f,
-		                  FMath::Cos(T * 0.19f + s * 1.3f) * 260.f + FMath::Cos(T * 0.53f + s) * 90.f,
-		                  FMath::Sin(T * 0.41f + s * 0.7f) * 35.f);
-		L->SetWorldLocation(F.Home + Off);
-		const float Blink = FMath::Clamp(FMath::Sin(T * (0.9f + 0.13f * s) + s * 5.f) * 1.6f + 0.2f, 0.f, 1.f);
-		L->SetIntensity(2.5f * NightK * Blink);
-		L->SetVisibility(NightK > 0.01f);
-	}
 	if (WindRotor) { WindRotor->AddLocalRotation(FRotator(0.f, 0.f, DeltaSeconds * 40.f)); }
 	if (DayNight)
 	{
@@ -577,8 +532,7 @@ void ADCLandscape::TickShots()
 		FVector Pivot = B.GetCenter(); Pivot.Z = 0.f;
 		float Dist = B.GetExtent().Size2D() / FMath::Tan(FMath::DegreesToRadians(9.f)) * 0.82f;
 		if (Frame == TEXT("far")) { Dist *= 1.3f; Pivot += FVector(1500.f, 1500.f, 0.f); }
-		else if (Frame == TEXT("close")) { Dist *= 0.4f; Pivot = FVector((DCSite::YardRect().Min.X + FireC.X) * 0.5f, (DCSite::YardRect().Max.Y + FireC.Y) * 0.5f, 0.f); }
-		else if (Frame == TEXT("pond")) { Dist *= 0.3f; Pivot = FVector(PondC.X, PondC.Y, 0.f); }
+		else if (Frame == TEXT("close")) { Dist *= 0.4f; Pivot = FVector(DCSite::YardRect().GetCenter().X, DCSite::YardRect().Max.Y, 0.f); }
 		const FRotator Rot(-35.f, 45.f, 0.f);
 		ShotCam->SetActorLocationAndRotation(Pivot - Rot.Vector() * Dist, Rot);
 		if (PC) { PC->SetViewTarget(ShotCam); }
