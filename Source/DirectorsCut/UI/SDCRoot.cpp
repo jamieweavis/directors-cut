@@ -814,13 +814,19 @@ TSharedRef<SWidget> SDCRoot::BuildHudStats()
 {
 	auto R = [this]() { return Run(); };
 	auto Sep = []() { return SNew(SBox).Padding(FMargin(12.f, 4.f)).HeightOverride(26.f)[VLine(Line)]; };
+	// True in the last game hour before the dawn upkeep charge.
+	auto PaydaySoon = [R]()
+	{
+		const UDCRunSubsystem* X = R();
+		return X && X->GetUpkeepDue() > 0 && X->GetSecondsUntilPayday() <= 60.0 / FMath::Max(0.001f, X->GetGameMinutesPerSecond());
+	};
 
 	TSharedRef<SWidget> Cash = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 8.f, 0.f)[Icon(TEXT("banknote"), 15.f, Accent)]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 		[
-			// Min width covers cash + daily drain so the bar doesn't jitter as the counter ticks.
-			SNew(SBox).MinDesiredWidth(170.f)
+			// Min width covers cash + daily drain + payday countdown so the bar doesn't jitter as the counter ticks.
+			SNew(SBox).MinDesiredWidth(230.f)
 			[
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
@@ -840,11 +846,27 @@ TSharedRef<SWidget> SDCRoot::BuildHudStats()
 						const UDCRunSubsystem* X = R();
 						const int32 Due = X ? X->GetUpkeepDue() : 0;
 						return Due > 0 ? FText::FromString(FString::Printf(TEXT("%s/day"), *Money(-Due))) : FText::GetEmpty();
-					}), Mono(11.f), FSlateColor(A(Bad, 0.85f)))
+					}), Mono(11.f), TAttribute<FSlateColor>::CreateLambda([PaydaySoon]() { return FSlateColor(PaydaySoon() ? Bad : A(Bad, 0.85f)); }))
+				]
+				// Countdown to the dawn charge; red in the last game hour.
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.f, 2.f, 3.f, 0.f)
+				[
+					SNew(SBox).Visibility_Lambda([R]() { const UDCRunSubsystem* X = R(); return (X && X->GetUpkeepDue() > 0) ? EVisibility::Visible : EVisibility::Collapsed; })
+					[
+						Icon(TEXT("sunrise"), 10.f, TAttribute<FSlateColor>::CreateLambda([PaydaySoon]() { return FSlateColor(PaydaySoon() ? Bad : TextFaint); }))
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 2.f, 0.f, 0.f)
+				[
+					TxtA(TAttribute<FText>::CreateLambda([R]()
+					{
+						const UDCRunSubsystem* X = R();
+						return (X && X->GetUpkeepDue() > 0) ? FText::FromString(DC::Clock(X->GetSecondsUntilPayday())) : FText::GetEmpty();
+					}), Mono(11.f), TAttribute<FSlateColor>::CreateLambda([PaydaySoon]() { return FSlateColor(PaydaySoon() ? Bad : TextFaint); }))
 				]
 			]
 		];
-	Cash->SetToolTip(Tip(TEXT("Cash"), TEXT("Your take from every job. Pays for gear, new wings, hires and wages. The red figure is the daily upkeep (crew wages + buildings), paid at 06:00."), TEXT("banknote")));
+	Cash->SetToolTip(Tip(TEXT("Cash"), TEXT("Your take from every job. Pays for gear, new wings, hires and wages. The red figure is the daily upkeep (crew wages + buildings), paid at 06:00; the timer counts down to it."), TEXT("banknote")));
 
 	TSharedRef<SWidget> Crew = IconTextA(TEXT("users"), TAttribute<FText>::CreateLambda([R]()
 		{
