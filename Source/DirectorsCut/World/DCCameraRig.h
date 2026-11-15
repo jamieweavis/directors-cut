@@ -27,9 +27,9 @@ public:
 	/** Extra world-space margin around the built rooms in the overview (shows locked silhouettes). */
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float OverviewMargin = 350.f;
 	/** Closest the camera may get (scroll / focus). */
-	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float MinDistance = 2600.f;
+	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float MinDistance = 3600.f;
 	/** Max zoom-out as a multiple of the overview distance. */
-	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float MaxDistanceOverOverview = 2.6f;
+	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float MaxDistanceOverOverview = 2.3f;
 	/** Smooth time (s) for focus/reset dollies and pan/zoom. */
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float FocusSmoothTime = 0.45f;
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float PanSmoothTime = 0.10f;
