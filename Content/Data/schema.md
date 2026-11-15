@@ -157,7 +157,9 @@ Abilities: 2 per type, and between them the types must cover every threat at lea
 Elite gets both. `traitPool` takes positive and negative trait ids (negative ones are rolled with `quality.negativeTraitChance`).
 
 ## names.json
-`{ "first": [...], "last": [...], "nicknames": { "Wheelman": [...], ... } }`: modern, gritty, international, ≥ 30 per list.
+`{ "firstMale": [...], "firstFemale": [...], "first": [...], "last": [...], "nicknames": { "Wheelman": [...], ... } }`: modern,
+gritty, international, ≥ 30 per list. The list a first name comes from sets the crew member's gender, which picks their
+body; `first` holds names for anyone (gender from the crew member's seed). A first name sits in one list only.
 
 ## abilities.json
 `{ "abilities": [ { "id": "loop_feed", "displayName": "Loop the Feed", "icon": "cctv", "counters": "Cameras" } ] }`

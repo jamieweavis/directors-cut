@@ -439,8 +439,10 @@ bool FDCSimData::Load(const FString& DirOverride)
 		C.File = TEXT("names.json");
 		const FObj R = ReadJson(C, PickFile(Dir, TEXT("names.json")));
 		FirstNames = StrArr(R, TEXT("first"));
+		MaleFirstNames = StrArr(R, TEXT("firstMale"));
+		FemaleFirstNames = StrArr(R, TEXT("firstFemale"));
 		LastNames = StrArr(R, TEXT("last"));
-		if (FirstNames.Num() == 0) { C.Warn(TEXT("no first names")); FirstNames = { TEXT("Alex") }; }
+		if (FirstNames.Num() + MaleFirstNames.Num() + FemaleFirstNames.Num() == 0) { C.Warn(TEXT("no first names")); FirstNames = { TEXT("Alex") }; }
 		if (LastNames.Num() == 0) { C.Warn(TEXT("no last names")); LastNames = { TEXT("Doe") }; }
 		const FObj N = Obj(R, TEXT("nicknames"));
 		for (int32 i = 0; i < (int32)EDCCriminalType::MAX; ++i)

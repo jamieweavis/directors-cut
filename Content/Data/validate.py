@@ -340,14 +340,21 @@ def main():
     # ---- names ----
     nm = data["names.json"]
     if nm is not None:
-        for key in ("first", "last"):
+        # first = names for anyone; firstMale / firstFemale set the crew member's gender (and so their body).
+        firsts = []
+        for key in ("firstMale", "firstFemale", "first", "last"):
             lst = req(nm, key, "names.json", "list") or []
-            if len(lst) < 30:
-                err(f"names.json.{key}: {len(lst)} entries (need >= 30)")
+            need = 30 if key in ("firstMale", "firstFemale", "last") else 1
+            if len(lst) < need:
+                err(f"names.json.{key}: {len(lst)} entries (need >= {need})")
             if len(set(lst)) != len(lst):
                 err(f"names.json.{key}: duplicates")
             for s in lst:
                 check_len(s, 12, f"names.json.{key}")
+            if key != "last":
+                firsts += lst
+        if len(set(firsts)) != len(firsts):
+            err("names.json: a first name is in more than one of firstMale / firstFemale / first")
         nick = req(nm, "nicknames", "names.json", "dict") or {}
         total = 0
         for ty in TYPES:

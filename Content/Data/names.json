@@ -1,17 +1,22 @@
 {
+  "firstMale": [
+    "Marco", "Dmitri", "Tariq", "Kwame", "Mateo", "Jonah", "Viktor", "Luca", "Rafael", "Kenji", "Darius", "Omar",
+    "Andrei", "Kofi", "Tomas", "Callum", "Reza", "Nikolai", "Hugo", "Ivo", "Abel", "Alejandro", "Anders", "Arjun",
+    "Basil", "Bram", "Cedric", "Colm", "Dante", "Desmond", "Eamon", "Eitan", "Emeka", "Ezra", "Felix", "Gael",
+    "Goran", "Hamid", "Hector", "Isak", "Ivan", "Jasper", "Karim", "Lars", "Levi", "Lorenzo", "Magnus", "Malik",
+    "Milo", "Niko", "Pablo", "Quentin", "Rhys", "Rui", "Selim", "Soren", "Teo", "Umar", "Xavi", "Yusuf",
+    "Zeno", "Duc"
+  ],
+  "firstFemale": [
+    "Yasmin", "Leila", "Ines", "Nadia", "Priya", "Amara", "Zara", "Elena", "Bianca", "Jade", "Lucia", "Mina",
+    "Aisha", "Talia", "Keisha", "Mei", "Adaeze", "Agnes", "Alma", "Anouk", "Astrid", "Beatriz", "Camila", "Cleo",
+    "Dalia", "Deepa", "Dina", "Elif", "Esme", "Farah", "Freya", "Gemma", "Greta", "Hana", "Ilse", "Imani",
+    "Kalinda", "Kasia", "Lena", "Lina", "Mae", "Marisol", "Nia", "Odette", "Oona", "Orla", "Paloma", "Petra",
+    "Rana", "Rosa", "Saoirse", "Simone", "Suki", "Tamsin", "Thandi", "Ulla", "Vera", "Wanjiru", "Yara", "Zofia",
+    "Celine", "Effie"
+  ],
   "first": [
-    "Marco", "Yasmin", "Dmitri", "Leila", "Tariq", "Ines", "Kwame", "Sasha", "Mateo", "Nadia", "Jonah", "Priya",
-    "Viktor", "Amara", "Luca", "Zara", "Rafael", "Noor", "Kenji", "Elena", "Darius", "Femi", "Bianca", "Omar",
-    "Jade", "Andrei", "Lucia", "Kofi", "Mina", "Tomas", "Aisha", "Callum", "Reza", "Talia", "Nikolai", "Sol",
-    "Hugo", "Keisha", "Ivo", "Mei", "Abel", "Adaeze", "Agnes", "Alejandro", "Alma", "Anders", "Anouk", "Arjun",
-    "Astrid", "Bao", "Basil", "Beatriz", "Bram", "Camila", "Cedric", "Chidi", "Cleo", "Colm", "Dalia", "Dante",
-    "Deepa", "Desmond", "Dina", "Eamon", "Eitan", "Elif", "Emeka", "Esme", "Ezra", "Farah", "Felix", "Freya",
-    "Gael", "Gemma", "Goran", "Greta", "Hamid", "Hana", "Hector", "Ilse", "Imani", "Isak", "Ivan", "Jasper",
-    "Jun", "Kai", "Kalinda", "Karim", "Kasia", "Lars", "Lena", "Levi", "Lina", "Lorenzo", "Mae", "Magnus",
-    "Malik", "Marisol", "Milo", "Nia", "Niko", "Odette", "Olu", "Oona", "Orla", "Pablo", "Paloma", "Petra",
-    "Quentin", "Rana", "Rhys", "Rosa", "Rui", "Saoirse", "Selim", "Simone", "Soren", "Suki", "Tamsin", "Teo",
-    "Thandi", "Ulla", "Umar", "Vera", "Wanjiru", "Wren", "Xavi", "Yara", "Yusuf", "Zeno", "Zofia", "Bodhi",
-    "Celine", "Duc", "Effie"
+    "Sasha", "Noor", "Femi", "Sol", "Bao", "Chidi", "Jun", "Kai", "Olu", "Wren", "Bodhi"
   ],
   "last": [
     "Okafor", "Volkov", "Moreau", "Haddad", "Novak", "Reyes", "Tanaka", "Kowalski", "Mensah", "Petrov", "Duarte", "Rahman",

@@ -231,6 +231,7 @@ struct FDCCriminal
 	UPROPERTY(BlueprintReadOnly) EDCCriminalType Type = EDCCriminalType::Muscle;
 	UPROPERTY(BlueprintReadOnly) EDCQuality Quality = EDCQuality::Street;
 	UPROPERTY(BlueprintReadOnly) int32 Seed = 0;           // cosmetic variation (pawn look, portrait)
+	UPROPERTY(BlueprintReadOnly) bool bFemale = false;     // picks the body (DCPaths::CrewBodiesFemale) and first name
 
 	UPROPERTY(BlueprintReadOnly) int32 Level = 1;          // 1..MaxLevel
 	UPROPERTY(BlueprintReadOnly) int32 XP = 0;             // progress toward next level

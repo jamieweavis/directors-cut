@@ -26,7 +26,8 @@ EAL = unreal.EditorAssetLibrary
 MEL = unreal.MaterialEditingLibrary
 AT = unreal.AssetToolsHelpers.get_asset_tools()
 
-# (asset name, fbx, basecolor jpg, normal jpg or None), all relative to Art/Crew. Order matches DCPaths::CrewBodies.
+# (asset name, fbx, basecolor jpg, normal jpg or None), all relative to Art/Crew. Order matches DCPaths::CrewBodies,
+# then DCPaths::CrewBodiesFemale (built on the Quinn mannequin, mannequin bone names).
 BODIES = [
     ("Hooded", "Crew_Hooded.fbx", "Crew_Hooded.fbm/T_Crew_Hooded_BaseColor.jpg", None),
     ("Criminal", "Crew_Criminal.fbx", "Crew_Criminal.fbm/T_Crew_Criminal_basecolor.jpg",
@@ -47,12 +48,34 @@ BODIES = [
      "Crew_BrownJacket.fbm/T_Crew_BrownJacket_normal.jpg"),
     ("Shearling", "Crew_Shearling.fbx", "Crew_Shearling.fbm/T_Crew_Shearling_basecolor.jpg",
      "Crew_Shearling.fbm/T_Crew_Shearling_normal.jpg"),
+    ("RedTop", "Crew_RedTop.fbx", "Crew_RedTop.fbm/T_Crew_RedTop_basecolor.jpg",
+     "Crew_RedTop.fbm/T_Crew_RedTop_normal.jpg"),
+    ("Blouse", "Crew_Blouse.fbx", "Crew_Blouse.fbm/T_Crew_Blouse_basecolor.jpg",
+     "Crew_Blouse.fbm/T_Crew_Blouse_normal.jpg"),
+    ("Puffer", "Crew_Puffer.fbx", "Crew_Puffer.fbm/T_Crew_Puffer_basecolor.jpg",
+     "Crew_Puffer.fbm/T_Crew_Puffer_normal.jpg"),
+    ("PlumJacket", "Crew_PlumJacket.fbx", "Crew_PlumJacket.fbm/T_Crew_PlumJacket_basecolor.jpg",
+     "Crew_PlumJacket.fbm/T_Crew_PlumJacket_normal.jpg"),
+    ("Businesswoman", "Crew_Businesswoman.fbx", "Crew_Businesswoman.fbm/T_Crew_Businesswoman_basecolor.jpg",
+     "Crew_Businesswoman.fbm/T_Crew_Businesswoman_normal.jpg"),
+    ("Denim", "Crew_Denim.fbx", "Crew_Denim.fbm/T_Crew_Denim_basecolor.jpg",
+     "Crew_Denim.fbm/T_Crew_Denim_normal.jpg"),
+    ("Streetwear", "Crew_Streetwear.fbx", "Crew_Streetwear.fbm/T_Crew_Streetwear_basecolor.jpg",
+     "Crew_Streetwear.fbm/T_Crew_Streetwear_normal.jpg"),
+    ("Blazer", "Crew_Blazer.fbx", "Crew_Blazer.fbm/T_Crew_Blazer_basecolor.jpg",
+     "Crew_Blazer.fbm/T_Crew_Blazer_normal.jpg"),
+    ("TankTop", "Crew_TankTop.fbx", "Crew_TankTop.fbm/T_Crew_TankTop_basecolor.jpg",
+     "Crew_TankTop.fbm/T_Crew_TankTop_normal.jpg"),
+    ("CreamKnit", "Crew_CreamKnit.fbx", "Crew_CreamKnit.fbm/T_Crew_CreamKnit_basecolor.jpg",
+     "Crew_CreamKnit.fbm/T_Crew_CreamKnit_normal.jpg"),
 ]
 
 # Bodies Interchange mangles: it rejects the FBX bind pose ("Imported skeleton has some invalid bind poses"),
 # rebinds at time zero and comes out ~100x too big with stretched skin. The legacy FBX importer recreates the bind
 # pose from the rest pose (identical in these files) and imports them cleanly.
-LEGACY_FBX = {"NavySweats", "Businessman", "BrownJacket", "Shearling"}
+LEGACY_FBX = {"NavySweats", "Businessman", "BrownJacket", "Shearling",
+              # every female body so far
+              "RedTop", "Blouse", "Puffer", "PlumJacket", "Businesswoman", "Denim", "Streetwear", "Blazer", "TankTop", "CreamKnit"}
 
 
 def log(msg):

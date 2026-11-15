@@ -145,7 +145,8 @@ struct FDCSimData
 	TArray<FDCTypeDef> Types;
 	TArray<FDCMissionTemplate> Missions;
 	TArray<FDCRoomDef> Rooms;
-	TArray<FString> FirstNames, LastNames;
+	TArray<FString> FirstNames, LastNames;  // FirstNames: names for anyone (body picked from the seed)
+	TArray<FString> MaleFirstNames, FemaleFirstNames;
 	TMap<EDCCriminalType, TArray<FString>> Nicknames;
 	FString SourceDir;
 	int32 Warnings = 0;

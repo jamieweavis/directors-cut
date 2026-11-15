@@ -78,6 +78,7 @@ void ADCCriminalPawn::InitFromCriminal(const FDCCriminal& C, ADCWorldDirector* I
 	Director = InDirector;
 	CriminalId = C.Id;
 	Type = C.Type;
+	bFemale = C.bFemale;
 	Rng.Initialize(0x5EED + C.Id * 977);
 	SetupVisuals();
 	bInitialized = true;
@@ -124,8 +125,27 @@ UMaterialInstanceDynamic* ADCCriminalPawn::MakeSurfaceMID(const FLinearColor& Co
 void ADCCriminalPawn::SetupVisuals()
 {
 	// The crew body is driven by a hidden mannequin: it runs ABP_Unarmed and its pose is copied onto the body.
+	// Female bodies are built on Quinn's proportions, so Quinn drives them (same skeleton and anim BP as Manny).
+	// -DCCrewBody=<Name> picks from both lists, so a body can be checked whatever the crew member's gender.
+	FString ForceBody; // -DCCrewBody=<Name>: everyone wears SK_Crew_<Name> (checking a new body)
+	const bool bForce = FParse::Value(FCommandLine::Get(), TEXT("DCCrewBody="), ForceBody);
+	auto HasBody = [&ForceBody](const DCPaths::FCrewBody* Bodies, int32 Num)
+	{
+		for (int32 k = 0; k < Num; ++k) { if (FString(Bodies[k].Mesh).Contains(TEXT("SK_Crew_") + ForceBody + TEXT("."))) { return k; } }
+		return (int32)INDEX_NONE;
+	};
+	bool bQuinn = bFemale;
+	if (bForce)
+	{
+		if (HasBody(DCPaths::CrewBodiesFemale, UE_ARRAY_COUNT(DCPaths::CrewBodiesFemale)) != INDEX_NONE) { bQuinn = true; }
+		else if (HasBody(DCPaths::CrewBodies, UE_ARRAY_COUNT(DCPaths::CrewBodies)) != INDEX_NONE) { bQuinn = false; }
+	}
+	const DCPaths::FCrewBody* Bodies = bQuinn ? DCPaths::CrewBodiesFemale : DCPaths::CrewBodies;
+	const int32 NumBodies = bQuinn ? UE_ARRAY_COUNT(DCPaths::CrewBodiesFemale) : UE_ARRAY_COUNT(DCPaths::CrewBodies);
 	USkeletalMeshComponent* M = GetMesh();
-	if (USkeletalMesh* Mesh = LoadQuiet<USkeletalMesh>(DCPaths::MannyMesh))
+	USkeletalMesh* Mesh = bQuinn ? LoadQuiet<USkeletalMesh>(DCPaths::QuinnMesh) : nullptr;
+	if (!Mesh) { Mesh = LoadQuiet<USkeletalMesh>(DCPaths::MannyMesh); }
+	if (Mesh)
 	{
 		M->SetSkeletalMesh(Mesh);
 		AnimClass = LoadClass<UAnimInstance>(nullptr, DCPaths::UnarmedAnimBP, nullptr, LOAD_NoWarn | LOAD_Quiet);
@@ -140,19 +160,11 @@ void ADCCriminalPawn::SetupVisuals()
 		// Crew pick a body by id; skip any that didn't import.
 		USkeletalMesh* BodyMesh = nullptr;
 		UMaterialInterface* Skin = nullptr;
-		const int32 NumBodies = UE_ARRAY_COUNT(DCPaths::CrewBodies);
 		int32 First = FMath::Abs(CriminalId) % NumBodies;
-		FString ForceBody; // -DCCrewBody=<Name>: everyone wears SK_Crew_<Name> (checking a new body)
-		if (FParse::Value(FCommandLine::Get(), TEXT("DCCrewBody="), ForceBody))
-		{
-			for (int32 k = 0; k < NumBodies; ++k)
-			{
-				if (FString(DCPaths::CrewBodies[k].Mesh).Contains(TEXT("SK_Crew_") + ForceBody + TEXT("."))) { First = k; }
-			}
-		}
+		if (bForce && HasBody(Bodies, NumBodies) != INDEX_NONE) { First = HasBody(Bodies, NumBodies); }
 		for (int32 k = 0; k < NumBodies && !BodyMesh; ++k)
 		{
-			const DCPaths::FCrewBody& Body = DCPaths::CrewBodies[(First + k) % NumBodies];
+			const DCPaths::FCrewBody& Body = Bodies[(First + k) % NumBodies];
 			BodyMesh = LoadQuiet<USkeletalMesh>(Body.Mesh);
 			Skin = BodyMesh ? LoadQuiet<UMaterialInterface>(Body.Skin) : nullptr;
 		}

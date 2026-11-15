@@ -192,10 +192,16 @@ FDCCriminal FDCSimImpl::MakeCriminal(S& Sim, EDCCriminalType Type, EDCQuality Qu
 		const TArray<FString>& Pool = Free.Num() > 0 ? Free : All;
 		return Pool[R.RandRange(0, Pool.Num() - 1)];
 	};
-	C.FirstName = PickUnused(D.FirstNames, UsedFirst);
+	// One draw from every first name; the list it came from sets the gender (names for anyone go by the seed), so
+	// gender costs no extra RNG draws.
+	TArray<FString> AllFirst = D.MaleFirstNames;
+	AllFirst.Append(D.FemaleFirstNames);
+	AllFirst.Append(D.FirstNames);
+	C.FirstName = PickUnused(AllFirst, UsedFirst);
 	C.LastName = PickUnused(D.LastNames, UsedLast);
 	C.Nickname = PickUnused(D.Nicknames.FindChecked(Type), UsedNick);
 	C.Seed = R.RandRange(0, MAX_int32 - 1);
+	C.bFemale = D.FemaleFirstNames.Contains(C.FirstName) || (!D.MaleFirstNames.Contains(C.FirstName) && (C.Seed & 1));
 	C.Level = FMath::Clamp(Level, 1, B.MaxLevel);
 	C.XP = 0;
 	C.XPToNext = XPToNext(Sim, C.Level);
