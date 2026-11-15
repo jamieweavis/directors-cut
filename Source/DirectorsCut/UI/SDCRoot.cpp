@@ -973,8 +973,8 @@ TSharedRef<SWidget> SDCRoot::BuildDock()
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.f, 0.f, 2.f, 0.f)[BuildHudSpeed()]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(8.f, 10.f)[VLine(Line)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("map"), TEXT("Missions"), TEXT("M"), EDCPanel::Missions, TAttribute<int32>::CreateLambda([this]() { return NewPostingCount(); }), true, [this]() { return SoonestLeadExpiry(); })]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("users"), TEXT("Crew"), TEXT("C"), EDCPanel::Crew, Zero)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("wrench"), TEXT("Gear"), TEXT("G"), EDCPanel::Workbench, Zero)]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("users"), TEXT("Crew"), TEXT("C"), EDCPanel::Crew, Zero)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("user-plus"), TEXT("Recruits"), TEXT("R"), EDCPanel::Recruits, Zero, true, [this]() { return RecruitExpiry(); })]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[DockButton(TEXT("hammer"), TEXT("Expand"), TEXT("B"), EDCPanel::Build, TAttribute<int32>::CreateLambda([this, R]()
 				{
