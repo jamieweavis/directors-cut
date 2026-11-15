@@ -21,7 +21,7 @@ class FDirectorsCutModule : public FDefaultGameModuleImpl
 		{
 			auto Apply = []() { FApp::SetVolumeMultiplier(0.f); FApp::SetUnfocusedVolumeMultiplier(0.f); };
 			Apply();
-			FCoreDelegates::OnPostEngineInit.AddLambda(Apply); // the engine re-reads UnfocusedVolumeMultiplier during init
+			FCoreDelegates::GetOnPostEngineInit().AddLambda(Apply); // the engine re-reads UnfocusedVolumeMultiplier during init
 			UE_LOG(LogDC, Display, TEXT("Audio muted (DefaultGame.ini bMuteAll). Pass -DCUnmute to hear it."));
 		}
 	}

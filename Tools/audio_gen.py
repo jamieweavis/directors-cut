@@ -595,7 +595,6 @@ def sfx_mission_start():
 def sfx_mission_complete():
     """Phone notification on a desk: brief haptic buzz, then a soft two-note glassy ping."""
     n = ns(0.9)
-    t = tt(n)
     y = np.zeros(n)
     m = ns(0.13)
     tm = tt(m)
