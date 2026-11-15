@@ -161,7 +161,7 @@ namespace DCSite
 
 	/** Gravel yard where cars park and circulate (Landscape draws it; nothing tall inside it). It covers the whole
 	 *  one-way loop: lower lane, U-turn at the -X end, the bay row and the out lane (see the car park below). */
-	inline FBox2D YardRect() { return FBox2D(FVector2D(-2450, -2310), FVector2D(2110, -1060)); }
+	inline FBox2D YardRect() { return FBox2D(FVector2D(-2210, -2310), FVector2D(2090, -1060)); }
 
 	/** The Office's front door: a doorway cut into its collapsed front (-Y) wall, centred on that edge. House builds
 	 *  the frame, World sends crew out through it, Landscape lays the footpath from it to the yard. */
@@ -204,17 +204,18 @@ namespace DCSite
 	//        the driveway's out lane (its +X side) -> right onto the lane, off towards +X.
 	// In and out traffic never cross: the lower lane carries arrivals, the upper lane departures, and the driveway has a
 	// lane for each. All routes are traced by the car's REAR axle (DCVehicle turns the body about it like a real car).
-	// Checked offline for every bay and car style: >= 35 cm from parked cars and the gateway, <= 47 deg of steer.
+	// Checked offline for every bay and car style: >= 33 cm from parked cars and the gateway, <= 48 deg of steer.
 	constexpr int32 MaxParkingSlots = 8;
 	constexpr float BaySlant = 55.f;          // bay axis vs the aisles (deg)
-	constexpr float BayPitch = 280.f;         // centre spacing measured across the cars (old row: 225)
+	constexpr float BayPitch = 270.f;         // centre spacing measured across the cars (old row: 225)
 	constexpr float BayRowY = -1600.f;        // bay centres
-	constexpr float Bay0X = -1200.f;          // centre of bay 0 (bays run towards +X)
+	constexpr float Bay0X = -1120.f;          // centre of bay 0 (bays run towards +X)
 	constexpr float AisleFrontY = BayRowY - 370.f;    // upper yard lane: departures (-1970)
 	constexpr float AisleRearY = BayRowY + 420.f;     // rear aisle: arrivals turning in (-1180)
 	constexpr float InLaneY = AisleFrontY - 240.f;    // lower yard lane: arrivals (-2210), a car width + 64 cm below
 	constexpr float YardTurnR = 330.f;        // rear-axle radius of the yard corners (~40 deg of lock on a long car)
 	constexpr float LaneTurnR = 430.f;        // turning off / onto the lane
+	constexpr float UTurnR = 340.f;           // the U-turn at the -X end (two quarter turns with a short straight)
 	inline float BaySpacing() { return BayPitch / FMath::Sin(FMath::DegreesToRadians(BaySlant)); }
 	/** Bay b (0..7, -X to +X): car centre on the ground, nose slanted towards +X and the lane. */
 	inline FTransform ParkingBay(int32 B)
@@ -240,7 +241,7 @@ namespace DCSite
 	constexpr float LaneTravelY = LaneY + 110.f;
 	/** Dirt driveway from the yard to the lane at the +X end of the yard, centred on X = DriveX. Two lanes: in on its
 	 *  -X side, out on its +X side (DriveX -+ DriveLaneHalf). */
-	constexpr float DriveX = 1830.f;
+	constexpr float DriveX = 1805.f;
 	constexpr float DriveW = 520.f;
 	constexpr float DriveLaneHalf = 165.f;
 	inline float DriveInX() { return DriveX - DriveLaneHalf; }
@@ -299,9 +300,9 @@ namespace DCSite
 		auto Add = [&](const FVector2D& P, float R) { Corners.Add(P); Radii.Add(R); };
 		if (bArrive)
 		{
-			// U-turn at the -X end: a half circle from the lower lane up to the rear aisle, just clear of bay 0's turn in.
-			const float UR = (AisleRearY - InLaneY) * 0.5f;
-			const float UX = BayAxisAtY(0, AisleRearY).X - YardTurnR * TanHalf - UR - 40.f;
+			// U-turn at the -X end: up from the lower lane to the rear aisle, just clear of bay 0's turn in.
+			const float UR = UTurnR;
+			const float UX = BayAxisAtY(0, AisleRearY).X - YardTurnR * TanHalf - UR - 20.f;
 			Add(FVector2D(ArriveFromX, LaneTravelY), 0.f);
 			Add(FVector2D(DriveInX(), LaneTravelY), LaneTurnR);
 			Add(FVector2D(DriveInX(), InLaneY), YardTurnR);
