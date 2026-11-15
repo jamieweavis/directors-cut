@@ -224,6 +224,8 @@ public:
 	void DevOfferPerks();
 	/** Dev/screenshot hook (-DCEndRun=win|lose): end the run now, as a win or a loss. */
 	void DevEndRun(bool bWon);
+	/** Dev/video hook (-DCReel): add cash now (a reel clip that builds a room tops the bank up if it's short). */
+	void DevAddCash(int32 Amount);
 	/** Successful missions in a row (a failure or bust resets it). */
 	int32 GetSuccessStreak() const { return SuccessStreak; }
 

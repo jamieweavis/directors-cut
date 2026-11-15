@@ -1,0 +1,74 @@
+# Director's Cut — shot list for the jam video (Scripts/record_video_win.ps1, Scripts/record_video_mac.sh).
+#
+# The game plays this top to bottom in one go: it starts on the title screen, then jumps through one seeded run.
+# Every clip fades in from black, holds for its length, and fades out; between clips (behind the black) the run
+# jumps forward and the world settles. The recorder films it all; reel_cues.csv marks the clean part of each clip
+# and the script cuts those out into Clips/ for you.
+#
+# Steps (one per line, # starts a comment):
+#   seconds <s>                  clean length of the clips that follow (default 10)
+#   fade <s>                     fade in / out time (0 = hard cuts)
+#   newrun <seed>                start a run with this seed, as New Run on the title does (-Seed / --seed overrides it)
+#   play <run-seconds> [hour]    the bot plays the run up to that run time (from the start of the run), then on to that
+#                                clock hour; instant, behind the black. 600 = day 2, 6000 = ~day 5, 18000 = ~day 14.
+#   endrun win|lose              end the run; the end screen opens
+#   clip <name> <camera> [ui=<Panel>] [hud=off] [len=<s>] [<t>:<action>]...
+#
+# Camera:  <focus>[@zoom]               holds still
+#          <focus>[@zoom]><focus>[@zoom] an eased move across the whole clip (a pan, a push-in, a pull-out)
+#   focus: wide (the overview)  far (zoomed out over the landscape)  house  yard (the cars)  crew (someone sleeping)
+#          follow (tracks a crew member on the move)  or a room: Office Lounge Workshop Garage OpsRoom Clinic
+#          ServerRoom LawyerOffice
+#   zoom:  0 = the overview distance .. 1 = closest; below 0 pulls back past the overview (-1 = as far as the player can)
+#
+# ui=<Panel> is open when the clip fades in: Title Missions MissionPlanner Crew Workbench Recruits Build PerkDraft
+#   Reports OpsRoom Clinic Lawyer ServerRoom. hud=off hides all the UI (for the pretty shots).
+#
+# Actions run <t> seconds into the clean part of the clip:
+#   open=<Panel>  close          open / close a panel (MissionPlanner opens a job the crew can take)
+#   autofill  start  cut=<0..1>  mission planner: fill the crew slots, set the director's cut, send the crew out
+#   hire                         hire a recruit (the Recruits panel shows it)
+#   crew=<i>  gear=<i>           select roster entry i in the Crew / Workbench panel
+#   perks  perk=<i>  pickperk    put a perk offer on the table, highlight card i, take it
+#   place=<Room|any>  click      start placing a new room (the cursor glides over the free cells), then build it
+#   look=<focus>[@zoom]          ease the camera somewhere else
+#   lapse=<hours>                time-lapse: that many game hours pass over the rest of the clip
+#   speed=<0|1|2>                game speed 1x / 2x / 4x
+#   view=<v>                     title sub-screens: options.general options.graphics options.access options.gameplay
+#                                slots.new slots.load (view=none goes back)
+#   hud=on|off
+
+seconds 5.5
+fade 0.3
+
+# 60 seconds of clean footage: 10 s on the title, then nine short clips through one run.
+
+# ── Title ───────────────────────────────────────────────────────────────────
+clip  title              wide@0.05>wide@0.18      ui=Title   len=10
+
+# ── Day 1 ───────────────────────────────────────────────────────────────────
+newrun 7
+clip  day1_office        Office@0.35>Office@0.7   hud=off
+
+# ── Day 2: the first job goes out ───────────────────────────────────────────
+play 600 10
+clip  early_plan         wide@0.2                 ui=MissionPlanner   len=6.5   1:autofill  2.6:cut=0.45  4:start  4.4:look=yard@0.5
+
+# ── Around day 5: the house grows ───────────────────────────────────────────
+play 6000 15
+clip  mid_reveal         far>house@0.35           hud=off
+clip  mid_build          house@0.3                len=6.5   0.4:place=any  5:click
+clip  mid_perk           wide@0.25                0.3:perks  1.6:perk=0  2.9:perk=1  4.2:pickperk
+clip  day_lapse          wide@0.08>wide@0.22      hud=off   0:lapse=6
+
+# ── Night ───────────────────────────────────────────────────────────────────
+play 12000 22
+clip  night_pushin       wide@-0.4>house@0.5      hud=off
+
+# ── Around day 14: the whole operation ──────────────────────────────────────
+play 18000 17
+clip  late_flyover       house@0.6>yard@0.4       hud=off
+
+# ── The Big Score ───────────────────────────────────────────────────────────
+endrun win
+clip  victory            wide@0.15>wide           len=4

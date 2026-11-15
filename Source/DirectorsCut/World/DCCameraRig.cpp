@@ -224,6 +224,19 @@ void ADCCameraRig::EndCinematic()
 	ActiveSmoothTime = FocusSmoothTime * 1.2f; bPlayerZoom = false;
 }
 
+void ADCCameraRig::DevSetView(const FVector& InPivot, float InDistance)
+{
+	if (bCinematic) { bCinematic = false; }
+	Mode = EMode::Free;
+	bPlayerZoom = false;
+	TargetPivot = CurPivot = InPivot;
+	TargetDistance = CurDistance = Distance = InDistance;
+	PivotVel = FVector::ZeroVector;
+	DistanceVel = 0.f;
+	bInitialized = true;
+	SetActorLocation(CurPivot);
+}
+
 void ADCCameraRig::SnapToTarget()
 {
 	CurPivot = TargetPivot;

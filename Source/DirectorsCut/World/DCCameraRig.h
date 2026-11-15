@@ -72,6 +72,10 @@ public:
 	/** The box the overview framing fits (house + yard). Pan clamping still uses SetBounds (the whole site). Invalid = use the bounds. */
 	void SetFraming(const FBox& WorldFraming);
 	FVector GetOverviewPivot() const { return OverviewPivot; }
+	/** Dev/video (-DCReel): put the camera exactly here this frame (no easing, no clamping). Call every frame to drive a move. */
+	void DevSetView(const FVector& InPivot, float InDistance);
+	/** Distance for a zoom alpha (0 = overview .. 1 = closest; below 0 zooms out past the overview, as far as the player may). */
+	float DistanceForZoom(float ZoomAlpha) const { return ZoomAlpha >= 0.f ? FMath::Lerp(OverviewDistance, MinDistance, FMath::Min(ZoomAlpha, 1.f)) : FMath::Lerp(OverviewDistance, GetMaxDistance(), FMath::Min(-ZoomAlpha, 1.f)); }
 
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;

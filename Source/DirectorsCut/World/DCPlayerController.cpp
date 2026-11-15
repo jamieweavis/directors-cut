@@ -1,4 +1,5 @@
 #include "World/DCPlayerController.h"
+#include "Core/DCDevTools.h"
 #include "Core/DCSettings.h"
 #include "World/DCCameraRig.h"
 #include "World/DCStation.h"
@@ -223,7 +224,8 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 	}
 	const bool bPlacing = IsPlacing();
 	if (bPlacing) { Placer->UpdateCursor(this, DeltaTime); }
-	if (!bBlocked && !bRmbDragging && !bPlacing)
+	// Video reels (-DCReel) keep the mouse out of the picture: no hover highlights from wherever it rests.
+	if (!bBlocked && !bRmbDragging && !bPlacing && !UDCDevTools::IsReel())
 	{
 		FHitResult Hit;
 		if (GetHitResultUnderCursor(ECC_Visibility, false, Hit))
@@ -293,7 +295,7 @@ void ADCPlayerController::PlayerTick(float DeltaTime)
 			if (IsInputKeyDown(EKeys::A) || IsInputKeyDown(EKeys::Left)) { Axis.X -= 1.f; }
 		}
 		const UDCUISubsystem* UI = UDCUISubsystem::Get(this);
-		if (bEdgeScroll && bHaveMouse && !bRmbDragging && (!UI || !UI->IsAnyPanelOpen()) && IsGameWindowFocused(GetWorld()))
+		if (bEdgeScroll && bHaveMouse && !bRmbDragging && !UDCDevTools::IsReel() && (!UI || !UI->IsAnyPanelOpen()) && IsGameWindowFocused(GetWorld()))
 		{
 			int32 VX = 0, VY = 0;
 			GetViewportSize(VX, VY);

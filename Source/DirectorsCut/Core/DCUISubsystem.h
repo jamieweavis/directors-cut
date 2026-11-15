@@ -48,6 +48,9 @@ public:
 	void RequestRoomPlacement(EDCRoomType Room);
 	FDCOnRoomPlacementRequested OnRoomPlacementRequested;
 
+	/** Dev video reels (-DCReel): a scripted UI action (see SDCRoot::DevAction). */
+	bool DevAction(const FString& Verb, const FString& Arg = FString());
+
 private:
 	// ═══ Agent C owns everything below this line ═══
 	friend class SDCRoot;

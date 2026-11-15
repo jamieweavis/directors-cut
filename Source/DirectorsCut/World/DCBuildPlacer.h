@@ -31,6 +31,10 @@ public:
 	void UpdateCursor(APlayerController* PC, float DeltaTime);
 	/** Left click while active. Builds on the hovered cell when allowed. */
 	void Click();
+	/** Dev/video (-DCReel): drive the hover from this ground point instead of the mouse (unset = the mouse again). */
+	void DevSetCursor(const TOptional<FVector2D>& GroundPoint) { DevCursorPoint = GroundPoint; }
+	/** Cells the room may go on right now. */
+	const TArray<FIntPoint>& GetValidCells() const { return Valid; }
 
 protected:
 	bool bActive = false;
@@ -46,6 +50,7 @@ protected:
 	float Appear = 0.f;           // fade-in 0..1
 	float Time = 0.f;
 	int32 LastCost = -1;
+	TOptional<FVector2D> DevCursorPoint;
 
 	UPROPERTY() TObjectPtr<USceneComponent> Root;
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> Lines;

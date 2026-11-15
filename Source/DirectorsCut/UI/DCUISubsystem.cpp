@@ -174,6 +174,8 @@ void UDCUISubsystem::RequestRoomPlacement(EDCRoomType Room)
 	OnRoomPlacementRequested.Broadcast(Room);
 }
 
+bool UDCUISubsystem::DevAction(const FString& Verb, const FString& Arg) { return Root.IsValid() && Root->DevAction(Verb, Arg); }
+
 EDCPanel UDCUISubsystem::GetOpenPanel() const { return OpenPanelType; }
 bool UDCUISubsystem::IsAnyPanelOpen() const { return OpenPanelType != EDCPanel::None; }
 bool UDCUISubsystem::IsWorldInputBlocked() const { return IsLoading() || (Root.IsValid() && Root->IsWorldBlocked()); }

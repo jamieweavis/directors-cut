@@ -46,6 +46,9 @@ public:
 	void SetDevView(const FString& View);
 	/** The loading screen lifted: restart the title's fade-in so it plays over the revealed scene. */
 	void ReplayTitleIntro();
+	/** Dev video reels (-DCReel): do what a click would (autofill, start, crew <i>, perk <i>, pickperk, cut <x>, view <v>,
+	 *  close, hud on|off, speed <i>, titleintro). Returns false if the verb is unknown or there was nothing to do. */
+	bool DevAction(const FString& Verb, const FString& Arg);
 
 private:
 	TWeakObjectPtr<UDCUISubsystem> Owner;

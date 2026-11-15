@@ -314,6 +314,42 @@ void SDCRoot::SetDevView(const FString& V)
 	else if (V == TEXT("hc")) { DCSettings::SetBool(TEXT("HighContrast"), true); ApplyPlayerSettings(true); }
 }
 
+bool SDCRoot::DevAction(const FString& Verb, const FString& Arg)
+{
+	UDCRunSubsystem* R = Run();
+	const int32 Index = FCString::Atoi(*Arg);
+	if (Verb == TEXT("view")) { if (Arg == TEXT("none")) { SetView(EView::None); } else { SetDevView(Arg); } return true; }
+	if (Verb == TEXT("autofill")) { if (PlanMissionId == INDEX_NONE) { return false; } AutoFill(); return true; }
+	if (Verb == TEXT("start")) { if (PlanMissionId == INDEX_NONE) { return false; } StartPlan(); return true; }
+	if (Verb == TEXT("cut")) { PlanCut = FMath::Clamp(FCString::Atof(*Arg), 0.f, 1.f); Sfx(DCSfx::Click); RecomputePlan(); Rebuild(); return true; }
+	if (Verb == TEXT("crew") || Verb == TEXT("gear"))
+	{
+		if (!R || !R->GetRoster().IsValidIndex(Index)) { return false; }
+		(Verb == TEXT("crew") ? CrewSel : GearSel) = R->GetRoster()[Index].Id;
+		DismissArmed = INDEX_NONE;
+		Sfx(DCSfx::Click); Rebuild();
+		return true;
+	}
+	if (Verb == TEXT("perk"))
+	{
+		const TArray<FDCPerk> O = R ? R->GetPerkOffer() : TArray<FDCPerk>();
+		if (!O.IsValidIndex(Index)) { return false; }
+		PerkSel = O[Index].Id; Sfx(DCSfx::Click); Rebuild();
+		return true;
+	}
+	if (Verb == TEXT("pickperk"))
+	{
+		if (!R || PerkSel == NAME_None || !R->PickPerk(PerkSel)) { return false; }
+		PerkSel = NAME_None; Sfx(DCSfx::Perk); Close(true);
+		return true;
+	}
+	if (Verb == TEXT("close")) { if (Confirm.IsValid()) { EndConfirm(false); } SetView(EView::None); Close(true); return true; }
+	if (Verb == TEXT("hud")) { SetVisibility(Arg == TEXT("off") ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible); return true; }
+	if (Verb == TEXT("speed")) { SetSpeed(FMath::Clamp(Index, 0, UDCRunSubsystem::NumGameSpeeds - 1)); return true; }
+	if (Verb == TEXT("titleintro")) { ReplayTitleIntro(); return true; }
+	return false;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Confirm dialog
 // ─────────────────────────────────────────────────────────────────────────────

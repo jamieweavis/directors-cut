@@ -149,7 +149,13 @@ void ADCBuildPlacer::UpdateCursor(APlayerController* PC, float DeltaTime)
 	static FString DevCursor = TEXT("?");
 	if (DevCursor == TEXT("?")) { DevCursor.Reset(); FParse::Value(FCommandLine::Get(), TEXT("DCPlaceCursor="), DevCursor, false); }
 	FString SX, SY;
-	if (!DevCursor.IsEmpty() && DevCursor.Split(TEXT(","), &SX, &SY))
+	if (DevCursorPoint.IsSet())
+	{
+		// dev video: a scripted ground point that glides between cells
+		Cursor = DevCursorPoint.GetValue();
+		bHaveCursor = true;
+	}
+	else if (!DevCursor.IsEmpty() && DevCursor.Split(TEXT(","), &SX, &SY))
 	{
 		// dev screenshots: a fixed ground point instead of the mouse
 		Cursor = FVector2D(FCString::Atof(*SX), FCString::Atof(*SY));

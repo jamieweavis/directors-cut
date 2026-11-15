@@ -20,6 +20,7 @@
 
 bool UDCDevTools::IsBuildAll() { return FParse::Param(FCommandLine::Get(), TEXT("DCBuildAll")); }
 int32 UDCDevTools::GetCmdSeed() { int32 S = 0; FParse::Value(FCommandLine::Get(), TEXT("DCSeed="), S); return S; }
+bool UDCDevTools::IsReel() { static const bool b = FCString::Strifind(FCommandLine::Get(), TEXT("DCReel=")) != nullptr; return b; }
 
 void UDCDevTools::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -46,7 +47,8 @@ void UDCDevTools::Initialize(FSubsystemCollectionBase& Collection)
 	FParse::Value(Cmd, TEXT("DCHireCrew="), HireCrew);
 	bPerkOffer = FParse::Param(Cmd, TEXT("DCPerkOffer"));
 	FParse::Value(Cmd, TEXT("DCEndRun="), EndRun);
-	if (Shots.Num() || QuitAfter > 0.f || AutoPlaySeconds > 0 || bClockFlags || bContinue || HireCrew > 0 || bPerkOffer || !EndRun.IsEmpty())
+	if (FParse::Value(Cmd, TEXT("DCReel="), ReelPath)) { FParse::Value(Cmd, TEXT("DCReelWait="), ReelWait); LoadReel(); }
+	if (Reel.Num() || Shots.Num() || QuitAfter > 0.f || AutoPlaySeconds > 0 || bClockFlags || bContinue || HireCrew > 0 || bPerkOffer || !EndRun.IsEmpty())
 	{
 		IFileManager::Get().MakeDirectory(*ShotDir, true);
 		TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UDCDevTools::Tick));
@@ -66,15 +68,16 @@ UWorld* UDCDevTools::GetGameWorld() const
 	return GI ? GI->GetWorld() : nullptr;
 }
 
-void UDCDevTools::RunAutoPlay()
+void UDCDevTools::RunAutoPlay(double PlaySeconds, float Hour, bool bKeepAfloat)
 {
 	UDCRunSubsystem* Run = UDCRunSubsystem::Get(GetGameWorld());
 	if (!Run) { return; }
 	if (!Run->HasActiveRun()) { Run->StartNewRun(GetCmdSeed()); }
 	// Bot: every 5 run-seconds, start every mission it can fully staff (SuggestPlan), pick the first perk, and spend what is
 	// left over a safety reserve (two paydays) on crew and rooms.
-	const auto BotStep = [Run](bool bWindDown)
+	const auto BotStep = [Run, bKeepAfloat](bool bWindDown)
 	{
+		if (bKeepAfloat && Run->GetCash() < Run->GetUpkeepDue() * 2 + 500) { Run->DevAddCash(Run->GetUpkeepDue() * 2 + 500 - Run->GetCash()); }
 		for (const FDCMission& M : Run->GetMissions())
 		{
 			// Winding down for the shots: one small job at a time, so most of the crew is home.
@@ -112,10 +115,9 @@ void UDCDevTools::RunAutoPlay()
 		}
 		Run->AdvanceTime(5.0);
 	};
-	for (double T = 0.0; T < AutoPlaySeconds && Run->GetPhase() == EDCGamePhase::Playing; T += 5.0) { BotStep(false); }
+	for (double T = 0.0; T < PlaySeconds && Run->GetPhase() == EDCGamePhase::Playing; T += 5.0) { BotStep(false); }
 	// -DCHour with -DCAutoPlay: keep playing until the clock reads that hour (at most one more day).
-	float Hour = -1.f;
-	if (FParse::Value(FCommandLine::Get(), TEXT("DCHour="), Hour) && Hour >= 0.f)
+	if (Hour >= 0.f)
 	{
 		const float StepHours = 5.f * Run->GetGameMinutesPerSecond() / 60.f;
 		const float WindDownHours = 8.f;
@@ -186,6 +188,52 @@ void UDCDevTools::ApplyClockFlags()
 	}
 }
 
+bool UDCDevTools::ResolveFocus(const FString& Focus, FVector& OutPoint, float& OutZoom) const
+{
+	UWorld* W = GetGameWorld();
+	if (!W) { return false; }
+	const auto Is = [&Focus](const TCHAR* Name) { return Focus.Equals(Name, ESearchCase::IgnoreCase); };
+	if (Is(TEXT("yard")))
+	{
+		// The parked cars and the front of the house.
+		const FVector2D C = DCSite::ParkingFrameRect().GetCenter();
+		OutPoint = FVector(C.X, C.Y - 150.f, 0.f); OutZoom = 0.3f;
+		return true;
+	}
+	if (Is(TEXT("house")))
+	{
+		FBox B(ForceInit);
+		for (TActorIterator<ADCRoomModule> It(W); It; ++It) { if (It->GetState() != EDCRoomState::Locked || IsBuildAll()) { B += It->GetWorldBounds(); } }
+		OutPoint = B.IsValid ? B.GetCenter() * FVector(1, 1, 0) : FVector::ZeroVector; OutZoom = 0.25f;
+		return true;
+	}
+	if (Is(TEXT("crew")))
+	{
+		// Close-up on a crew member (a sleeping one if any).
+		ADCCriminalPawn* Best = nullptr;
+		for (TActorIterator<ADCCriminalPawn> It(W); It; ++It)
+		{
+			if (It->IsHidden()) { continue; }
+			if (!Best || (It->IsSleeping() && !Best->IsSleeping())) { Best = *It; }
+		}
+		if (!Best) { return false; }
+		OutPoint = Best->GetActorLocation(); OutZoom = 1.f;
+		return true;
+	}
+	const UEnum* E = StaticEnum<EDCRoomType>();
+	FString Name = Focus;
+	if (Is(TEXT("Bunkroom"))) { Name = TEXT("Lounge"); }
+	if (Is(TEXT("Lawyer"))) { Name = TEXT("LawyerOffice"); }
+	if (Is(TEXT("Ops"))) { Name = TEXT("OpsRoom"); }
+	const int64 V = E->GetValueByNameString(Name);
+	if (V == INDEX_NONE) { return false; }
+	for (TActorIterator<ADCRoomModule> It(W); It; ++It)
+	{
+		if ((int64)It->RoomType == V) { OutPoint = It->GetFocusPoint(); OutZoom = 0.7f; return true; }
+	}
+	return false;
+}
+
 void UDCDevTools::PrepareShot(const FShot& Shot)
 {
 	UWorld* W = GetGameWorld();
@@ -199,46 +247,12 @@ void UDCDevTools::PrepareShot(const FShot& Shot)
 		float ZoomOverride = -1.f;
 		if (Shot.Focus.Split(TEXT("@"), &Focus, &ZoomStr)) { ZoomOverride = FMath::Clamp(FCString::Atof(*ZoomStr), 0.f, 1.f); }
 		const auto Is = [&Focus](const TCHAR* Name) { return Focus.Equals(Name, ESearchCase::IgnoreCase); };
-		const auto Go = [Rig, ZoomOverride](const FVector& Point, float Zoom) { Rig->FocusOn(Point, ZoomOverride >= 0.f ? ZoomOverride : Zoom); };
+		FVector Point;
+		float Zoom = 0.5f;
 		if (Is(TEXT("wide"))) { if (ZoomOverride >= 0.f) { Rig->FocusOn(Rig->GetOverviewPivot(), ZoomOverride); } else { Rig->ResetFocus(); } }
-		else if (Is(TEXT("yard")))
-		{
-			// The parked cars and the front of the house.
-			const FVector2D C = DCSite::ParkingFrameRect().GetCenter();
-			Go(FVector(C.X, C.Y - 150.f, 0.f), 0.3f);
-		}
-		else if (Is(TEXT("house")))
-		{
-			FBox B(ForceInit);
-			for (TActorIterator<ADCRoomModule> It(W); It; ++It) { if (It->GetState() != EDCRoomState::Locked || IsBuildAll()) { B += It->GetWorldBounds(); } }
-			Go(B.IsValid ? B.GetCenter() * FVector(1, 1, 0) : FVector::ZeroVector, 0.25f);
-		}
 		else if (Is(TEXT("far"))) { Rig->ResetFocus(); Rig->Zoom(-30.f); }
-		else if (Is(TEXT("crew")))
-		{
-			// Close-up on a crew member (a sleeping one if any).
-			ADCCriminalPawn* Best = nullptr;
-			for (TActorIterator<ADCCriminalPawn> It(W); It; ++It)
-			{
-				if (It->IsHidden()) { continue; }
-				if (!Best || (It->IsSleeping() && !Best->IsSleeping())) { Best = *It; }
-			}
-			if (Best) { Go(Best->GetActorLocation(), 1.f); }
-		}
-		else
-		{
-			const UEnum* E = StaticEnum<EDCRoomType>();
-			FString Name = Focus;
-			if (Is(TEXT("Bunkroom"))) { Name = TEXT("Lounge"); }
-			if (Is(TEXT("Lawyer"))) { Name = TEXT("LawyerOffice"); }
-			if (Is(TEXT("Ops"))) { Name = TEXT("OpsRoom"); }
-			const int64 V = E->GetValueByNameString(Name);
-			if (V == INDEX_NONE) { UE_LOG(LogDC, Warning, TEXT("[DCShots] unknown focus '%s'"), *Shot.Focus); }
-			for (TActorIterator<ADCRoomModule> It(W); It; ++It)
-			{
-				if ((int64)It->RoomType == V) { Go(It->GetFocusPoint(), 0.7f); }
-			}
-		}
+		else if (ResolveFocus(Focus, Point, Zoom)) { Rig->FocusOn(Point, ZoomOverride >= 0.f ? ZoomOverride : Zoom); }
+		else { UE_LOG(LogDC, Warning, TEXT("[DCShots] unknown focus '%s'"), *Shot.Focus); }
 	}
 	if (UDCUISubsystem* UI = UDCUISubsystem::Get(W))
 	{
@@ -258,6 +272,7 @@ void UDCDevTools::PrepareShot(const FShot& Shot)
 bool UDCDevTools::Tick(float DeltaTime)
 {
 	Elapsed += DeltaTime;
+	if (Reel.Num()) { return TickReel(DeltaTime); }
 	// Run-setup flags apply as soon as the game world is up (independent of -DCShotDelay).
 	const bool bWorldUp = GetGameWorld() && GetGameWorld()->HasBegunPlay();
 	if (bContinue && bWorldUp) { ApplyContinue(); bContinue = false; }
@@ -272,7 +287,15 @@ bool UDCDevTools::Tick(float DeltaTime)
 	if (const UDCUISubsystem* UI = UDCUISubsystem::Get(GetGameWorld()); UI && UI->IsLoading() && !FParse::Param(FCommandLine::Get(), TEXT("DCHoldLoading"))) { NextAt = FMath::Max(NextAt, Elapsed + 1.0); return true; }
 	if (Elapsed < NextAt) { return true; }
 	// Give the rebuilt world a few seconds of real time (crew walk to their spots, lights settle) before the first shot.
-	if (Step == 0 && AutoPlaySeconds > 0) { RunAutoPlay(); AutoPlaySeconds = 0; NextAt = Elapsed + (Shots.Num() ? 4.0 : 1.0); return true; }
+	if (Step == 0 && AutoPlaySeconds > 0)
+	{
+		float Hour = -1.f;
+		FParse::Value(FCommandLine::Get(), TEXT("DCHour="), Hour);
+		RunAutoPlay(AutoPlaySeconds, Hour);
+		AutoPlaySeconds = 0;
+		NextAt = Elapsed + (Shots.Num() ? 4.0 : 1.0);
+		return true;
+	}
 	if (!EndRun.IsEmpty()) { ApplyEndRun(); EndRun.Reset(); NextAt = Elapsed + 1.0; return true; }
 
 	if (Shots.IsValidIndex(Step))
