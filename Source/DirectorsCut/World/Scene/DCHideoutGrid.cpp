@@ -254,8 +254,7 @@ void ADCHideoutBuilder::BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 
 		{
 			Kind[e] = NStage(e) == 2 ? 1 : (Grid::IsFrontEdge(e) ? 2 : 0);
 			bExit[e] = Grid::IsFrontEdge(e) && NStage(e) == 0;
-			bSS[e] = e == 1 && NStage(0) < 2;
-			bSE[e] = e == 2 && NStage(3) < 2;
+			bSS[e] = bSE[e] = false; // back walls stand full height to both ends
 		}
 		const bool bFurnished = FurnishGridRoom(Room, Q, Kind, bExit, bSS, bSE, H, Seed, Seed, Omit);
 		for (int32 e = 0; e < 4; ++e)
@@ -275,10 +274,8 @@ void ADCHideoutBuilder::BuildGridRoom(int32 Index, const FIntPoint& Cell, int32 
 			}
 			else
 			{
-				// Back wall; it breaks down towards an open front.
-				const bool bStepStart = e == 1 && NStage(0) < 2;
-				const bool bStepEnd = e == 2 && NStage(3) < 2;
-				TallEdge(A, B, H, St, S, bStepStart, bStepEnd, Omit[e]);
+				// Back wall: full height along its whole length (must match bSS / bSE above).
+				TallEdge(A, B, H, St, S, bSS[e], bSE[e], Omit[e]);
 			}
 		}
 		if (bTall[1] && bTall[2])
