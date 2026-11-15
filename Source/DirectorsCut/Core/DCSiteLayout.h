@@ -46,7 +46,7 @@ namespace DCSite
 	namespace Grid
 	{
 		constexpr float CellSize = 580.f;     // nominal cell (the Office is roughly 5.8 x 5.8 m)
-		constexpr float Jitter = 62.f;        // max corner offset (cm) per axis
+		constexpr float Jitter = 31.f;       // max corner offset (cm) per axis
 		constexpr int32 MinCol = -2, MaxCol = 2;
 		constexpr int32 MinRow = 0, MaxRow = 3; // row 0 = the front row (the Office's row); rows grow behind (+Y)
 		/** World position of the centre of cell (0,0) before jitter. The house sits forward of the world origin, close
