@@ -347,6 +347,16 @@ bool SDCRoot::DevAction(const FString& Verb, const FString& Arg)
 	if (Verb == TEXT("hud")) { SetVisibility(Arg == TEXT("off") ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible); return true; }
 	if (Verb == TEXT("speed")) { SetSpeed(FMath::Clamp(Index, 0, UDCRunSubsystem::NumGameSpeeds - 1)); return true; }
 	if (Verb == TEXT("titleintro")) { ReplayTitleIntro(); return true; }
+	if (Verb == TEXT("quiet"))
+	{
+		// Video reel, behind the black: results and toasts from a fast-forward would all land at once over the next clip.
+		// Seen reports drop their result cards (bottom right) on the next tick; queued and showing toasts go now.
+		if (R) { R->MarkAllReportsSeen(); }
+		PendingToasts.Reset();
+		if (ToastBox.IsValid()) { for (const FToast& T : Toasts) { if (T.Widget.IsValid()) { ToastBox->RemoveSlot(T.Widget.ToSharedRef()); } } }
+		Toasts.Reset();
+		return true;
+	}
 	return false;
 }
 

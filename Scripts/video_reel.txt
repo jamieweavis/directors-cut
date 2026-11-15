@@ -38,32 +38,32 @@
 #                                slots.new slots.load (view=none goes back)
 #   hud=on|off
 
-seconds 5.5
-fade 0.3
+seconds 10
+fade 0
 
-# 60 seconds of clean footage: 10 s on the title, then nine short clips through one run.
+# Ten 10 s clips with hard cuts (trimmed and transitioned in the edit): the title, then nine through one run.
 
 # ── Title ───────────────────────────────────────────────────────────────────
-clip  title              wide@0.05>wide@0.18      ui=Title   len=10
+clip  title              yard@0.3>house@0.3       ui=Title
 
 # ── Day 1 ───────────────────────────────────────────────────────────────────
 newrun 7
-clip  day1_office        Office@0.35>Office@0.7   hud=off
+clip  day1_office        Office@0.35>Office@0.7
 
 # ── Day 2: the first job goes out ───────────────────────────────────────────
 play 600 10
-clip  early_plan         wide@0.2                 ui=MissionPlanner   len=6.5   1:autofill  2.6:cut=0.45  4:start  4.4:look=yard@0.5
+clip  early_plan         wide@0.2                 ui=MissionPlanner   1:autofill  2.6:cut=0.45  4:start  4.4:look=yard@0.5
 
 # ── Around day 5: the house grows ───────────────────────────────────────────
 play 6000 15
 clip  mid_reveal         far>house@0.35           hud=off
-clip  mid_build          house@0.3                len=6.5   0.4:place=any  5:click
-clip  mid_perk           wide@0.25                0.3:perks  1.6:perk=0  2.9:perk=1  4.2:pickperk
+clip  mid_build          house@0.3                0.4:place=any  5:click
+clip  mid_perk           follow                   0.3:perks  1.6:perk=0  2.9:perk=1  4.2:pickperk
 clip  day_lapse          wide@0.08>wide@0.22      hud=off   0:lapse=6
 
-# ── Night ───────────────────────────────────────────────────────────────────
+# ── Night: hiring and the crew ──────────────────────────────────────────────
 play 12000 22
-clip  night_pushin       wide@-0.4>house@0.5      hud=off
+clip  night_crew         house@0.35               ui=Recruits   1:hire  2.6:open=Crew  3.6:crew=1
 
 # ── Around day 14: the whole operation ──────────────────────────────────────
 play 18000 17
@@ -71,4 +71,4 @@ clip  late_flyover       house@0.6>yard@0.4       hud=off
 
 # ── The Big Score ───────────────────────────────────────────────────────────
 endrun win
-clip  victory            wide@0.15>wide           len=4
+clip  victory            wide@0.15>wide

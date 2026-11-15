@@ -319,6 +319,8 @@ void UDCDevTools::ReelPrepareClip(FReelStep& Clip)
 
 	if (UI)
 	{
+		// Whatever happened off camera (a fast-forward, the build wait above) stays off camera: no pile of result cards.
+		UI->DevAction(TEXT("quiet"));
 		UI->DevAction(TEXT("hud"), Clip.bHudOff ? TEXT("off") : TEXT("on"));
 		if (Clip.Panel.IsEmpty()) { UI->ClosePanel(); }
 		else if (Clip.Panel == TEXT("MissionPlanner") && Run)

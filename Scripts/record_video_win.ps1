@@ -20,7 +20,7 @@
 #
 # Output: Saved\Videos\<timestamp>\ (a new folder every time)
 #   reel_full.mp4       the whole recording (fades included), at the size it was filmed
-#   Clips\NN_name.mp4   each clip's clean part (no fades), cut from it at Width x Height, ready to edit
+#   Clips\NN_name.mp4   each clip's clean part, cut from it at Width x Height, ready to edit
 #   reel_cues.csv       where each clip starts and ends in reel_full.mp4 (seconds)
 #   logs\               game and ffmpeg logs
 #
@@ -306,9 +306,9 @@ if (-not $NoSplit) {
     $n = 0
     foreach ($c in ($Cues | Where-Object { $_.kind -eq "clip" })) {
         $n++
-        # A few frames in from each end, so no frame of a fade gets in.
-        $s = [double]::Parse($c.start, $Inv) + 0.05
-        $len = [double]::Parse($c.end, $Inv) - [double]::Parse($c.start, $Inv) - 0.1
+        # The whole clean part: the reel cuts hard (fade 0), so there is no fade to trim off.
+        $s = [double]::Parse($c.start, $Inv)
+        $len = [double]::Parse($c.end, $Inv) - [double]::Parse($c.start, $Inv)
         $Out = Join-Path $ClipDir ("{0:00}_{1}.mp4" -f $n, $c.name)
         $Err = FF @("-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-ss", (Num $s), "-i", $Full, "-t", (Num $len), "-vf", $Scale,
             "-c:v", "libx264", "-preset", "slow", "-crf", [string][Math]::Max(0, $Quality - 2), "-an", "-movflags", "+faststart", $Out)

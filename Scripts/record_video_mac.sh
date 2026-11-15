@@ -17,7 +17,7 @@
 #
 # Output: Saved/Videos/<timestamp>/ (a new folder every time)
 #   reel_full.mp4       the whole recording (fades included)
-#   Clips/NN_name.mp4   each clip's clean part (no fades), cut from it, ready to edit
+#   Clips/NN_name.mp4   each clip's clean part, cut from it, ready to edit
 #   reel_cues.csv       where each clip starts and ends in reel_full.mp4 (seconds)
 #   logs/               game and ffmpeg logs
 #
@@ -297,10 +297,10 @@ if [[ $NO_SPLIT -eq 0 ]]; then
   while IFS=, read -r kind name start end; do
     [[ "$kind" == "clip" ]] || continue
     N=$((N + 1))
-    # A few frames in from each end, so no frame of a fade gets in.
-    LEN=$(awk -v s="$start" -v e="$end" 'BEGIN { printf "%.3f", e - s - 0.1 }')
+    # The whole clean part: the reel cuts hard (fade 0), so there is no fade to trim off.
+    LEN=$(awk -v s="$start" -v e="$end" 'BEGIN { printf "%.3f", e - s }')
     OUT="$OUT_DIR/Clips/$(printf '%02d' "$N")_$name.mp4"
-    if ffmpeg -hide_banner -nostdin -loglevel error -y -ss "$(awk -v s="$start" 'BEGIN { printf "%.3f", s + 0.05 }')" -i "$FULL" -t "$LEN" \
+    if ffmpeg -hide_banner -nostdin -loglevel error -y -ss "$start" -i "$FULL" -t "$LEN" \
         -c:v h264_videotoolbox -b:v "$BITRATE" -pix_fmt yuv420p -an -movflags +faststart "$OUT"; then
       CUT=$((CUT + 1)); echo "    $(basename "$OUT")"
     else
