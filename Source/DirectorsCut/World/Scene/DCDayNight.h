@@ -71,6 +71,10 @@ protected:
 
 	float DisplayHour = 17.5f;
 	bool bHaveHour = false;
+	float LastTarget = 17.5f;   // clock hour seen last tick (jump detection)
+	float BlendOffset = 0.f;    // display - clock at the start of a jump blend (hours); 0 = following the clock
+	float BlendT = 0.f;
+	float BlendDur = 1.f;
 	float FixedHour = -1.f;
 	float LampAlpha = 0.f;
 	float SunAlphaNow = 0.f;

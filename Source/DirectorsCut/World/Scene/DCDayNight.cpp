@@ -151,6 +151,8 @@ void ADCDayNight::SetFixedHour(float Hour, bool bSnap)
 	if (bSnap && Hour >= 0.f)
 	{
 		DisplayHour = FMath::Fmod(Hour + 24.f, 24.f);
+		LastTarget = DisplayHour;
+		BlendOffset = 0.f;
 		bHaveHour = true;
 		bSnapLamps = true;
 	}
@@ -167,14 +169,29 @@ void ADCDayNight::Tick(float DeltaSeconds)
 	{
 		if (Run->HasActiveRun()) { Target = Run->GetHourOfDay(); }
 	}
-	if (!bHaveHour) { DisplayHour = Target; bHaveHour = true; bSnapLamps = true; }
+	auto Shortest = [](float A, float B) { return FMath::Fmod(A - B + 36.f, 24.f) - 12.f; }; // A - B, -12..12
+	if (!bHaveHour) { DisplayHour = Target; LastTarget = Target; bHaveHour = true; bSnapLamps = true; BlendOffset = 0.f; }
 	else
 	{
-		// Smooth toward the clock along the shortest way round (clock jumps / continue never pop).
-		float D = FMath::Fmod(Target - DisplayHour + 36.f, 24.f) - 12.f;
-		const float Step = (FMath::Abs(D) > 0.25f) ? D * FMath::Min(1.f, DeltaSeconds * 2.5f) : D;
-		DisplayHour = FMath::Fmod(DisplayHour + Step + 24.f, 24.f);
+		// Clock jump (run start / continue / skip): ease out an offset from the live clock, so the shown hour leaves
+		// the old pose and lands exactly on the still-running clock with no pop (shortest way round).
+		if (FMath::Abs(Shortest(Target, LastTarget)) > 0.25f)
+		{
+			BlendOffset = Shortest(DisplayHour, Target);
+			BlendT = 0.f;
+			BlendDur = FMath::Clamp(0.6f + 0.15f * FMath::Abs(BlendOffset), 0.8f, 2.4f);
+		}
+		float Offset = 0.f;
+		if (BlendOffset != 0.f)
+		{
+			BlendT += DeltaSeconds;
+			const float A = FMath::Clamp(BlendT / BlendDur, 0.f, 1.f);
+			Offset = BlendOffset * (1.f - A * A * (3.f - 2.f * A));
+			if (A >= 1.f) { BlendOffset = 0.f; }
+		}
+		DisplayHour = FMath::Fmod(Target + Offset + 24.f, 24.f);
 	}
+	LastTarget = Target;
 	Apply(DisplayHour, DeltaSeconds);
 }
 
