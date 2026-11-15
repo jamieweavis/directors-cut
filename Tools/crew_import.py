@@ -41,12 +41,18 @@ BODIES = [
      "Crew_Casual.fbm/T_Crew_Casual_normal.jpg"),
     ("NavySweats", "Crew_NavySweats.fbx", "Crew_NavySweats.fbm/T_Crew_NavySweats_basecolor.jpg",
      "Crew_NavySweats.fbm/T_Crew_NavySweats_normal.jpg"),
+    ("Businessman", "Crew_Businessman.fbx", "Crew_Businessman.fbm/T_Crew_Businessman_basecolor.jpg",
+     "Crew_Businessman.fbm/T_Crew_Businessman_normal.jpg"),
+    ("BrownJacket", "Crew_BrownJacket.fbx", "Crew_BrownJacket.fbm/T_Crew_BrownJacket_basecolor.jpg",
+     "Crew_BrownJacket.fbm/T_Crew_BrownJacket_normal.jpg"),
+    ("Shearling", "Crew_Shearling.fbx", "Crew_Shearling.fbm/T_Crew_Shearling_basecolor.jpg",
+     "Crew_Shearling.fbm/T_Crew_Shearling_normal.jpg"),
 ]
 
 # Bodies Interchange mangles: it rejects the FBX bind pose ("Imported skeleton has some invalid bind poses"),
 # rebinds at time zero and comes out ~100x too big with stretched skin. The legacy FBX importer recreates the bind
 # pose from the rest pose (identical in these files) and imports them cleanly.
-LEGACY_FBX = {"NavySweats"}
+LEGACY_FBX = {"NavySweats", "Businessman", "BrownJacket", "Shearling"}
 
 
 def log(msg):

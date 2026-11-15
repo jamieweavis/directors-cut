@@ -45,6 +45,9 @@ namespace DCPaths
 		{ TEXT("/Game/DC/Characters/Crew/SK_Crew_Tracksuit.SK_Crew_Tracksuit"), TEXT("/Game/DC/Characters/Crew/MI_Crew_Tracksuit.MI_Crew_Tracksuit") },
 		{ TEXT("/Game/DC/Characters/Crew/SK_Crew_Casual.SK_Crew_Casual"), TEXT("/Game/DC/Characters/Crew/MI_Crew_Casual.MI_Crew_Casual") },
 		{ TEXT("/Game/DC/Characters/Crew/SK_Crew_NavySweats.SK_Crew_NavySweats"), TEXT("/Game/DC/Characters/Crew/MI_Crew_NavySweats.MI_Crew_NavySweats") },
+		{ TEXT("/Game/DC/Characters/Crew/SK_Crew_Businessman.SK_Crew_Businessman"), TEXT("/Game/DC/Characters/Crew/MI_Crew_Businessman.MI_Crew_Businessman") },
+		{ TEXT("/Game/DC/Characters/Crew/SK_Crew_BrownJacket.SK_Crew_BrownJacket"), TEXT("/Game/DC/Characters/Crew/MI_Crew_BrownJacket.MI_Crew_BrownJacket") },
+		{ TEXT("/Game/DC/Characters/Crew/SK_Crew_Shearling.SK_Crew_Shearling"), TEXT("/Game/DC/Characters/Crew/MI_Crew_Shearling.MI_Crew_Shearling") },
 	};
 	inline const TCHAR* MatCrewSkin   = TEXT("/Game/DC/Materials/M_DC_CrewSkin.M_DC_CrewSkin");
 

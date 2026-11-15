@@ -8,7 +8,9 @@
 namespace
 {
 	// Crew body bone -> mannequin bone. Unlisted bones (twists, the body's own pelvis) keep their ref pose relative to
-	// their parent. The first entry also takes the mannequin pelvis translation (bob, crouch, lying down).
+	// their parent. The bone mapped to pelvis also takes the mannequin pelvis translation (bob, crouch, lying down).
+	// Two rig namings: Hip/Waist/L_Upperarm (Hooded) and Hips/Spine/LeftArm (Shearling); bodies with mannequin names
+	// map by name in Init.
 	const TPair<const TCHAR*, const TCHAR*> BoneMap[] = {
 		{ TEXT("Hip"), TEXT("pelvis") },
 		{ TEXT("Waist"), TEXT("spine_01") },
@@ -31,6 +33,57 @@ namespace
 		{ TEXT("R_Thigh"), TEXT("thigh_r") },
 		{ TEXT("R_Calf"), TEXT("calf_r") },
 		{ TEXT("R_Foot"), TEXT("foot_r") },
+		{ TEXT("Hips"), TEXT("pelvis") },
+		{ TEXT("Spine"), TEXT("spine_01") },
+		{ TEXT("Spine1"), TEXT("spine_03") },
+		{ TEXT("Spine2"), TEXT("spine_05") },
+		{ TEXT("Neck"), TEXT("neck_01") },
+		{ TEXT("LeftShoulder"), TEXT("clavicle_l") },
+		{ TEXT("LeftArm"), TEXT("upperarm_l") },
+		{ TEXT("LeftForeArm"), TEXT("lowerarm_l") },
+		{ TEXT("LeftHand"), TEXT("hand_l") },
+		{ TEXT("LeftUpLeg"), TEXT("thigh_l") },
+		{ TEXT("LeftLeg"), TEXT("calf_l") },
+		{ TEXT("LeftFoot"), TEXT("foot_l") },
+		{ TEXT("LeftToeBase"), TEXT("ball_l") },
+		{ TEXT("LeftHandIndex1"), TEXT("index_01_l") },
+		{ TEXT("LeftHandIndex2"), TEXT("index_02_l") },
+		{ TEXT("LeftHandIndex3"), TEXT("index_03_l") },
+		{ TEXT("LeftHandMiddle1"), TEXT("middle_01_l") },
+		{ TEXT("LeftHandMiddle2"), TEXT("middle_02_l") },
+		{ TEXT("LeftHandMiddle3"), TEXT("middle_03_l") },
+		{ TEXT("LeftHandRing1"), TEXT("ring_01_l") },
+		{ TEXT("LeftHandRing2"), TEXT("ring_02_l") },
+		{ TEXT("LeftHandRing3"), TEXT("ring_03_l") },
+		{ TEXT("LeftHandPinky1"), TEXT("pinky_01_l") },
+		{ TEXT("LeftHandPinky2"), TEXT("pinky_02_l") },
+		{ TEXT("LeftHandPinky3"), TEXT("pinky_03_l") },
+		{ TEXT("LeftHandThumb1"), TEXT("thumb_01_l") },
+		{ TEXT("LeftHandThumb2"), TEXT("thumb_02_l") },
+		{ TEXT("LeftHandThumb3"), TEXT("thumb_03_l") },
+		{ TEXT("RightShoulder"), TEXT("clavicle_r") },
+		{ TEXT("RightArm"), TEXT("upperarm_r") },
+		{ TEXT("RightForeArm"), TEXT("lowerarm_r") },
+		{ TEXT("RightHand"), TEXT("hand_r") },
+		{ TEXT("RightUpLeg"), TEXT("thigh_r") },
+		{ TEXT("RightLeg"), TEXT("calf_r") },
+		{ TEXT("RightFoot"), TEXT("foot_r") },
+		{ TEXT("RightToeBase"), TEXT("ball_r") },
+		{ TEXT("RightHandIndex1"), TEXT("index_01_r") },
+		{ TEXT("RightHandIndex2"), TEXT("index_02_r") },
+		{ TEXT("RightHandIndex3"), TEXT("index_03_r") },
+		{ TEXT("RightHandMiddle1"), TEXT("middle_01_r") },
+		{ TEXT("RightHandMiddle2"), TEXT("middle_02_r") },
+		{ TEXT("RightHandMiddle3"), TEXT("middle_03_r") },
+		{ TEXT("RightHandRing1"), TEXT("ring_01_r") },
+		{ TEXT("RightHandRing2"), TEXT("ring_02_r") },
+		{ TEXT("RightHandRing3"), TEXT("ring_03_r") },
+		{ TEXT("RightHandPinky1"), TEXT("pinky_01_r") },
+		{ TEXT("RightHandPinky2"), TEXT("pinky_02_r") },
+		{ TEXT("RightHandPinky3"), TEXT("pinky_03_r") },
+		{ TEXT("RightHandThumb1"), TEXT("thumb_01_r") },
+		{ TEXT("RightHandThumb2"), TEXT("thumb_02_r") },
+		{ TEXT("RightHandThumb3"), TEXT("thumb_03_r") },
 	};
 
 	// Yaw of the body mesh relative to the mannequin mesh (both face +Y in their own component space).
@@ -87,7 +140,7 @@ bool UDCCrewBodyComponent::Init(USkeletalMesh* BodyMesh, USkeletalMeshComponent*
 		SrcIndex[Ti] = Si;
 		SrcRefInvCS[Ti] = SrcRef.GetRotation().Inverse();
 		SrcRefLocCS[Ti] = SrcRef.GetLocation();
-		if (Mapped == 0) { HipBone = Ti; }
+		if (FCString::Strcmp(Pair.Value, TEXT("pelvis")) == 0) { HipBone = Ti; }
 		++Mapped;
 	}
 	// Bodies exported with mannequin bone names (fingers and all) map one-to-one; pelvis takes the translation.
