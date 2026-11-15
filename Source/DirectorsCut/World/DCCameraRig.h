@@ -33,7 +33,7 @@ public:
 	/** Smooth time (s) for focus/reset dollies and pan/zoom. */
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float FocusSmoothTime = 0.45f;
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float PanSmoothTime = 0.10f;
-	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float ZoomSmoothTime = 0.18f;
+	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float ZoomSmoothTime = 0.07f; // scroll zoom: exponential time constant (s)
 	/** Keyboard pan speed as a fraction of the current distance per second. */
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float KeyPanSpeed = 0.35f;
 	/** Player settings multipliers (options screen), pushed by the player controller. */
@@ -96,6 +96,7 @@ protected:
 	float OverviewDistance = 6000.f;
 	float LastAspect = 0.f;
 	bool bInitialized = false;
+	bool bPlayerZoom = false; // distance follows the scroll wheel (exponential), not a dolly (spring)
 
 	// Cinematic
 	bool bCinematic = false;

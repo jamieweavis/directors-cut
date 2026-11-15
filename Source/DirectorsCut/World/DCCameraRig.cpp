@@ -120,7 +120,7 @@ void ADCCameraRig::FocusOn(const FVector& WorldPoint, float ZoomAlpha)
 	FocusZoomAlpha = FMath::Clamp(ZoomAlpha, 0.f, 1.f);
 	TargetPivot = WorldPoint;
 	TargetDistance = FMath::Lerp(OverviewDistance, MinDistance, FocusZoomAlpha);
-	ActiveSmoothTime = FocusSmoothTime;
+	ActiveSmoothTime = FocusSmoothTime; bPlayerZoom = false;
 }
 
 void ADCCameraRig::ResetFocus()
@@ -129,7 +129,7 @@ void ADCCameraRig::ResetFocus()
 	Mode = EMode::Overview;
 	TargetPivot = OverviewPivot;
 	TargetDistance = OverviewDistance;
-	ActiveSmoothTime = FocusSmoothTime;
+	ActiveSmoothTime = FocusSmoothTime; bPlayerZoom = false;
 }
 
 void ADCCameraRig::Pan(const FVector2D& ScreenDelta)
@@ -141,8 +141,12 @@ void ADCCameraRig::Pan(const FVector2D& ScreenDelta)
 	// Grab-the-world: dragging right moves the world right (camera left); dragging down moves the camera forward.
 	const FVector Move = -FlatRight() * ScreenDelta.X * WorldPerPixel + FlatForward() * ScreenDelta.Y * WorldPerPixel / SinPitch;
 	Mode = EMode::Free;
-	TargetPivot = ClampPivot(TargetPivot + Move);
+	// 1:1 grab: the world sticks to the cursor (no easing). Grabbing also cancels any dolly still in flight.
+	TargetPivot = ClampPivot(CurPivot + Move);
+	CurPivot = TargetPivot;
+	PivotVel = FVector::ZeroVector;
 	ActiveSmoothTime = PanSmoothTime;
+	SetActorLocation(CurPivot);
 }
 
 void ADCCameraRig::PanAxis(const FVector2D& Axis, float DeltaTime)
@@ -161,6 +165,7 @@ void ADCCameraRig::Zoom(float Delta)
 	if (Mode == EMode::Overview) { Mode = EMode::Free; }
 	TargetDistance = FMath::Clamp(TargetDistance * FMath::Pow(0.87f, Delta * ZoomSpeedMul), MinDistance, GetMaxDistance());
 	if (ActiveSmoothTime > ZoomSmoothTime) { ActiveSmoothTime = ZoomSmoothTime; }
+	bPlayerZoom = true;
 	Distance = TargetDistance;
 }
 
@@ -174,7 +179,7 @@ void ADCCameraRig::SetBounds(const FBox& WorldBounds)
 	{
 		TargetPivot = OverviewPivot;
 		TargetDistance = OverviewDistance;
-		ActiveSmoothTime = FocusSmoothTime * 1.6f;
+		ActiveSmoothTime = FocusSmoothTime * 1.6f; bPlayerZoom = false;
 	}
 	if (!bInitialized) { SnapToTarget(); }
 }
@@ -189,7 +194,7 @@ void ADCCameraRig::SetFraming(const FBox& WorldFraming)
 	{
 		TargetPivot = OverviewPivot;
 		TargetDistance = OverviewDistance;
-		ActiveSmoothTime = FocusSmoothTime * 1.6f;
+		ActiveSmoothTime = FocusSmoothTime * 1.6f; bPlayerZoom = false;
 	}
 	if (!bInitialized) { SnapToTarget(); }
 }
@@ -206,7 +211,7 @@ void ADCCameraRig::BeginCinematic(const FVector& WorldPoint, float ZoomAlpha, fl
 	CinematicTimeLeft = FMath::Max(0.5f, MaxSeconds);
 	TargetPivot = WorldPoint;
 	TargetDistance = FMath::Lerp(OverviewDistance, MinDistance, FMath::Clamp(ZoomAlpha, 0.f, 1.f));
-	ActiveSmoothTime = FocusSmoothTime * 1.2f;
+	ActiveSmoothTime = FocusSmoothTime * 1.2f; bPlayerZoom = false;
 }
 
 void ADCCameraRig::EndCinematic()
@@ -216,7 +221,7 @@ void ADCCameraRig::EndCinematic()
 	Mode = SavedMode;
 	if (Mode == EMode::Overview) { TargetPivot = OverviewPivot; TargetDistance = OverviewDistance; }
 	else { TargetPivot = SavedPivot; TargetDistance = SavedDistance; }
-	ActiveSmoothTime = FocusSmoothTime * 1.2f;
+	ActiveSmoothTime = FocusSmoothTime * 1.2f; bPlayerZoom = false;
 }
 
 void ADCCameraRig::SnapToTarget()
@@ -251,7 +256,17 @@ void ADCCameraRig::Tick(float DeltaSeconds)
 	}
 
 	CurPivot = SmoothDamp(CurPivot, TargetPivot, PivotVel, ActiveSmoothTime, Dt);
-	CurDistance = SmoothDamp(CurDistance, TargetDistance, DistanceVel, FMath::Max(ActiveSmoothTime, ZoomSmoothTime), Dt);
+	if (bPlayerZoom && !bCinematic)
+	{
+		// Scroll zoom: exponential approach — moves fastest on the notch and settles without the spring's wind-up.
+		const float Prev = CurDistance;
+		CurDistance = FMath::Lerp(CurDistance, TargetDistance, 1.f - FMath::Exp(-Dt / FMath::Max(0.001f, ZoomSmoothTime)));
+		DistanceVel = Dt > 0.f ? (CurDistance - Prev) / Dt : 0.f; // keeps a later dolly continuous
+	}
+	else
+	{
+		CurDistance = SmoothDamp(CurDistance, TargetDistance, DistanceVel, FMath::Max(ActiveSmoothTime, ZoomSmoothTime), Dt);
+	}
 	SetActorLocation(CurPivot);
 
 	const FRotator Rot(Pitch, Yaw, 0.f);
