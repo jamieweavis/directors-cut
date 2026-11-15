@@ -12,6 +12,12 @@
 
 ## The game
 
+Director's Cut is a real-time crew management roguelike. You're the director: you don't do the jobs yourself, you put the right people on them and take your cut. It starts with an abandoned farmhouse in a quiet meadow, some cash, and no crew. Hire specialists from the recruit board, choose jobs from the board, assign people and gear to each one, then watch them walk out to the cars and drive off down the lane. They come back richer, injured, or not at all. Crew can get arrested, and if loyalty drops too low they quit.
+
+The clock keeps running. Every dawn is payday, and crew wages and building upkeep come due. If you can't pay, the run is over. Spend your earnings on new rooms, which you place on a wonky hand-built grid so the house grows piece by piece. The Workshop, Ops Room, Clinic, Server Room, Lawyer and others each improve your odds in their own way. Draft perks to change how the run plays, take on risky night work and rare jackpot jobs, and build up to the Big Score: five crew, twenty minutes, and one shot at retiring rich.
+
+Every run deals out different recruits, jobs and perks, so no two runs play out the same. Everything happens in a small toybox diorama with a day/night cycle, cel-shaded and shot with tilt-shift so the farmhouse looks like a model on a table.
+
 - **Build the hideout.** Build and upgrade rooms in your farmhouse to support your crew and operations.
 - **Hire a crew.** Recruit and manage a team of specialists to carry out your operations.
 - **Arrange jobs.** Assign your crew to various missions to maximize profits and minimize risks.
