@@ -643,7 +643,7 @@ TSharedRef<SWidget> SDCRoot::BuildEnd(bool bWon)
 		if (Names.Num() == 0) { W->AddSlot()[Txt(TEXT("—"), Font(10.f), TextFaint)]; }
 		return W;
 	};
-	// Wraps onto new rows: a long run can collect more perks than fit across the card.
+	// The card is sized so all 22 perks (30px + 6px gap = 786px) fit on one row; wraps if more are added.
 	TSharedRef<SWrapBox> Perks = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(6.f, 6.f));
 	for (FName Id : S.Perks)
 	{
@@ -654,7 +654,7 @@ TSharedRef<SWidget> SDCRoot::BuildEnd(bool bWon)
 	}
 
 	TSharedRef<SWidget> CardW = GlassPanel(
-		SNew(SBox).WidthOverride(780.f)
+		SNew(SBox).WidthOverride(800.f)
 		[
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[IconTile(bWon ? TEXT("crown") : TEXT("skull"), 60.f, Col, 0.48f, 0.14f)]
