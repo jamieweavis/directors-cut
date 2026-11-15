@@ -99,9 +99,7 @@ protected:
 	UMaterialInstanceDynamic* MakeMID(const TCHAR* Path, const FLinearColor& Color, float A, float B);
 	UStaticMeshComponent* Part(USceneComponent* Parent, UStaticMesh* Mesh, const FVector& Loc, const FVector& Size, UMaterialInterface* Mat, const FRotator& Rot = FRotator::ZeroRotator, bool bShadow = true);
 	void BuildBody(int32 Seed);
-	/** Imported car model (DCPaths::CarModels) instead of primitives; false if unavailable (then BuildBody carries on). */
-	bool BuildModel(int32 Seed);
-	/** Headlight spots + tail point light (shared by both builds). */
+	/** Headlight spots + tail point light. */
 	void BuildLights(float HL, float HW, float LampZ);
 	void BuildRoute(const TArray<TArray<FVector>>& Segments, const TArray<bool>& Reverse, float StartSpeed, float EndSpeed);
 	FSample SampleAt(float S, FVector* OutTangent) const;

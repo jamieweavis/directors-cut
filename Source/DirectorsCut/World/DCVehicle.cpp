@@ -132,8 +132,6 @@ void ADCVehicle::BuildBody(int32 Seed)
 	HeadMID = MakeMID(DCPaths::MatEmissive, FLinearColor(1.f, 0.9f, 0.72f), 0.5f, 0.f);
 	TailMID = MakeMID(DCPaths::MatEmissive, FLinearColor(1.f, 0.03f, 0.02f), 0.4f, 0.f);
 
-	if (BuildModel(Seed)) { return; }
-
 	// Dimensions per style (local: +X nose, +Y right, Z up, origin = ground centre).
 	float BodyTop = 88.f, CabX0 = -120.f, CabX1 = 70.f, CabTop = 146.f, DoorX0 = -55.f, DoorX1 = 60.f;
 	switch (Style)
@@ -262,64 +260,6 @@ void ADCVehicle::BuildBody(int32 Seed)
 
 	BuildLights(HL, HW, LampZ);
 	(void)R;
-}
-
-bool ADCVehicle::BuildModel(int32 Seed)
-{
-	static const bool bEnabled = [] { int32 V = 1; FParse::Value(FCommandLine::Get(), TEXT("DCCarModel="), V); return V != 0; }();
-	if (!bEnabled || UE_ARRAY_COUNT(DCPaths::CarModels) == 0) { return false; }
-	int32 Pick = Seed % UE_ARRAY_COUNT(DCPaths::CarModels);
-	// Dev: -DCCarOnly=<Name> makes every car SM_Car_<Name> (checking one model's fit / lamps).
-	FString Only;
-	if (FParse::Value(FCommandLine::Get(), TEXT("DCCarOnly="), Only))
-	{
-		for (int32 i = 0; i < UE_ARRAY_COUNT(DCPaths::CarModels); ++i)
-		{
-			if (FString(DCPaths::CarModels[i].Mesh).Contains(TEXT("/SM_Car_") + Only + TEXT("."))) { Pick = i; }
-		}
-	}
-	const DCPaths::FCarModel& Def = DCPaths::CarModels[Pick];
-	UStaticMesh* Mesh = LoadQuiet<UStaticMesh>(Def.Mesh);
-	UMaterialInterface* Skin = LoadQuiet<UMaterialInterface>(Def.Skin);
-	if (!Mesh) { UE_LOG(LogTemp, Warning, TEXT("[DCVehicle] car model %s missing, using primitive car"), Def.Mesh); return false; }
-
-	// Model space: ground at Z=0 (Tools/car_import.py); Def.Yaw turns the nose to +X. Fit every model to the same
-	// length/width caps (slots are 225 apart) so parking gaps and gate clearance stay as tuned.
-	constexpr float MaxLength = 450.f, MaxWidth = 195.f;
-	const FBox B = Mesh->GetBoundingBox();
-	const bool bSideways = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Def.Yaw))) > 0.5f;
-	const FVector Ext = B.GetSize();
-	const float ExtL = bSideways ? Ext.Y : Ext.X, ExtW = bSideways ? Ext.X : Ext.Y;
-	if (ExtL < 1.f || ExtW < 1.f) { return false; }
-	const float S = FMath::Min(MaxLength / ExtL, MaxWidth / ExtW);
-	Style = EDCCarStyle::Estate;
-	Length = ExtL * S;
-	Width = ExtW * S;
-	const float Height = Ext.Z * S;
-	WheelR = 0.f; // unused: wheels are part of the mesh
-
-	UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
-	C->SetStaticMesh(Mesh);
-	C->SetupAttachment(BodyPivot);
-	const FVector Centre = B.GetCenter();
-	const FRotator Yaw(0.f, Def.Yaw, 0.f);
-	C->SetRelativeRotation(Yaw);
-	C->SetRelativeScale3D(FVector(S));
-	C->SetRelativeLocation(Yaw.RotateVector(-FVector(Centre.X, Centre.Y, B.Min.Z) * S));
-	C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	if (Skin) { C->SetMaterial(0, Skin); } // paint colour is baked into each model's texture
-	C->RegisterComponent();
-	AddInstanceComponent(C);
-
-	// No glowing lens pads: lamp positions differ per model, so only the real spot / tail lights light up.
-	const float HL = Length * 0.5f, HW = Width * 0.5f;
-	const float HeadZ = Height * 0.42f;
-
-	// No hinged doors or separate wheels: DoorHinge / WheelSteer / WheelSpin stay empty and Tick skips them.
-	DoorHinge.Reset(); WheelSteer.Reset(); WheelSpin.Reset();
-	BuildLights(HL, HW, HeadZ);
-	UE_LOG(LogTemp, Log, TEXT("[DCVehicle] model %s scale %.2f -> %.0f x %.0f x %.0f"), Def.Mesh, S, Length, Width, Height);
-	return true;
 }
 
 void ADCVehicle::BuildLights(float HL, float HW, float LampZ)

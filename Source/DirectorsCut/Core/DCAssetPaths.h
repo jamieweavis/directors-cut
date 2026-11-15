@@ -28,20 +28,6 @@ namespace DCPaths
 	//   (created by Agent D in Wave 1; until merged, fall back to M_DC_Glass with low Opacity)
 	inline const TCHAR* MatHighlight = TEXT("/Game/DC/Materials/M_DC_Highlight.M_DC_Highlight");
 
-	// Crew car models (Tools/car_import.py from Art/Cars). One fused static mesh each (body, wheels, glass, interior);
-	// M_DC_CarSkin params: BaseTex, NormalTex, Tint(vec), Roughness, Metallic. ADCVehicle falls back to its primitive
-	// build when the mesh is missing (or with -DCCarModel=0).
-	struct FCarModel { const TCHAR* Mesh; const TCHAR* Skin; float Yaw; }; // Yaw turns the model so its nose points +X
-	inline const FCarModel CarModels[] = {
-		{ TEXT("/Game/DC/Vehicles/SM_Car_Estate.SM_Car_Estate"), TEXT("/Game/DC/Vehicles/MI_Car_Estate.MI_Car_Estate"), 0.f },
-		{ TEXT("/Game/DC/Vehicles/SM_Car_Sedan.SM_Car_Sedan"), TEXT("/Game/DC/Vehicles/MI_Car_Sedan.MI_Car_Sedan"), -90.f },
-		{ TEXT("/Game/DC/Vehicles/SM_Car_Pickup.SM_Car_Pickup"), TEXT("/Game/DC/Vehicles/MI_Car_Pickup.MI_Car_Pickup"), -90.f },
-		{ TEXT("/Game/DC/Vehicles/SM_Car_Classic.SM_Car_Classic"), TEXT("/Game/DC/Vehicles/MI_Car_Classic.MI_Car_Classic"), -90.f },
-		{ TEXT("/Game/DC/Vehicles/SM_Car_GreyEstate.SM_Car_GreyEstate"), TEXT("/Game/DC/Vehicles/MI_Car_GreyEstate.MI_Car_GreyEstate"), 180.f },
-		{ TEXT("/Game/DC/Vehicles/SM_Car_SUV.SM_Car_SUV"), TEXT("/Game/DC/Vehicles/MI_Car_SUV.MI_Car_SUV"), -90.f },
-		{ TEXT("/Game/DC/Vehicles/SM_Car_Modern.SM_Car_Modern"), TEXT("/Game/DC/Vehicles/MI_Car_Modern.MI_Car_Modern"), -90.f },
-	};
-
 	// Characters (copied from the UE template; references are internal to /Game/Characters/Mannequins)
 	inline const TCHAR* MannyMesh     = TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple");
 	inline const TCHAR* QuinnMesh     = TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple"); // same skeleton
