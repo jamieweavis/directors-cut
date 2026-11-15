@@ -1,7 +1,7 @@
 // Director's Cut — shared data contracts, v2 "realtime crew & missions" (LEAD-OWNED, frozen during Wave R1).
 // Agents: do not edit. Request changes in your final report.
 //
-// Design: PLAN.md §R. A dark, modern crime-management game played in real time. Crew (followers) run timed missions
+// Design: a dark, modern crime-management game played in real time. Crew (followers) run timed missions
 // from a warehouse hideout via a mission table. Abilities counter threats, traits add bonuses,
 // and crew level is weighed against mission level.
 //

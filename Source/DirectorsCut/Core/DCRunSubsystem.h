@@ -3,7 +3,7 @@
 // The PUBLIC section is frozen during Wave R1.
 // Agent A (Sim) owns the implementation (Sim/*) and MAY add or change members in the PRIVATE section below.
 //
-// Realtime model (PLAN.md §R):
+// Realtime model:
 //  - The subsystem ticks itself (FTickableGameObject). While a run is Playing and not paused, RunTime advances by
 //    DeltaTime * DevTimeScale * GameSpeed (1x / 2x / 4x). Every timer (missions, builds, injuries, board expiry, recruit refresh) is in run seconds.
 //  - Clock: hour = StartHour + RunTime * GameMinutesPerSecond / 60 (default 1 game minute per real second, so a day is
