@@ -414,7 +414,7 @@ void ADCLandscape::BuildLightingAndPost()
 	S.bOverride_BloomIntensity = true; S.BloomIntensity = 0.55f;  // driven by ADCDayNight (stronger at night)
 	S.bOverride_BloomThreshold = true; S.BloomThreshold = -1.f;
 	S.bOverride_FilmGrainIntensity = true; S.FilmGrainIntensity = 0.f;
-	S.bOverride_VignetteIntensity = true; S.VignetteIntensity = 0.28f;
+	S.bOverride_VignetteIntensity = true; S.VignetteIntensity = 0.f; // the camera rig owns the vignette
 	S.bOverride_SceneFringeIntensity = true; S.SceneFringeIntensity = 0.f;
 	S.bOverride_MotionBlurAmount = true; S.MotionBlurAmount = 0.f;
 	S.bOverride_LensFlareIntensity = true; S.LensFlareIntensity = 0.f;

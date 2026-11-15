@@ -297,5 +297,7 @@ void ADCCameraRig::Tick(float DeltaSeconds)
 	PP.DepthOfFieldFstop = DOFFstop;
 	PP.DepthOfFieldMinFstop = FMath::Min(DOFFstop, 1.2f);
 	PP.DepthOfFieldSensorWidth = DOFSensorWidth;
+	PP.bOverride_VignetteIntensity = true;
+	PP.VignetteIntensity = VignetteIntensity;
 	Camera->PostProcessBlendWeight = 1.f;
 }

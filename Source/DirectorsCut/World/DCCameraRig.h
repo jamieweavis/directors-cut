@@ -43,6 +43,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") bool bTiltShiftDOF = true;
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float DOFFstop = 0.9f;
 	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float DOFSensorWidth = 120.f;
+	/** Soft corner darkening (0 = off). Owned here, not by the scene post volume. */
+	UPROPERTY(EditAnywhere, Category = "DC|Tuning") float VignetteIntensity = 0.5f;
 
 	/** Smoothly move the pivot to a world point (station / room focus). ZoomAlpha 0 = overview distance, 1 = closest. */
 	virtual void FocusOn(const FVector& WorldPoint, float ZoomAlpha = 0.5f);
