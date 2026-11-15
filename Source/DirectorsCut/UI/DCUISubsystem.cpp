@@ -3,6 +3,8 @@
 #include "Core/DCRunSubsystem.h"
 #include "Core/DCDevTools.h"
 #include "UI/SDCRoot.h"
+#include "UI/SDCLoading.h"
+#include "Containers/Ticker.h"
 #include "UI/DCUIStyle.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
@@ -20,17 +22,19 @@
 class FDCHotkeyProcessor : public IInputProcessor
 {
 public:
-	explicit FDCHotkeyProcessor(TWeakPtr<SDCRoot> InRoot) : Root(InRoot) {}
+	FDCHotkeyProcessor(TWeakPtr<SDCRoot> InRoot, TWeakPtr<SDCLoading> InLoading) : Root(InRoot), Loading(InLoading) {}
 	virtual void Tick(const float DeltaTime, FSlateApplication& SlateApp, TSharedRef<ICursor> Cursor) override {}
 	virtual bool HandleKeyDownEvent(FSlateApplication& SlateApp, const FKeyEvent& InKeyEvent) override
 	{
 		if (InKeyEvent.IsRepeat() || InKeyEvent.IsControlDown() || InKeyEvent.IsCommandDown() || InKeyEvent.IsAltDown()) { return false; }
+		if (TSharedPtr<SDCLoading> L = Loading.Pin(); L && L->IsBlocking()) { return false; }
 		if (TSharedPtr<SDCRoot> R = Root.Pin()) { R->HandleHotkey(InKeyEvent.GetKey()); }
 		return false;
 	}
 	virtual const TCHAR* GetDebugName() const override { return TEXT("DCHotkeys"); }
 private:
 	TWeakPtr<SDCRoot> Root;
+	TWeakPtr<SDCLoading> Loading;
 };
 
 UDCUISubsystem* UDCUISubsystem::Get(const UObject* WorldContext)
@@ -47,8 +51,20 @@ void UDCUISubsystem::Deinitialize()
 	Super::Deinitialize();
 }
 
+void UDCUISubsystem::RemoveLoading()
+{
+	if (Loading.IsValid())
+	{
+		if (UGameViewportClient* VP = RootViewport.Get()) { VP->RemoveViewportWidgetContent(Loading.ToSharedRef()); }
+		Loading.Reset();
+	}
+}
+
+bool UDCUISubsystem::IsLoading() const { return Loading.IsValid() && Loading->IsBlocking(); }
+
 void UDCUISubsystem::RemoveRoot()
 {
+	RemoveLoading();
 	if (Hotkeys.IsValid())
 	{
 		if (FSlateApplication::IsInitialized()) { FSlateApplication::Get().UnregisterInputPreProcessor(Hotkeys); }
@@ -90,9 +106,32 @@ void UDCUISubsystem::InitializeUI(APlayerController* PC)
 	FString Views;
 	if (FParse::Value(FCommandLine::Get(), TEXT("DCUIView="), Views, false)) { Views.ParseIntoArray(DevViews, TEXT(","), true); }
 	VP->AddViewportWidgetContent(Root.ToSharedRef(), 10);
+
+	// Boot loading screen over everything until shaders, loads and texture streaming have settled
+	// (-DCNoLoading skips it). The world keeps rendering underneath so streaming sees what it needs.
+	if (!FParse::Param(FCommandLine::Get(), TEXT("DCNoLoading")))
+	{
+		TWeakObjectPtr<UDCUISubsystem> WeakThis(this);
+		Loading = SNew(SDCLoading)
+			.OnReveal_Lambda([WeakThis]()
+			{
+				if (WeakThis.IsValid() && WeakThis->Root.IsValid()) { WeakThis->Root->ReplayTitleIntro(); }
+			})
+			.OnFinished_Lambda([WeakThis]()
+			{
+				// Not from inside the widget's own tick: remove it on the next core tick.
+				FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis](float)
+				{
+					if (WeakThis.IsValid()) { WeakThis->RemoveLoading(); }
+					return false;
+				}));
+			});
+		VP->AddViewportWidgetContent(Loading.ToSharedRef(), 100);
+	}
+
 	if (FSlateApplication::IsInitialized())
 	{
-		Hotkeys = MakeShared<FDCHotkeyProcessor>(Root);
+		Hotkeys = MakeShared<FDCHotkeyProcessor>(Root, Loading);
 		FSlateApplication::Get().RegisterInputPreProcessor(Hotkeys);
 	}
 
@@ -137,7 +176,7 @@ void UDCUISubsystem::RequestRoomPlacement(EDCRoomType Room)
 
 EDCPanel UDCUISubsystem::GetOpenPanel() const { return OpenPanelType; }
 bool UDCUISubsystem::IsAnyPanelOpen() const { return OpenPanelType != EDCPanel::None; }
-bool UDCUISubsystem::IsWorldInputBlocked() const { return Root.IsValid() && Root->IsWorldBlocked(); }
+bool UDCUISubsystem::IsWorldInputBlocked() const { return IsLoading() || (Root.IsValid() && Root->IsWorldBlocked()); }
 void UDCUISubsystem::HandleBack() { if (Root.IsValid()) { Root->Back(); } }
 
 void UDCUISubsystem::ShowToast(const FString& Message, FName Icon, bool bIsWarning)

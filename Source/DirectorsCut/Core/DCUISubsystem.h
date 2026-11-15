@@ -33,6 +33,8 @@ public:
 	bool IsAnyPanelOpen() const;
 	/** True while a modal flow (title, pause, perk draft, game over, victory) should block world clicks. */
 	bool IsWorldInputBlocked() const;
+	/** The boot loading screen is still covering the world (dev screenshots wait for it). */
+	bool IsLoading() const;
 	/** Esc: back out of the current panel (or open Pause when nothing is open). */
 	void HandleBack();
 
@@ -55,6 +57,8 @@ private:
 	EDCPanel OpenPanelType = EDCPanel::None;
 	TWeakObjectPtr<APlayerController> OwningPC;
 	TSharedPtr<class SDCRoot> Root;
+	TSharedPtr<class SDCLoading> Loading;   // boot loading screen, until the world has settled
+	void RemoveLoading();
 	TWeakObjectPtr<class UGameViewportClient> RootViewport;
 	TSharedPtr<class IInputProcessor> Hotkeys;
 	TArray<FString> DevViews;           // -DCUIView queue (dev screenshots)

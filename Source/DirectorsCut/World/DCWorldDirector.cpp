@@ -1617,6 +1617,8 @@ void ADCWorldDirector::LogPawns(const TCHAR* Tag) const
 
 void ADCWorldDirector::TickWorldTest(float Dt)
 {
+	// The script's clock starts once the loading screen has lifted.
+	if (const UDCUISubsystem* UI = UDCUISubsystem::Get(this); UI && UI->IsLoading()) { return; }
 	TestTime += Dt;
 	UDCRunSubsystem* Run = UDCRunSubsystem::Get(this);
 	ADCCameraRig* Rig = PC.IsValid() ? PC->GetCameraRig() : nullptr;

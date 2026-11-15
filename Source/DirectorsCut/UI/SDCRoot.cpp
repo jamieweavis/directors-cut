@@ -148,6 +148,13 @@ TSharedRef<SWidget> SDCRoot::BuildRootContent()
 
 }
 
+void SDCRoot::ReplayTitleIntro()
+{
+	if (Current != EDCPanel::Title || ShownModal != EDCPanel::Title || !ModalSlot.IsValid()) { return; }
+	TitleT0 = Now();
+	ModalSlot->SetContent(BuildPanel(EDCPanel::Title));
+}
+
 void SDCRoot::RebuildAll()
 {
 	// Palette / text size changed: every widget captured old colours and fonts at build time.

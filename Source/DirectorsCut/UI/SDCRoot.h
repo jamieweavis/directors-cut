@@ -44,6 +44,8 @@ public:
 	void ApplyPlayerSettings(bool bRebuild);
 	/** Dev screenshots (-DCUIView=...): open a sub-view of the current screen, e.g. "options.graphics", "slots.load". */
 	void SetDevView(const FString& View);
+	/** The loading screen lifted: restart the title's fade-in so it plays over the revealed scene. */
+	void ReplayTitleIntro();
 
 private:
 	TWeakObjectPtr<UDCUISubsystem> Owner;

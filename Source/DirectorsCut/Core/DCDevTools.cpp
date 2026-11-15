@@ -268,6 +268,8 @@ bool UDCDevTools::Tick(float DeltaTime)
 		if (UDCRunSubsystem* Run = UDCRunSubsystem::Get(GetGameWorld())) { if (Run->HasActiveRun()) { Run->DevOfferPerks(); } }
 		bPerkOffer = false;
 	}
+	// Shots wait for the loading screen to lift (and a moment for the title fade / scene).
+	if (const UDCUISubsystem* UI = UDCUISubsystem::Get(GetGameWorld()); UI && UI->IsLoading() && !FParse::Param(FCommandLine::Get(), TEXT("DCHoldLoading"))) { NextAt = FMath::Max(NextAt, Elapsed + 1.0); return true; }
 	if (Elapsed < NextAt) { return true; }
 	// Give the rebuilt world a few seconds of real time (crew walk to their spots, lights settle) before the first shot.
 	if (Step == 0 && AutoPlaySeconds > 0) { RunAutoPlay(); AutoPlaySeconds = 0; NextAt = Elapsed + (Shots.Num() ? 4.0 : 1.0); return true; }
