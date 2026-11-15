@@ -465,9 +465,9 @@ bool ADCWorldDirector::IsSpotTaken(const FVector& P, const ADCCriminalPawn* Exce
 
 bool ADCWorldDirector::IsSleeper(const ADCCriminalPawn* P) const
 {
-	// About one in four stays up all night.
-	const uint32 H = ::GetTypeHash(P->GetCriminalId() * 2654435761u);
-	return (H % 4u) != 1u;
+	// Crew never sleep: they only walk around and pause, day and night.
+	(void)P;
+	return false;
 }
 
 void ADCWorldDirector::BuildSleepSpots()
