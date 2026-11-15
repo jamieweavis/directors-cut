@@ -57,7 +57,7 @@ FName ADCStation::TypeIcon(EDCStationType Type)
 	case EDCStationType::MissionBoard: return TEXT("map-pinned");
 	case EDCStationType::Lounge:       return TEXT("users");
 	case EDCStationType::Workbench:    return TEXT("wrench");
-	case EDCStationType::GarageDoor:   return TEXT("car-front");
+	case EDCStationType::GarageDoor:   return TEXT("backpack");
 	case EDCStationType::BuildTable:   return TEXT("hammer");
 	case EDCStationType::OpsRoom:      return TEXT("monitor");
 	case EDCStationType::Clinic:       return TEXT("cross");
@@ -75,7 +75,7 @@ FString ADCStation::TypeName(EDCStationType Type)
 	case EDCStationType::MissionBoard: return TEXT("Missions");
 	case EDCStationType::Lounge:       return TEXT("Crew");
 	case EDCStationType::Workbench:    return TEXT("Gear");
-	case EDCStationType::GarageDoor:   return TEXT("Garage");
+	case EDCStationType::GarageDoor:   return TEXT("Kit Room");
 	case EDCStationType::BuildTable:   return TEXT("Build");
 	case EDCStationType::OpsRoom:      return TEXT("Ops");
 	case EDCStationType::Clinic:       return TEXT("Clinic");

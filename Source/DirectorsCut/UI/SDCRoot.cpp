@@ -830,7 +830,7 @@ TSharedRef<SWidget> SDCRoot::BuildHudStats()
 			const UDCRunSubsystem* X = R();
 			return X ? FText::FromString(FString::Printf(TEXT("%d/%d"), X->GetActiveMissionCount(), X->GetMaxActiveMissions())) : FText::GetEmpty();
 		}), Mono(13.f), FSlateColor(TextDim), FSlateColor(Text), 14.f, 7.f);
-	Active->SetToolTip(Tip(TEXT("Missions running"), TEXT("Active / max at once (Garage adds more)"), TEXT("car-front")));
+	Active->SetToolTip(Tip(TEXT("Missions running"), TEXT("Active / max at once (Kit Room adds more)"), TEXT("car-front")));
 
 	TSharedRef<SWidget> Wins = IconTextA(TEXT("trophy"), TAttribute<FText>::CreateLambda([R]()
 		{

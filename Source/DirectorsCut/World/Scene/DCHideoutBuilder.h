@@ -12,7 +12,7 @@
 // the whole house: per cell a floor, and per edge either a tall back wall (exterior +X/+Y), a low stub (exterior
 // -X/-Y) or a low partition stub with a doorway gap at the edge midpoint (two finished rooms; built by the -side room). A room
 // under its first build is a slab + timber frame + scaffold. Rooms are furnished by a layout solver that fits
-// their shape and connections (DCHideoutFurnish*.cpp, one recipe per room); the Garage is EMPTY for now. One clickable station covers
+// their shape and connections (DCHideoutFurnish*.cpp, one recipe per room; the Garage type is dressed as the Kit Room). One clickable station covers
 // each whole room and opens its panel. No house geometry collides (pawns path through the doorway midpoints).
 //
 // Dev flags (World/Scene only):
@@ -271,7 +271,7 @@ protected:
 	 *  without it). Run it BEFORE the walls. Returns false if the room type has no furnishing (the caller then lights
 	 *  the room itself). */
 	bool FurnishGridRoom(ADCRoomModule* Room, const FVector2D Q[4], const int32 EdgeKind[4], const bool bExit[4], const bool bStepStart[4], const bool bStepEnd[4], float H, int32 WallSeed, int32 Seed, uint8 OutOmitWindows[4]);
-	// One recipe per room type, each in its own file (DCHideoutFurnish<Room>.cpp). The Garage has none yet.
+	// One recipe per room type, each in its own file (DCHideoutFurnish<Room>.cpp). The Garage is the Kit Room.
 	void FurnishOffice(DCFurnish::FCtx& C);
 	void FurnishLounge(DCFurnish::FCtx& C);
 	void FurnishWorkshop(DCFurnish::FCtx& C);
@@ -279,6 +279,7 @@ protected:
 	void FurnishClinic(DCFurnish::FCtx& C);
 	void FurnishServerRoom(DCFurnish::FCtx& C);
 	void FurnishLawyer(DCFurnish::FCtx& C);
+	void FurnishKitRoom(DCFurnish::FCtx& C);
 
 	// ---------------------------------------------------------------- runtime FX
 	struct FFlicker { TWeakObjectPtr<ULightComponent> Light; float Base; float Rate; float Depth; float Seed; };

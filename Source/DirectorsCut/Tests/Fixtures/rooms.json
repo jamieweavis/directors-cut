@@ -17,7 +17,7 @@
     "levels": [ { "effects": [ { "kind": "gearTier", "value": 2 }, { "kind": "gearSlots", "value": 1 } ] },
                 { "effects": [ { "kind": "gearTier", "value": 2 }, { "kind": "gearSlots", "value": 1 }, { "kind": "gearPriceMult", "value": 0.9 } ] },
                 { "effects": [ { "kind": "gearTier", "value": 3 }, { "kind": "gearSlots", "value": 1 }, { "kind": "gearPriceMult", "value": 0.8 } ] } ] },
-  { "type": "Garage", "displayName": "Garage", "description": "Run more jobs at once", "icon": "warehouse",
+  { "type": "Garage", "displayName": "Kit Room", "description": "Run more jobs at once", "icon": "backpack",
     "cost": [5000, 12000, 22000], "buildSec": [60, 120, 180], "requiredSuccesses": [2, 5, 9], "upkeepPerDay": [200, 300, 450],
     "levelEffects": ["+1 active mission", "+1 active, -10% time", "+2 active, -20% time"],
     "levels": [ { "effects": [ { "kind": "maxActive", "value": 1 } ] },

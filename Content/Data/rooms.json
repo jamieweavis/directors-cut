@@ -41,9 +41,9 @@
     },
     {
       "type": "Garage",
-      "displayName": "Garage",
-      "description": "Car shed: more cars, more jobs at once",
-      "icon": "warehouse",
+      "displayName": "Kit Room",
+      "description": "Lockers and go-bags: more cars, more jobs at once",
+      "icon": "backpack",
       "cost": [1500, 10000, 20000],
       "buildSec": [60, 150, 270],
       "requiredSuccesses": [2, 12, 22],

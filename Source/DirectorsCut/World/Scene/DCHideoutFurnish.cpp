@@ -1,7 +1,7 @@
 // Director's Cut — room furnishing on the build grid. A small layout solver fits furniture to the room's real
 // (jittered) outline and to its connections, then draws it from primitives. This file holds the shared prop kit, the
 // steps any room can use and the driver; each room's recipe is in its own file (DCHideoutFurnishOffice.cpp, ...).
-// The Garage is not furnished yet.
+// The Garage room type is furnished as the Kit Room (DCHideoutFurnishKitRoom.cpp).
 //
 // How a layout is found (all room-local, cm):
 //  1. Every edge is classified: tall wall (its windows and broken-down ends come from TallEdgePlan), low partition
@@ -702,7 +702,7 @@ using namespace DCFurnish;
 
 bool ADCHideoutBuilder::FurnishGridRoom(ADCRoomModule* Room, const FVector2D Q[4], const int32 EdgeKind[4], const bool bExit[4], const bool bStepStart[4], const bool bStepEnd[4], float H, int32 WallSeed, int32 Seed, uint8 OutOmitWindows[4])
 {
-	if (!Room || Room->RoomType == EDCRoomType::Garage || Room->RoomType >= EDCRoomType::MAX) { return false; }
+	if (!Room || Room->RoomType >= EDCRoomType::MAX) { return false; }
 	const double T0 = FPlatformTime::Seconds();
 	static const bool bDebug = FParse::Param(FCommandLine::Get(), TEXT("DCFurnishDebug"));
 	DCFurnish::GDebug = bDebug;
@@ -753,6 +753,7 @@ bool ADCHideoutBuilder::FurnishGridRoom(ADCRoomModule* Room, const FVector2D Q[4
 	case EDCRoomType::Clinic:       FurnishClinic(C); break;
 	case EDCRoomType::ServerRoom:   FurnishServerRoom(C); break;
 	case EDCRoomType::LawyerOffice: FurnishLawyer(C); break;
+	case EDCRoomType::Garage:       FurnishKitRoom(C); break;
 	default: return false;
 	}
 

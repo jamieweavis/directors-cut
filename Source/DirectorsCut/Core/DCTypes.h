@@ -96,7 +96,7 @@ enum class EDCRoomType : uint8
 	Office,        // start: mission board + desk (recruits, finances)
 	Lounge,        // bunks: roster cap, idle loyalty
 	Workshop,      // gear catalogue, gear slots
-	Garage,        // concurrent missions, shorter durations
+	Garage,        // shown as the Kit Room: concurrent missions, shorter durations
 	OpsRoom,       // surveillance wall: tier 3+ missions, The Big Score
 	Clinic,        // faster injury recovery, patch-ups
 	ServerRoom,    // bigger board, faster board refresh, Hacker bonus
@@ -601,7 +601,7 @@ namespace DC
 		case EDCRoomType::Office:       return TEXT("Office");
 		case EDCRoomType::Lounge:       return TEXT("Bunkroom");
 		case EDCRoomType::Workshop:     return TEXT("Workshop");
-		case EDCRoomType::Garage:       return TEXT("Garage");
+		case EDCRoomType::Garage:       return TEXT("Kit Room");
 		case EDCRoomType::OpsRoom:      return TEXT("Ops Room");
 		case EDCRoomType::Clinic:       return TEXT("Clinic");
 		case EDCRoomType::ServerRoom:   return TEXT("Server Room");
@@ -616,7 +616,7 @@ namespace DC
 		case EDCRoomType::Office:       return TEXT("briefcase");
 		case EDCRoomType::Lounge:       return TEXT("bed-double");
 		case EDCRoomType::Workshop:     return TEXT("hammer");
-		case EDCRoomType::Garage:       return TEXT("warehouse");
+		case EDCRoomType::Garage:       return TEXT("backpack");
 		case EDCRoomType::OpsRoom:      return TEXT("monitor");
 		case EDCRoomType::Clinic:       return TEXT("cross");
 		case EDCRoomType::ServerRoom:   return TEXT("server");
