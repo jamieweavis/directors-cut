@@ -295,6 +295,8 @@ void UDCDevTools::PrepareShot(const FShot& Shot)
 	}
 	if (UDCUISubsystem* UI = UDCUISubsystem::Get(W))
 	{
+		// Missions finished during the -DCAutoPlay fast-forward would otherwise stack their result cards and toasts over the shot.
+		UI->DevAction(TEXT("quiet"));
 		if (!Shot.Panel.IsEmpty())
 		{
 			const int64 P = StaticEnum<EDCPanel>()->GetValueByNameString(Shot.Panel);
