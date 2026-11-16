@@ -26,7 +26,7 @@ Every run deals out different recruits, jobs and perks, so no two runs play out 
 
 Want to know how it was made? Read the [devlog](DEVLOG.md).
 
-Watch the gameplay video on [YouTube](https://www.youtube.com/watch?v=PLACEHOLDER).
+Watch the gameplay video on [YouTube](https://www.youtube.com/watch?v=rzyayglO4S0).
 
 ## Screenshots
 
