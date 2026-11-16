@@ -62,11 +62,8 @@ The project targets Unreal Engine 5.9. Open `DirectorsCut.uproject` in the edito
 | | |
 | --- | --- |
 | ![Day 2: the base is a single room in the meadow with a pickup in the yard](docs/screenshots/day2_one_room.jpg) | ![Day 6: three rooms, four crew, and a car back from a job](docs/screenshots/day6_two_rooms.jpg) |
-| **Humble beginnings:** one room, one car, two crew | **Growing:** more rooms, more crew, jobs on the go |
 | ![The Recruits panel: four hires with roles, traits and prices](docs/screenshots/recruits.jpg) | ![Expand the house: rooms to build and upgrade](docs/screenshots/expand_house.jpg) |
-| **Recruiting:** hire before they move on | **Building:** rooms that change your odds |
 | ![The house on day 14: a full crew at level 10 and two cars in the yard](docs/screenshots/day14_house.jpg) | ![The house lit up at night while a job runs](docs/screenshots/night.jpg) |
-| **The house:** a full crew by day 14 | **Night work:** riskier jobs after dark |
 
 ## Licensing
 
