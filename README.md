@@ -28,6 +28,35 @@ Want to know how it was made? Read the [devlog](DEVLOG.md).
 
 Watch the gameplay video on [YouTube](https://www.youtube.com/watch?v=rzyayglO4S0).
 
+## Download and install
+
+Download the build for your platform from the [itch.io page](https://jamieweavis.itch.io/directors-cut). Builds are available for Windows and macOS. Neither is code-signed, so your OS will warn you the first time you open it.
+
+### Windows
+
+1. Download `DirectorsCut-Win64.zip`.
+2. Right-click the zip, choose **Extract All…**, and extract it somewhere like your Desktop or `C:\Games`.
+3. Open the extracted `Windows` folder and run `DirectorsCut.exe`.
+4. If SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**.
+
+If the game won't start and complains about a missing DLL or the Visual C++ runtime, run `Engine\Extras\Redist\en-us\UEPrereqSetup_x64.exe` from the extracted folder, then try again.
+
+### macOS
+
+1. Download `DirectorsCut-Mac.zip` and double-click it to unzip.
+2. Drag `DirectorsCut-Mac-Shipping.app` into your Applications folder (optional).
+3. The first time, right-click the app and choose **Open**, then **Open** again in the dialog. On recent versions of macOS you may need to go to **System Settings → Privacy & Security** instead and click **Open Anyway**.
+
+If macOS says the app "is damaged and can't be opened", clear the download quarantine flag in Terminal and open it again:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/DirectorsCut-Mac-Shipping.app
+```
+
+### Building from source
+
+The project targets Unreal Engine 5.9. Open `DirectorsCut.uproject` in the editor, or package a build with `Scripts/package_mac.sh` (macOS) or `Scripts/package_win.ps1` (Windows). The output goes to `Packaged/`.
+
 ## Screenshots
 
 | | |
