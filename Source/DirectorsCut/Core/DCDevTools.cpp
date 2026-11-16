@@ -246,7 +246,7 @@ bool UDCDevTools::ResolveFocus(const FString& Focus, FVector& OutPoint, float& O
 	return false;
 }
 
-void UDCDevTools::PrepareShot(const FShot& Shot)
+void UDCDevTools::AimShot(const FShot& Shot)
 {
 	UWorld* W = GetGameWorld();
 	if (!W) { return; }
@@ -254,6 +254,8 @@ void UDCDevTools::PrepareShot(const FShot& Shot)
 	ADCCameraRig* Rig = PC ? PC->GetCameraRig() : nullptr;
 	if (Rig)
 	{
+		// A room reveal still playing from the fast-forward would hold the camera on that room (or hand it back later).
+		Rig->EndCinematic();
 		// "focus@Z": Z overrides the zoom (0 = the overview distance .. 1 = closest).
 		FString Focus = Shot.Focus, ZoomStr;
 		float ZoomOverride = -1.f;
@@ -293,6 +295,16 @@ void UDCDevTools::PrepareShot(const FShot& Shot)
 		else if (ResolveFocus(Focus, Point, Zoom)) { Rig->FocusOn(Point, ZoomOverride >= 0.f ? ZoomOverride : Zoom); }
 		else { UE_LOG(LogDC, Warning, TEXT("[DCShots] unknown focus '%s'"), *Shot.Focus); }
 	}
+}
+
+void UDCDevTools::PrepareShot(const FShot& Shot)
+{
+	UWorld* W = GetGameWorld();
+	if (!W) { return; }
+	// Stop the run clock for the shots: a build finishing (its reveal flies the camera to the room) or a room unlocking
+	// (the overview refits) between aiming and capturing would pull the camera off the shot. Crew still walk and animate.
+	if (UDCRunSubsystem* RunS = UDCRunSubsystem::Get(W); RunS && RunS->HasActiveRun()) { RunS->SetTimeScale(0.f); }
+	AimShot(Shot);
 	if (UDCUISubsystem* UI = UDCUISubsystem::Get(W))
 	{
 		// Missions finished during the -DCAutoPlay fast-forward would otherwise stack their result cards and toasts over the shot.
@@ -326,6 +338,9 @@ bool UDCDevTools::Tick(float DeltaTime)
 	}
 	// Shots wait for the loading screen to lift (and a moment for the title fade / scene).
 	if (const UDCUISubsystem* UI = UDCUISubsystem::Get(GetGameWorld()); UI && UI->IsLoading() && !FParse::Param(FCommandLine::Get(), TEXT("DCHoldLoading"))) { NextAt = FMath::Max(NextAt, Elapsed + 1.0); return true; }
+	// While a shot waits to be taken, keep re-aiming it: right after the fast-forward the world is still rebuilding and the
+	// overview framing (which every zoom is measured from) can briefly span the whole site, as the video reel's settle does.
+	if (bPreparedShot && Shots.IsValidIndex(Step)) { AimShot(Shots[Step]); }
 	if (Elapsed < NextAt) { return true; }
 	// Give the rebuilt world a few seconds of real time (crew walk to their spots, lights settle) before the first shot.
 	if (Step == 0 && AutoPlaySeconds > 0)

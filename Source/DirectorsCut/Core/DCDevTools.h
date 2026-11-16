@@ -80,6 +80,8 @@ private:
 
 	bool Tick(float DeltaTime);
 	void PrepareShot(const FShot& Shot);
+	/** Points the camera for a shot. Safe to repeat every frame (the result only depends on the world as it is now). */
+	void AimShot(const FShot& Shot);
 	/** Bot plays Seconds of run time instantly (then on to clock hour Hour when >= 0), and the world snaps to the result.
 	 *  bKeepAfloat (video reels): never let the bank run dry, so the run can't end before the shots it is played for. */
 	void RunAutoPlay(double Seconds, float Hour, bool bKeepAfloat = false);
