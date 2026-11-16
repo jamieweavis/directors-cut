@@ -3,6 +3,7 @@
 #include "Core/DCUISubsystem.h"
 #include "World/DCPlayerController.h"
 #include "World/DCCameraRig.h"
+#include "World/DCVehicle.h"
 #include "World/DCRoomModule.h"
 #include "World/DCCriminalPawn.h"
 #include "World/DCWorldDirector.h"
@@ -10,6 +11,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "EngineUtils.h"
 #include "HAL/FileManager.h"
 #include "Misc/CommandLine.h"
@@ -17,6 +19,15 @@
 #include "Misc/Paths.h"
 #include "UnrealClient.h"
 #include "DirectorsCut.h"
+
+namespace
+{
+	// "thumb" focus: the house sits this share of the view width right of centre, and this share of the view height below it.
+	constexpr float ThumbHouseRight = 0.15f;
+	constexpr float ThumbHouseDown = 0.09f;
+	// ...and a car parked on the gravel in front of it, nose towards the camera (the title has no run, so no cars).
+	const FTransform ThumbCar(FRotator(0.f, -160.f, 0.f), FVector(250.f, -1300.f, DCSite::GroundZ));
+}
 
 bool UDCDevTools::IsBuildAll() { return FParse::Param(FCommandLine::Get(), TEXT("DCBuildAll")); }
 int32 UDCDevTools::GetCmdSeed() { int32 S = 0; FParse::Value(FCommandLine::Get(), TEXT("DCSeed="), S); return S; }
@@ -42,6 +53,7 @@ void UDCDevTools::Initialize(FSubsystemCollectionBase& Collection)
 	FParse::Value(Cmd, TEXT("DCShotDelay="), Delay);
 	FParse::Value(Cmd, TEXT("DCQuitAfter="), QuitAfter);
 	FParse::Value(Cmd, TEXT("DCAutoPlay="), AutoPlaySeconds);
+	FParse::Value(Cmd, TEXT("DCThumbCar="), ThumbCarSeed);
 	bClockFlags = FCString::Strifind(Cmd, TEXT("DCHour=")) || FCString::Strifind(Cmd, TEXT("DCTimeScale="));
 	bContinue = FParse::Param(Cmd, TEXT("DCContinue"));
 	FParse::Value(Cmd, TEXT("DCHireCrew="), HireCrew);
@@ -251,6 +263,33 @@ void UDCDevTools::PrepareShot(const FShot& Shot)
 		float Zoom = 0.5f;
 		if (Is(TEXT("wide"))) { if (ZoomOverride >= 0.f) { Rig->FocusOn(Rig->GetOverviewPivot(), ZoomOverride); } else { Rig->ResetFocus(); } }
 		else if (Is(TEXT("far"))) { Rig->ResetFocus(); Rig->Zoom(-30.f); }
+		else if (Is(TEXT("thumb")))
+		{
+			// Store thumbnail: the Office (the house the run starts in) in the lower right, leaving the top for the
+			// wordmark. The pivot moves screen-left and screen-up by shares of the visible view at that distance
+			// (screen-up on the ground is the flat forward, stretched by 1/sin(pitch)).
+			const float Z = ZoomOverride >= 0.f ? ZoomOverride : 0.68f;
+			if (!ThumbCarActor.IsValid())
+			{
+				FActorSpawnParameters SP;
+				SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+				if (ADCVehicle* Car = W->SpawnActor<ADCVehicle>(ADCVehicle::StaticClass(), ThumbCar, SP))
+				{
+					Car->Setup(ThumbCarSeed);
+					Car->ParkAt(ThumbCar);
+					ThumbCarActor = Car;
+				}
+			}
+			const FVector House(DCSite::Grid::OriginX, DCSite::Grid::OriginY, 120.f);
+			const FVector ScreenRight = FRotator(0.f, Rig->Yaw + 90.f, 0.f).Vector();
+			const FVector ScreenUp = FRotator(0.f, Rig->Yaw, 0.f).Vector();
+			const float ViewW = 2.f * Rig->DistanceForZoom(Z) * FMath::Tan(FMath::DegreesToRadians(Rig->FOV * 0.5f));
+			FVector2D VP(16.f, 9.f);
+			if (GEngine && GEngine->GameViewport) { GEngine->GameViewport->GetViewportSize(VP); }
+			const float ViewH = ViewW * VP.Y / FMath::Max(1.f, VP.X);
+			const float GroundUp = ViewH / FMath::Max(0.2f, FMath::Sin(FMath::DegreesToRadians(FMath::Abs(Rig->Pitch))));
+			Rig->FocusOn(House - ScreenRight * ViewW * ThumbHouseRight + ScreenUp * GroundUp * ThumbHouseDown, Z);
+		}
 		else if (ResolveFocus(Focus, Point, Zoom)) { Rig->FocusOn(Point, ZoomOverride >= 0.f ? ZoomOverride : Zoom); }
 		else { UE_LOG(LogDC, Warning, TEXT("[DCShots] unknown focus '%s'"), *Shot.Focus); }
 	}

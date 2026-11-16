@@ -4,6 +4,8 @@
 //        focus = wide | Office | Lounge | Workshop | Garage | OpsRoom | Clinic | ServerRoom | LawyerOffice
 //                (aliases Bunkroom, Ops, Lawyer) | crew (close-up on a crew member, a sleeping one if any)
 //                | yard (the parked cars + driveway) | house (the built house) | far (zoomed right out over the landscape)
+//                | thumb (store thumbnail: the Office lower right, a parked car beside it; pair with -DCThumbnail;
+//                  -DCThumbCar=N picks the car's model/colour)
 //        panel = optional EDCPanel name to open before the shot (e.g. Missions, MissionPlanner, Reports)
 //        focus@Z = same focus at zoom Z (0 = the overview distance .. 1 = closest), e.g. house@0.5, wide@0.2, crew@0.8
 //   -DCShotDir=/abs/dir     where PNGs go (default <Project>/Saved/DCShots)
@@ -25,6 +27,7 @@
 //   -DCPortraitDump         also write every baked crew portrait onto a contact sheet, <DCShotDir>/portraits.png
 //   -DCPerkOffer          put a perk offer on the table right after start (shoot it with panel PerkDraft)
 //   -DCPerkSel=N            with -DCShots: pre-select perk card N (0-based) when the PerkDraft panel opens
+//   -DCThumbnail           title screen shows only the wordmark + tagline, large (Scripts/thumbnail_mac.sh)
 //   -DCContinue            load the saved run (UDCRunSubsystem::ContinueRun) right after start instead of a new run
 //
 // Video reels (DCDevReel.cpp; driven by Scripts/record_video_*.{ps1,sh}):
@@ -58,6 +61,8 @@ public:
 private:
 	struct FShot { FString Name; FString Focus; FString Panel; };
 	TArray<FShot> Shots;
+	TWeakObjectPtr<class ADCVehicle> ThumbCarActor; // the parked car of the "thumb" shot
+	int32 ThumbCarSeed = 0;                           // -DCThumbCar=N picks its model/colour
 	FString ShotDir;
 	float Delay = 6.f;
 	float QuitAfter = -1.f;

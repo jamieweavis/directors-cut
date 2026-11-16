@@ -220,6 +220,7 @@ private:
 	TArray<FDCSaveSlotInfo> SlotInfos() const;
 	TArray<FDCRunRecord> LeaderboardRows() const;
 	bool bFakeData = false;               // dev-only (-DCUIFakeData): sample slots/leaderboard for screenshots
+	bool bThumbnail = false;              // dev-only (-DCThumbnail): title is just the big wordmark (store thumbnail)
 
 	struct FConfirm
 	{

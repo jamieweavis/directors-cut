@@ -20,6 +20,7 @@ void SDCRoot::Construct(const FArguments& InArgs)
 	SetVisibility(EVisibility::SelfHitTestInvisible);
 
 	bFakeData = !UE_BUILD_SHIPPING && FParse::Param(FCommandLine::Get(), TEXT("DCUIFakeData"));
+	bThumbnail = !UE_BUILD_SHIPPING && FParse::Param(FCommandLine::Get(), TEXT("DCThumbnail"));
 	DCUI::RefreshPrefs();
 	ChildSlot[SNew(SDPIScaler).DPIScale_Lambda([]() { return Prefs().UIScale; })[BuildRootContent()]];
 

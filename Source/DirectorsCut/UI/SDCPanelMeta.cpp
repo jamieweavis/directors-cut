@@ -13,13 +13,14 @@
 class SDCTitleShade : public SLeafWidget
 {
 public:
-	SLATE_BEGIN_ARGS(SDCTitleShade) {}
+	SLATE_BEGIN_ARGS(SDCTitleShade) : _TopDown(false) {}
+		SLATE_ARGUMENT(bool, TopDown) // fade from the top edge down instead of from the left edge across (store thumbnail)
 	SLATE_END_ARGS()
-	void Construct(const FArguments&) { SetVisibility(EVisibility::HitTestInvisible); }
+	void Construct(const FArguments& InArgs) { bTopDown = InArgs._TopDown; SetVisibility(EVisibility::HitTestInvisible); }
 	virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(8.f, 8.f); }
 	virtual int32 OnPaint(const FPaintArgs&, const FGeometry& Geo, const FSlateRect&, FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& Style, bool) const override
 	{
-		const float W = Geo.GetLocalSize().X;
+		const float W = bTopDown ? Geo.GetLocalSize().Y : Geo.GetLocalSize().X;
 		const float Tint = Style.GetColorAndOpacityTint().A;
 		TArray<FSlateGradientStop> Stops;
 		const int32 N = 32;
@@ -27,11 +28,13 @@ public:
 		{
 			const float X = (float)i / N;
 			const float Alpha = X < 0.4f ? 0.84f : 0.84f * FMath::Pow(1.f - (X - 0.4f) / 0.6f, 1.6f);
-			Stops.Emplace(FVector2f(X * W, 0.f), FLinearColor(0.01f, 0.012f, 0.016f, Alpha * Tint));
+			Stops.Emplace(bTopDown ? FVector2f(0.f, X * W) : FVector2f(X * W, 0.f), FLinearColor(0.01f, 0.012f, 0.016f, Alpha * Tint));
 		}
-		FSlateDrawElement::MakeGradient(Out, Layer, Geo.ToPaintGeometry(), MoveTemp(Stops), Orient_Vertical);
+		FSlateDrawElement::MakeGradient(Out, Layer, Geo.ToPaintGeometry(), MoveTemp(Stops), bTopDown ? Orient_Horizontal : Orient_Vertical);
 		return Layer;
 	}
+private:
+	bool bTopDown = false;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -442,6 +445,24 @@ TSharedRef<SWidget> SDCRoot::BuildTitle()
 {
 	const double T0 = TitleT0;
 	auto Fade = [T0](float Delay) { return TAttribute<FLinearColor>::CreateLambda([T0, Delay]() { return FLinearColor(1, 1, 1, EaseOut((float)(Now() - T0 - Delay) / 0.5f)); }); };
+
+	// Store thumbnail (-DCThumbnail, Scripts/thumbnail_*): just the wordmark and tagline, very large so they read
+	// when the picture is shrunk to a small card. Text across the top over a top-down shade; the "thumb" shot focus
+	// puts the house in the lower right.
+	if (bThumbnail)
+	{
+		return SNew(SOverlay)
+			+ SOverlay::Slot().VAlign(VAlign_Top)[SNew(SBox).HeightOverride(760.f)[SNew(SDCTitleShade).TopDown(true)]]
+			+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(FMargin(64.f, 70.f, 0.f, 0.f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
+				[SNew(SBox).WidthOverride(120.f).HeightOverride(8.f)[SNew(SImage).Image(WhiteBrush()).ColorAndOpacity(Accent)]]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 30.f, 0.f, 0.f)[Txt(TEXT("DIRECTOR'S"), Font(132.f, EW::Bold, 120), Text)]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, -30.f, 0.f, 0.f)[Txt(TEXT("CUT"), Font(132.f, EW::Bold, 120), Accent)]
+				+ SVerticalBox::Slot().AutoHeight().Padding(4.f, 8.f, 0.f, 0.f)[Txt(TEXT("Run the crew. Plan the jobs. Take your cut."), Font(35.f, EW::Medium), A(Text, 0.9f))]
+			];
+	}
 
 	// Slots: Continue = most recent unfinished run.
 	const TArray<FDCSaveSlotInfo> Infos = SlotInfos();
