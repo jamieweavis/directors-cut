@@ -516,7 +516,7 @@ TSharedRef<SWidget> SDCRoot::BuildOptions()
 				{
 					if (OptTab == 0)
 					{
-						if (UDCAudioSubsystem* Au = UDCAudioSubsystem::Get(GetContext())) { Au->SetVolume(EDCVolumeChannel::Master, 1.f); Au->SetVolume(EDCVolumeChannel::SFX, 1.f); Au->SetVolume(EDCVolumeChannel::Ambience, 0.8f); Au->SetVolume(EDCVolumeChannel::Music, 0.6f); }
+						if (UDCAudioSubsystem* Au = UDCAudioSubsystem::Get(GetContext())) { Au->SetVolume(EDCVolumeChannel::Master, 1.f); Au->SetVolume(EDCVolumeChannel::SFX, 1.f); Au->SetVolume(EDCVolumeChannel::Ambience, 0.2f); Au->SetVolume(EDCVolumeChannel::Music, 0.6f); }
 						DCSettings::SetBool(TEXT("MuteAll"), false); DCSettings::SetBool(TEXT("MuteWhenUnfocused"), true);
 					}
 					else if (OptTab == 2)

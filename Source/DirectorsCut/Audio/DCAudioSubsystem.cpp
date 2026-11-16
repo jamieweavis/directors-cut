@@ -38,8 +38,8 @@ namespace
 	constexpr int32 NumVolumeChannels = 4;
 	const TCHAR* ChannelKeys[NumVolumeChannels] = { TEXT("MasterVolume"), TEXT("SFXVolume"), TEXT("AmbienceLevel"), TEXT("MusicVolume") };
 
-	// The Ambience slider spans a quieter range: full slider = 25% of the raw bed gain, so the 80% default
-	// lands where the old 20% was. The config key changed with the range so saved old-scale values reset.
+	// The Ambience slider spans a quieter range: full slider = 25% of the raw bed gain (default 20%).
+	// The config key changed with the range so saved old-scale values reset.
 	constexpr float AmbienceRangeScale = 0.25f;
 
 	constexpr float BedFadeTau = 1.2f;          // seconds; crossfade smoothing for bed gains

@@ -58,7 +58,7 @@ private:
 	// ═══ Agent H owns everything below this line ═══
 	friend struct FDCAudioTestAccess; // automation tests (Audio/DCAudioTests.cpp)
 
-	float Volumes[4] = { 1.f, 1.f, 0.8f, 0.6f };
+	float Volumes[4] = { 1.f, 1.f, 0.2f, 0.6f };
 
 	UPROPERTY(Transient) TMap<FName, TObjectPtr<class USoundBase>> SoundCache;
 	/** Looping ambience beds (DCAudio::EBed order), living in the game instance's current world. */
