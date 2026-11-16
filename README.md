@@ -6,6 +6,10 @@
 
 *Built for the 2026 Epic AI MegaJam · Unreal Engine 5.9*
 
+**[Play it on itch.io](https://jamieweavis.itch.io/directors-cut)**
+
+<img src="docs/screenshots/thumbnail.png" alt="Thumbnail for Director's Cut" width="500">
+
 </div>
 
 ---
@@ -18,7 +22,24 @@ The clock keeps running. Every dawn is payday, and crew wages and building upkee
 
 Every run deals out different recruits, jobs and perks, so no two runs play out the same.
 
+---
+
 Want to know how it was made? Read the [devlog](DEVLOG.md).
+
+Watch the gameplay video on [YouTube](https://www.youtube.com/watch?v=PLACEHOLDER).
+
+## Screenshots
+
+| | |
+| --- | --- |
+| ![Day 2: the base is a single room in the meadow](docs/screenshots/early_overview.jpg) | ![Day 11: a second room added and a second car in the yard](docs/screenshots/two_rooms.jpg) |
+| **Humble beginnings:** one room, one car, two crew | **Growing:** a second room and a second car |
+| ![The mission board with the first jobs](docs/screenshots/early_jobs.jpg) | ![Crew moving between rooms inside the house](docs/screenshots/late_crew_closeup.jpg) |
+| **Jobs:** pick work from the board | **The crew:** living in the house between jobs |
+| ![The farmhouse on day 14, crew roster on the left and finished jobs on the right](docs/screenshots/late_overview.jpg) | ![Planning the Big Score: threats, crew, odds and your cut](docs/screenshots/late_planner.jpg) |
+| **The house:** crew, cars and jobs coming home | **The planner:** cover the threats, set your cut |
+| ![Expand the house: rooms to build and upgrade](docs/screenshots/mid_build.jpg) | ![Night falls on the yard as the cars head out](docs/screenshots/night_yard.jpg) |
+| **Building:** rooms that change your odds | **Night work:** riskier jobs after dark |
 
 ## Licensing
 
